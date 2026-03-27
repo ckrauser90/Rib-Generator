@@ -1,0 +1,38 @@
+:root {
+  --bg: #efe3d2;
+  --panel: rgba(255, 250, 242, 0.82);
+  --panel-strong: rgba(255, 247, 236, 0.96);
+  --line: rgba(92, 63, 39, 0.18);
+  --text: #2f241b;
+  --muted: #6f6157;
+  --accent: #a2512b;
+  --accent-soft: #d7814c;
+  --shadow: 0 24px 80px rgba(66, 35, 19, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: Georgia, "Times New Roman", serif;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.75), transparent 36%),
+    linear-gradient(180deg, #efe3d2 0%, #e4d0bb 100%);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
