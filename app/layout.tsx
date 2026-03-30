@@ -1,19 +1,22 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Providers } from "./components/providers";
 
 export const metadata: Metadata = {
-  title: "Rib Tool Contour Lab",
-  description: "Foto hochladen, Kontur erkennen und eine Rib-STL vorbereiten.",
+  title: "Rib Generator",
+  description: "Verwandle Fotos in 3D-druckbare Rib-Konturen",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="de">
-      <body>{children}</body>
+    <html lang="de" suppressHydrationWarning>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
