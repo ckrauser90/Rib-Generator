@@ -231,7 +231,7 @@ const suppressProfileSpikes = (points: Point[]) => {
 
   let current = points.map((point) => ({ ...point }));
 
-  for (let pass = 0; pass < 2; pass += 1) {
+  for (let pass = 0; pass < 4; pass += 1) {
     const next = current.map((point) => ({ ...point }));
 
     for (let index = 3; index < current.length - 3; index += 1) {
@@ -269,7 +269,7 @@ const removeMicroKinks = (points: Point[]) => {
 
   let current = points.map((point) => ({ ...point }));
 
-  for (let pass = 0; pass < 2; pass += 1) {
+  for (let pass = 0; pass < 4; pass += 1) {
     const next = current.map((point) => ({ ...point }));
 
     for (let index = 2; index < current.length - 2; index += 1) {
@@ -1254,15 +1254,33 @@ export const buildRibToolOutline = (
     buildTemplateCappedProfile(denseProfile, totalWidthMm, cavityDepthMm, topY, bottomY),
   );
 
+  // Final aggressive smoothing: 6 passes of wide-kernel median on x-coords
+  const finalSmoothed = (() => {
+    if (detailedProfile.length < 9) return detailedProfile;
+    let current = detailedProfile.map((p) => ({ ...p }));
+    for (let pass = 0; pass < 6; pass += 1) {
+      const next = current.map((p) => ({ ...p }));
+      for (let i = 3; i < current.length - 3; i += 1) {
+        const window7 = [
+          current[i - 3].x, current[i - 2].x, current[i - 1].x,
+          current[i].x, current[i + 1].x, current[i + 2].x, current[i + 3].x,
+        ];
+        next[i].x = median(window7);
+      }
+      current = next;
+    }
+    return current;
+  })();
+
   return {
     outline: [
       { x: outerLeftX, y: topY },
-      { x: detailedProfile[0]?.x ?? outerRightX, y: topY },
-      ...detailedProfile,
-      { x: detailedProfile[detailedProfile.length - 1]?.x ?? outerRightX, y: bottomY },
+      { x: finalSmoothed[0]?.x ?? outerRightX, y: topY },
+      ...finalSmoothed,
+      { x: finalSmoothed[finalSmoothed.length - 1]?.x ?? outerRightX, y: bottomY },
       { x: outerLeftX, y: bottomY },
     ],
-    profile: detailedProfile,
+    profile: finalSmoothed,
   };
 };
 
