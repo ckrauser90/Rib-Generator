@@ -51,11 +51,11 @@ Phase 3: Community       →  Gallery + Netzwerk-Effekt        (8-16 Wochen)
 
 ### Paket A: Supabase Infrastructure ⚙️
 **Unabhängig — zuerst**
-- [ ] Supabase Projekt erstellen
-- [ ] Database Schema: Users, Drafts, Payments
-- [ ] Auth: E-Mail + Google OAuth
-- [ ] RLS Policies (User sieht nur eigene Drafts)
-- [ ] Storage Bucket für Thumbnails
+- [x] ~~Supabase Projekt erstellen~~ (Chris muss selbst machen — Account nötig)
+- [x] Database Schema: Users, Drafts, Payments
+- [x] Auth: E-Mail + Google OAuth (NextAuth.js mit Supabase Adapter)
+- [x] RLS Policies (User sieht nur eigene Drafts)
+- [x] Storage Bucket für Thumbnails
 
 ### Paket B: Design System 🎨
 **Unabhängig — parallel zu A**
@@ -234,6 +234,30 @@ Vor jedem Deployment:
 - [ ] KI-Hintergrundentfernung: Browser-seitig vs. Backend
 - [ ] Zahlungsmodell finalisieren (später)
 - [ ] Team-Größe Workshop: Max 5 oder unbegrenzt?
+
+### Paket A — Offene Fragen (Supabase)
+
+- [ ] **Chris muss Supabase Account haben** und ein Projekt erstellen unter https://app.supabase.com
+- [ ] **Google OAuth Credentials nötig** — Chris muss in Google Cloud Console ein Project erstellen und OAuth Credentials generieren
+- [ ] **Stripe Account später** für Payments (Phase 2)
+- [ ] **SQL Migration ausführen** — Chris muss die Migration in Supabase Dashboard ausführen unter SQL Editor
+
+### Paket A — Fortschritt ✅
+
+- [x] `.env.local` erstellt (alle Supabase + NextAuth Variablen)
+- [x] `.env.example` erstellt (als Template für andere Entwickler)
+- [x] `supabase/migrations/001_initial_schema.sql` erstellt mit:
+  - Tables: profiles, drafts, payments, usage
+  - Indexes auf user_id, created_at
+  - RLS Policies (profiles, drafts, payments, usage)
+  - Auto-create profile trigger
+  - Storage Bucket "thumbnails" mit Policies
+- [x] `lib/supabase-admin.ts` erstellt (Service-Role Client)
+- [x] API Routes erstellt:
+  - `/app/api/auth/[...nextauth]/route.ts` — NextAuth.js mit Google OAuth + Supabase Adapter
+  - `/app/api/drafts/route.ts` — GET (list), POST (create)
+  - `/app/api/drafts/[id]/route.ts` — GET, PUT, DELETE
+  - `/app/api/drafts/[id]/thumbnail/route.ts` — POST (upload thumbnail)
 
 ---
 
