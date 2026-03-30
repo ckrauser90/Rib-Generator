@@ -49,6 +49,8 @@ const mapCanvasToImage = (
   };
 };
 
+type CropRect = { x: number; y: number; w: number; h: number };
+
 const drawPreview = (
   canvas: HTMLCanvasElement,
   image: RasterSource,
@@ -56,9 +58,12 @@ const drawPreview = (
   workProfile: Point[],
   promptPoint: Point | null,
   thicknessMm: number,
+  cropRect: CropRect | null = null,
 ) => {
   const { width: imageWidth, height: imageHeight } = getRasterSize(image);
-  const ratio = imageWidth / imageHeight;
+  const srcW = cropRect ? cropRect.w : imageWidth;
+  const srcH = cropRect ? cropRect.h : imageHeight;
+  const ratio = srcW / srcH;
   const width = canvas.clientWidth;
   const height = Math.max(420, Math.round(width / ratio));
   canvas.width = width;
@@ -70,7 +75,16 @@ const drawPreview = (
   }
 
   context.clearRect(0, 0, width, height);
-  context.drawImage(image, 0, 0, width, height);
+  if (cropRect) {
+    context.drawImage(image, cropRect.x, cropRect.y, cropRect.w, cropRect.h, 0, 0, width, height);
+  } else {
+    context.drawImage(image, 0, 0, width, height);
+  }
+
+  const tx = (px: number) =>
+    cropRect ? ((px - cropRect.x) / cropRect.w) * width : (px / imageWidth) * width;
+  const ty = (py: number) =>
+    cropRect ? ((py - cropRect.y) / cropRect.h) * height : (py / imageHeight) * height;
 
   if (contour.length > 1) {
     context.fillStyle = "rgba(246, 124, 57, 0.16)";
@@ -78,12 +92,10 @@ const drawPreview = (
     context.lineWidth = 3;
     context.beginPath();
     contour.forEach((point, index) => {
-      const x = (point.x / imageWidth) * width;
-      const y = (point.y / imageHeight) * height;
       if (index === 0) {
-        context.moveTo(x, y);
+        context.moveTo(tx(point.x), ty(point.y));
       } else {
-        context.lineTo(x, y);
+        context.lineTo(tx(point.x), ty(point.y));
       }
     });
     context.closePath();
@@ -96,25 +108,21 @@ const drawPreview = (
     context.strokeStyle = "#fff7ef";
     context.lineWidth = 2;
     workProfile.forEach((point, index) => {
-      const x = (point.x / imageWidth) * width;
-      const y = (point.y / imageHeight) * height;
       if (index === 0) {
-        context.moveTo(x, y);
+        context.moveTo(tx(point.x), ty(point.y));
       } else {
-        context.lineTo(x, y);
+        context.lineTo(tx(point.x), ty(point.y));
       }
     });
     context.stroke();
   }
 
   if (promptPoint) {
-    const x = (promptPoint.x / imageWidth) * width;
-    const y = (promptPoint.y / imageHeight) * height;
     context.beginPath();
     context.fillStyle = "#fff7ee";
     context.strokeStyle = "#d85a1e";
     context.lineWidth = 2;
-    context.arc(x, y, 8, 0, Math.PI * 2);
+    context.arc(tx(promptPoint.x), ty(promptPoint.y), 8, 0, Math.PI * 2);
     context.fill();
     context.stroke();
   }
@@ -220,7 +228,28 @@ export default function Home() {
       return;
     }
 
-    drawPreview(canvasRef.current, displayRaster, contour, workProfile, promptPoint, thicknessMm);
+    let cropRect: CropRect | null = null;
+    if (contour.length > 0) {
+      const { width: dw, height: dh } = getRasterSize(displayRaster);
+      const xs = contour.map((p) => p.x);
+      const ys = contour.map((p) => p.y);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const padX = (maxX - minX) * 0.12;
+      const padY = (maxY - minY) * 0.12;
+      const x = Math.max(0, minX - padX);
+      const y = Math.max(0, minY - padY);
+      cropRect = {
+        x,
+        y,
+        w: Math.min(dw, maxX + padX) - x,
+        h: Math.min(dh, maxY + padY) - y,
+      };
+    }
+
+    drawPreview(canvasRef.current, displayRaster, contour, workProfile, promptPoint, thicknessMm, cropRect);
   }, [contour, correctedRaster, promptPoint, sourceRaster, thicknessMm, workProfile]);
 
   // Effect A: run MediaPipe segmentation when the image or click point changes
@@ -759,7 +788,7 @@ export default function Home() {
                   <canvas
                     ref={canvasRef}
                     onClick={handleCanvasClick}
-                    style={{ width: "100%", height: "100%", cursor: "crosshair" }}
+                    style={{ width: "100%", height: "auto", cursor: "crosshair" }}
                   />
                 </div>
               </div>
