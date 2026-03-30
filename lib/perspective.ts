@@ -116,6 +116,77 @@ const bilinearSample = (
   return out;
 };
 
+export function computeCorrectionQuad(
+  width: number,
+  height: number,
+  verticalDeg: number,
+  horizontalDeg: number,
+  rotationDeg: number,
+): Point[] {
+  // vShift > 0: top of quad is narrower (corrects camera-above distortion where bottom appears wider)
+  const vShift = Math.tan((verticalDeg * Math.PI) / 180) * height * 0.5;
+  // hShift > 0: left of quad is shorter (corrects camera-right distortion where left appears taller)
+  const hShift = Math.tan((horizontalDeg * Math.PI) / 180) * width * 0.5;
+
+  let quad: Point[] = [
+    { x: vShift,         y: hShift },
+    { x: width - vShift, y: -hShift },
+    { x: width + vShift, y: height + hShift },
+    { x: -vShift,        y: height - hShift },
+  ];
+
+  if (rotationDeg !== 0) {
+    const rad = (rotationDeg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const cx = width / 2;
+    const cy = height / 2;
+    quad = quad.map((p) => ({
+      x: cx + (p.x - cx) * cos - (p.y - cy) * sin,
+      y: cy + (p.x - cx) * sin + (p.y - cy) * cos,
+    }));
+  }
+
+  return quad;
+}
+
+export function warpMask(
+  maskData: Uint8Array,
+  srcWidth: number,
+  srcHeight: number,
+  quad: Point[],
+): { mask: Uint8Array; width: number; height: number } {
+  const topWidth = distance(quad[0], quad[1]);
+  const bottomWidth = distance(quad[3], quad[2]);
+  const leftHeight = distance(quad[0], quad[3]);
+  const rightHeight = distance(quad[1], quad[2]);
+  const outputWidth = Math.max(120, Math.round((topWidth + bottomWidth) / 2));
+  const outputHeight = Math.max(160, Math.round((leftHeight + rightHeight) / 2));
+
+  const destinationRect: Point[] = [
+    { x: 0, y: 0 },
+    { x: outputWidth - 1, y: 0 },
+    { x: outputWidth - 1, y: outputHeight - 1 },
+    { x: 0, y: outputHeight - 1 },
+  ];
+
+  const mapToSource = computeHomography(destinationRect, quad);
+  const outputMask = new Uint8Array(outputWidth * outputHeight);
+
+  for (let y = 0; y < outputHeight; y += 1) {
+    for (let x = 0; x < outputWidth; x += 1) {
+      const sourcePoint = projectPoint(mapToSource, { x, y });
+      const sx = Math.round(sourcePoint.x);
+      const sy = Math.round(sourcePoint.y);
+      if (sx >= 0 && sx < srcWidth && sy >= 0 && sy < srcHeight) {
+        outputMask[y * outputWidth + x] = maskData[sy * srcWidth + sx];
+      }
+    }
+  }
+
+  return { mask: outputMask, width: outputWidth, height: outputHeight };
+}
+
 export const warpImageToQuad = (source: RasterSource, quad: Point[]) => {
   const { width, height } = getRasterSize(source);
   const topWidth = distance(quad[0], quad[1]);

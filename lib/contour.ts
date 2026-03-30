@@ -1455,3 +1455,72 @@ export function createExtrudedStl(
 
   return `solid rib_tool\n${facets.join("\n")}\nendsolid rib_tool\n`;
 }
+
+export type PerspectiveAnalysis = {
+  verticalDeg: number;
+  horizontalDeg: number;
+  score: number;
+};
+
+export function analyzePerspective(
+  maskData: Uint8Array,
+  width: number,
+  height: number,
+): PerspectiveAnalysis {
+  const topStart = Math.floor(height * 0.1);
+  const topEnd = Math.floor(height * 0.35);
+  const bottomStart = Math.floor(height * 0.65);
+  const bottomEnd = Math.floor(height * 0.9);
+
+  const zoneScan = (yStart: number, yEnd: number) => {
+    let widthSum = 0;
+    let centerSum = 0;
+    let count = 0;
+    for (let y = yStart; y < yEnd; y += 1) {
+      let left = -1;
+      let right = -1;
+      for (let x = 0; x < width; x += 1) {
+        if (maskData[y * width + x]) {
+          left = x;
+          break;
+        }
+      }
+      for (let x = width - 1; x >= 0; x -= 1) {
+        if (maskData[y * width + x]) {
+          right = x;
+          break;
+        }
+      }
+      if (left >= 0 && right > left) {
+        widthSum += right - left;
+        centerSum += (left + right) / 2;
+        count += 1;
+      }
+    }
+    return count > 0 ? { width: widthSum / count, center: centerSum / count } : null;
+  };
+
+  const top = zoneScan(topStart, topEnd);
+  const bottom = zoneScan(bottomStart, bottomEnd);
+
+  if (!top || !bottom) {
+    return { verticalDeg: 0, horizontalDeg: 0, score: 0 };
+  }
+
+  const spanY = height * 0.55;
+  const widthDiff = bottom.width - top.width;
+  const verticalDeg = (Math.atan2(widthDiff / 2, spanY) * 180) / Math.PI;
+
+  const centerDiff = bottom.center - top.center;
+  const horizontalDeg = (Math.atan2(centerDiff, spanY) * 180) / Math.PI;
+
+  const widthRatio =
+    Math.max(top.width, bottom.width) / Math.min(top.width, bottom.width);
+  const score = Math.min(1, (widthRatio - 1) * 2);
+
+  return {
+    verticalDeg: Math.max(-30, Math.min(30, verticalDeg)),
+    horizontalDeg: Math.max(-30, Math.min(30, horizontalDeg)),
+    score,
+  };
+}

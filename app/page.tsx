@@ -3,6 +3,7 @@
 import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./page.module.css";
 import {
+  analyzePerspective,
   buildRibToolOutline,
   createExtrudedStl,
   detectContourFromMask,
@@ -10,7 +11,13 @@ import {
   type WorkProfileSide,
 } from "../lib/contour";
 import { loadInteractiveSegmenter, segmentRasterFromPoint } from "../lib/interactive-segmenter";
-import { getRasterSize, type RasterSource } from "../lib/perspective";
+import {
+  computeCorrectionQuad,
+  getRasterSize,
+  warpImageToQuad,
+  warpMask,
+  type RasterSource,
+} from "../lib/perspective";
 
 type Metrics = {
   widthMm: number;
@@ -139,6 +146,16 @@ export default function Home() {
   const [segmenterState, setSegmenterState] = useState<"loading" | "ready" | "error">("loading");
   const [segmenterError, setSegmenterError] = useState<string | null>(null);
   const [segmenting, setSegmenting] = useState(false);
+  const [rawMaskData, setRawMaskData] = useState<{
+    binaryMask: Uint8Array;
+    width: number;
+    height: number;
+    confidence: Float32Array | null;
+  } | null>(null);
+  const [perspectiveV, setPerspectiveV] = useState(0);
+  const [perspectiveH, setPerspectiveH] = useState(0);
+  const [perspectiveRot, setPerspectiveRot] = useState(0);
+  const [correctedRaster, setCorrectedRaster] = useState<HTMLCanvasElement | null>(null);
   const [metrics, setMetrics] = useState<Metrics>({
     widthMm: 0,
     heightMm: 0,
@@ -198,16 +215,20 @@ export default function Home() {
   }, [imageUrl]);
 
   useEffect(() => {
-    if (!sourceRaster || !canvasRef.current) {
+    const displayRaster = correctedRaster ?? sourceRaster;
+    if (!displayRaster || !canvasRef.current) {
       return;
     }
 
-    drawPreview(canvasRef.current, sourceRaster, contour, workProfile, promptPoint, thicknessMm);
-  }, [contour, promptPoint, sourceRaster, thicknessMm, workProfile]);
+    drawPreview(canvasRef.current, displayRaster, contour, workProfile, promptPoint, thicknessMm);
+  }, [contour, correctedRaster, promptPoint, sourceRaster, thicknessMm, workProfile]);
 
+  // Effect A: run MediaPipe segmentation when the image or click point changes
   useEffect(() => {
     if (!sourceRaster || !promptPoint || segmenterState !== "ready") {
       if (!promptPoint) {
+        setRawMaskData(null);
+        setCorrectedRaster(null);
         setContour([]);
         setLeftWorkProfile([]);
         setRightWorkProfile([]);
@@ -228,17 +249,6 @@ export default function Home() {
       try {
         setSegmenting(true);
         const { width, height } = getRasterSize(sourceRaster);
-        const workerCanvas = document.createElement("canvas");
-        workerCanvas.width = width;
-        workerCanvas.height = height;
-        const workerContext = workerCanvas.getContext("2d");
-
-        if (!workerContext) {
-          throw new Error("Bild konnte nicht fuer die Konturverfeinerung vorbereitet werden.");
-        }
-
-        workerContext.drawImage(sourceRaster, 0, 0, width, height);
-        const sourceImageData = workerContext.getImageData(0, 0, width, height);
         const result = await segmentRasterFromPoint(
           sourceRaster,
           { x: promptPoint.x / width, y: promptPoint.y / height },
@@ -249,64 +259,18 @@ export default function Home() {
           return;
         }
 
-        const contourResult = detectContourFromMask(
-          result.binaryMask,
-          result.width,
-          result.height,
-          {
-            smoothPasses,
-            cropBottomRatio,
-            seedPoint: promptPoint,
-          },
-          sourceImageData,
-          result.confidence,
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        setContour(contourResult.contour);
-        setLeftWorkProfile(contourResult.leftWorkProfile);
-        setRightWorkProfile(contourResult.rightWorkProfile);
-        setReferenceBounds(contourResult.referenceBounds);
-        setMetrics({
-          widthMm: toolWidthMm,
-          heightMm: toolHeightMm,
-          points: contourResult.contour.length,
+        setRawMaskData({
+          binaryMask: result.binaryMask,
+          width: result.width,
+          height: result.height,
+          confidence: result.confidence ?? null,
         });
-
-        const selectedProfile =
-          workProfileSide === "left"
-            ? contourResult.leftWorkProfile
-            : contourResult.rightWorkProfile;
-
-        if (selectedProfile.length === 0) {
-          setToolOutline([]);
-          setStatus("Die MediaPipe-Maske war da, aber daraus konnte noch keine stabile Gefaesskontur abgeleitet werden.");
-          return;
-        }
-
-        setToolOutline(
-          buildRibToolOutline(
-            selectedProfile,
-            result.width,
-            result.height,
-            toolWidthMm,
-            toolHeightMm,
-            workProfileSide,
-            contourResult.referenceBounds,
-          ).outline,
-        );
-        setStatus(
-          `MediaPipe-Maske erkannt. ${contourResult.usableColumns} Zeilen ausgewertet, aktive Seite: ${
-            workProfileSide === "left" ? "links" : "rechts"
-          }.`,
-        );
       } catch (error) {
         if (cancelled) {
           return;
         }
+        setRawMaskData(null);
+        setCorrectedRaster(null);
         setContour([]);
         setLeftWorkProfile([]);
         setRightWorkProfile([]);
@@ -325,17 +289,122 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
+  }, [maskThreshold, promptPoint, segmenterState, sourceRaster, toolHeightMm, toolWidthMm]);
+
+  // Effect B: apply perspective correction and run contour detection
+  useEffect(() => {
+    if (!rawMaskData || !sourceRaster || !promptPoint) {
+      return;
+    }
+
+    let mask = rawMaskData.binaryMask;
+    let maskWidth = rawMaskData.width;
+    let maskHeight = rawMaskData.height;
+    let imageForContour: RasterSource = sourceRaster;
+    let warpedCanvas: HTMLCanvasElement | null = null;
+
+    if (perspectiveV !== 0 || perspectiveH !== 0 || perspectiveRot !== 0) {
+      const quad = computeCorrectionQuad(maskWidth, maskHeight, perspectiveV, perspectiveH, perspectiveRot);
+      const warped = warpMask(rawMaskData.binaryMask, maskWidth, maskHeight, quad);
+      mask = warped.mask;
+      maskWidth = warped.width;
+      maskHeight = warped.height;
+      warpedCanvas = warpImageToQuad(sourceRaster, quad);
+      imageForContour = warpedCanvas;
+    }
+
+    setCorrectedRaster(warpedCanvas);
+
+    let sourceImageData: ImageData | undefined;
+    const helperCanvas = document.createElement("canvas");
+    helperCanvas.width = maskWidth;
+    helperCanvas.height = maskHeight;
+    const helperCtx = helperCanvas.getContext("2d");
+    if (helperCtx) {
+      helperCtx.drawImage(imageForContour, 0, 0, maskWidth, maskHeight);
+      sourceImageData = helperCtx.getImageData(0, 0, maskWidth, maskHeight);
+    }
+
+    const { width: origW, height: origH } = getRasterSize(sourceRaster);
+    const mappedSeed: Point = {
+      x: (promptPoint.x / origW) * maskWidth,
+      y: (promptPoint.y / origH) * maskHeight,
+    };
+
+    const contourResult = detectContourFromMask(
+      mask,
+      maskWidth,
+      maskHeight,
+      { smoothPasses, cropBottomRatio, seedPoint: mappedSeed },
+      sourceImageData,
+      rawMaskData.confidence ?? undefined,
+    );
+
+    setContour(contourResult.contour);
+    setLeftWorkProfile(contourResult.leftWorkProfile);
+    setRightWorkProfile(contourResult.rightWorkProfile);
+    setReferenceBounds(contourResult.referenceBounds);
+    setMetrics({
+      widthMm: toolWidthMm,
+      heightMm: toolHeightMm,
+      points: contourResult.contour.length,
+    });
+
+    const selectedProfile =
+      workProfileSide === "left"
+        ? contourResult.leftWorkProfile
+        : contourResult.rightWorkProfile;
+
+    if (selectedProfile.length === 0) {
+      setToolOutline([]);
+      setStatus("Die MediaPipe-Maske war da, aber daraus konnte noch keine stabile Gefaesskontur abgeleitet werden.");
+      return;
+    }
+
+    setToolOutline(
+      buildRibToolOutline(
+        selectedProfile,
+        maskWidth,
+        maskHeight,
+        toolWidthMm,
+        toolHeightMm,
+        workProfileSide,
+        contourResult.referenceBounds,
+      ).outline,
+    );
+
+    const perspActive = perspectiveV !== 0 || perspectiveH !== 0 || perspectiveRot !== 0;
+    setStatus(
+      `MediaPipe-Maske erkannt. ${contourResult.usableColumns} Zeilen ausgewertet, Seite: ${
+        workProfileSide === "left" ? "links" : "rechts"
+      }${perspActive ? ", Perspektive korrigiert" : ""}.`,
+    );
   }, [
     cropBottomRatio,
-    maskThreshold,
+    perspectiveH,
+    perspectiveRot,
+    perspectiveV,
     promptPoint,
-    segmenterState,
+    rawMaskData,
     smoothPasses,
     sourceRaster,
     toolHeightMm,
     toolWidthMm,
     workProfileSide,
   ]);
+
+  const handleAutoCorrect = () => {
+    if (!rawMaskData) {
+      return;
+    }
+    const analysis = analyzePerspective(rawMaskData.binaryMask, rawMaskData.width, rawMaskData.height);
+    setPerspectiveV(Math.round(analysis.verticalDeg * 10) / 10);
+    setPerspectiveH(Math.round(analysis.horizontalDeg * 10) / 10);
+    setPerspectiveRot(0);
+    setStatus(
+      `Auto-Korrektur: vertikal ${analysis.verticalDeg.toFixed(1)}°, horizontal ${analysis.horizontalDeg.toFixed(1)}° (Verzerrung ${(analysis.score * 100).toFixed(0)}%).`,
+    );
+  };
 
   const handleImageUpload = async (file: File) => {
     if (imageUrl?.startsWith("blob:")) {
@@ -347,6 +416,11 @@ export default function Home() {
     setImageUrl(url);
     setSourceRaster(image);
     setPromptPoint(null);
+    setRawMaskData(null);
+    setPerspectiveV(0);
+    setPerspectiveH(0);
+    setPerspectiveRot(0);
+    setCorrectedRaster(null);
     setContour([]);
     setLeftWorkProfile([]);
     setRightWorkProfile([]);
@@ -407,6 +481,11 @@ export default function Home() {
 
   const resetSelection = () => {
     setPromptPoint(null);
+    setRawMaskData(null);
+    setPerspectiveV(0);
+    setPerspectiveH(0);
+    setPerspectiveRot(0);
+    setCorrectedRaster(null);
     setContour([]);
     setLeftWorkProfile([]);
     setRightWorkProfile([]);
@@ -567,6 +646,74 @@ export default function Home() {
                 onChange={(event) => setThicknessMm(Number(event.target.value))}
               />
             </div>
+
+            {rawMaskData && (
+              <div className={styles.field}>
+                <label>Perspektiv-Korrektur</label>
+                <button
+                  type="button"
+                  className={`${styles.button} ${styles.ghostButton}`}
+                  onClick={handleAutoCorrect}
+                >
+                  Auto-Korrektur
+                </button>
+                <div className={styles.field}>
+                  <label htmlFor="persp-v">
+                    Vertikal: {perspectiveV.toFixed(1)}&deg;
+                  </label>
+                  <input
+                    id="persp-v"
+                    type="range"
+                    min="-30"
+                    max="30"
+                    step="0.5"
+                    value={perspectiveV}
+                    onChange={(event) => setPerspectiveV(Number(event.target.value))}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="persp-h">
+                    Horizontal: {perspectiveH.toFixed(1)}&deg;
+                  </label>
+                  <input
+                    id="persp-h"
+                    type="range"
+                    min="-30"
+                    max="30"
+                    step="0.5"
+                    value={perspectiveH}
+                    onChange={(event) => setPerspectiveH(Number(event.target.value))}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="persp-rot">
+                    Rotation: {perspectiveRot.toFixed(1)}&deg;
+                  </label>
+                  <input
+                    id="persp-rot"
+                    type="range"
+                    min="-15"
+                    max="15"
+                    step="0.5"
+                    value={perspectiveRot}
+                    onChange={(event) => setPerspectiveRot(Number(event.target.value))}
+                  />
+                </div>
+                {(perspectiveV !== 0 || perspectiveH !== 0 || perspectiveRot !== 0) && (
+                  <button
+                    type="button"
+                    className={`${styles.button} ${styles.ghostButton}`}
+                    onClick={() => {
+                      setPerspectiveV(0);
+                      setPerspectiveH(0);
+                      setPerspectiveRot(0);
+                    }}
+                  >
+                    Korrektur zur&uuml;cksetzen
+                  </button>
+                )}
+              </div>
+            )}
 
             <button
               className={`${styles.button} ${styles.ghostButton}`}
