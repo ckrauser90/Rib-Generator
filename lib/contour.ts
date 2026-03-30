@@ -285,11 +285,9 @@ const removeMicroKinks = (points: Point[]) => {
       ]);
       const deviationFromMedian = Math.abs(current[index].x - localMedian);
       const deviationFromLine = Math.abs(current[index].x - interpolatedX);
-      // Organic shape = no short reversals at all; any reversal is suspicious
       const shortReversal =
         Math.sign(current[index].x - current[index - 1].x) !==
         Math.sign(current[index + 1].x - current[index].x);
-      // Lower threshold further — organic shapes should be very smooth
       const threshold = Math.max(0.2, localStep * 0.8);
 
       if (shortReversal && deviationFromMedian > threshold && deviationFromLine > threshold * 0.8) {
@@ -301,6 +299,68 @@ const removeMicroKinks = (points: Point[]) => {
   }
 
   return current;
+};
+
+// Catmull-Rom spline interpolation — creates smooth organic curves through points
+const catmullRomSpline = (points: Point[], numSamples: number): Point[] => {
+  if (points.length < 4) return points.slice();
+
+  const result: Point[] = [];
+  const n = points.length - 1;
+
+  for (let i = 0; i < n; i += 1) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[Math.min(n, i + 1)];
+    const p3 = points[Math.min(n, i + 2)];
+
+    for (let j = 0; j < numSamples; j += 1) {
+      const t = j / numSamples;
+      const t2 = t * t;
+      const t3 = t2 * t;
+
+      const x =
+        0.5 *
+        ((2 * p1.x) +
+          (-p0.x + p2.x) * t +
+          (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+          (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+
+      const y =
+        0.5 *
+        ((2 * p1.y) +
+          (-p0.y + p2.y) * t +
+          (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+          (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
+
+      result.push({ x, y });
+    }
+  }
+
+  result.push(points[n]);
+  return result;
+};
+
+// Smooth a profile by fitting a Catmull-Rom spline and resampling it evenly
+const fitSplineAndResample = (points: Point[], numOutput: number): Point[] => {
+  if (points.length < 4 || numOutput < 4) return points.slice();
+  const spline = catmullRomSpline(points, 4);
+  // Resample spline at evenly spaced intervals
+  const result: Point[] = [];
+  for (let i = 0; i < numOutput; i += 1) {
+    const t = spline.length > 1 ? (i / (numOutput - 1)) * (spline.length - 1) : 0;
+    const idx = Math.floor(t);
+    const frac = t - idx;
+    if (idx >= spline.length - 1) {
+      result.push({ ...spline[spline.length - 1] });
+    } else {
+      result.push({
+        x: spline[idx].x + (spline[idx + 1].x - spline[idx].x) * frac,
+        y: spline[idx].y + (spline[idx + 1].y - spline[idx].y) * frac,
+      });
+    }
+  }
+  return result;
 };
 
 // Curvature-aware aggressive smoothing for organic pottery shapes.
@@ -1242,9 +1302,14 @@ export const buildRibToolOutline = (
     };
   }
 
-  const bounds = getBounds(workProfile);
-  const profileMinX = Math.min(...workProfile.map((point) => point.x));
-  const profileMaxX = Math.max(...workProfile.map((point) => point.x));
+  // Fit Catmull-Rom spline to the workProfile — this makes the contour truly organic
+  // by describing it as a smooth mathematical curve rather than noisy pixel samples.
+  // Target ~150 points for the spline (enough detail, smooth result)
+  const splineProfile = fitSplineAndResample(workProfile, 150);
+
+  const bounds = getBounds(splineProfile);
+  const profileMinX = Math.min(...splineProfile.map((point) => point.x));
+  const profileMaxX = Math.max(...splineProfile.map((point) => point.x));
   const silhouetteWidth = Math.max(1, profileMaxX - profileMinX);
   const sourceMinY = referenceBounds?.minY ?? bounds.minY;
   const sourceMaxY = referenceBounds?.maxY ?? bounds.maxY;
@@ -1257,7 +1322,7 @@ export const buildRibToolOutline = (
   const bottomPad = toolHeightMm * 0.06;
   const totalHeight = toolHeightMm + topPad + bottomPad;
 
-  const rawDepths = workProfile.map((point) =>
+  const rawDepths = splineProfile.map((point) =>
     side === "left" ? profileMaxX - point.x : point.x - profileMinX,
   );
   const macroDepths = smoothSeries(rawDepths, 10);
@@ -1269,7 +1334,7 @@ export const buildRibToolOutline = (
   const boostedMaxDepth = Math.max(...boostedDepths);
   const boostedRange = Math.max(1, boostedMaxDepth - boostedMinDepth);
 
-  const profile = workProfile.map((point, index) => {
+  const profile = splineProfile.map((point, index) => {
     const normalizedDepth = (boostedDepths[index] - boostedMinDepth) / boostedRange;
     return {
       x: profileAnchorX - normalizedDepth * cavityDepthMm,
