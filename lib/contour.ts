@@ -269,7 +269,7 @@ const removeMicroKinks = (points: Point[]) => {
 
   let current = points.map((point) => ({ ...point }));
 
-  for (let pass = 0; pass < 4; pass += 1) {
+  for (let pass = 0; pass < 6; pass += 1) {
     const next = current.map((point) => ({ ...point }));
 
     for (let index = 2; index < current.length - 2; index += 1) {
@@ -285,19 +285,51 @@ const removeMicroKinks = (points: Point[]) => {
       ]);
       const deviationFromMedian = Math.abs(current[index].x - localMedian);
       const deviationFromLine = Math.abs(current[index].x - interpolatedX);
+      // Organic shape = no short reversals at all; any reversal is suspicious
       const shortReversal =
         Math.sign(current[index].x - current[index - 1].x) !==
         Math.sign(current[index + 1].x - current[index].x);
-      const threshold = Math.max(0.42, localStep * 1.2);
+      // Lower threshold further — organic shapes should be very smooth
+      const threshold = Math.max(0.2, localStep * 0.8);
 
       if (shortReversal && deviationFromMedian > threshold && deviationFromLine > threshold * 0.8) {
-        next[index].x = interpolatedX * 0.78 + localMedian * 0.22;
+        next[index].x = interpolatedX * 0.6 + localMedian * 0.4;
       }
     }
 
     current = next;
   }
 
+  return current;
+};
+
+// Curvature-aware aggressive smoothing for organic pottery shapes.
+// Points that deviate significantly from their neighbors are smoothed more.
+const smoothOrganicContour = (points: Point[], passes: number): Point[] => {
+  if (points.length < 7 || passes === 0) return points.slice();
+  let current = points.map((p) => ({ ...p }));
+  for (let pass = 0; pass < passes; pass += 1) {
+    const next = current.map((p) => ({ ...p }));
+    for (let i = 3; i < current.length - 3; i += 1) {
+      const neighbors = [
+        current[i - 3].x, current[i - 2].x, current[i - 1].x,
+        current[i].x, current[i + 1].x, current[i + 2].x, current[i + 3].x,
+      ];
+      const localMedian = median(neighbors);
+      const deviation = Math.abs(current[i].x - localMedian);
+      const localStep = average([
+        Math.abs(current[i - 1].x - current[i - 2].x),
+        Math.abs(current[i].x - current[i - 1].x),
+        Math.abs(current[i + 1].x - current[i].x),
+        Math.abs(current[i + 2].x - current[i + 1].x),
+      ]);
+      // Aggressive: blend heavily toward neighbor average for any meaningful deviation
+      const blendFactor = Math.min(0.85, Math.max(0.3, deviation / Math.max(localStep, 0.5)));
+      const neighborAvg = (current[i - 1].x + current[i + 1].x) / 2;
+      next[i].x = current[i].x * (1 - blendFactor) + neighborAvg * blendFactor;
+    }
+    current = next;
+  }
   return current;
 };
 
@@ -1231,7 +1263,7 @@ export const buildRibToolOutline = (
   const macroDepths = smoothSeries(rawDepths, 10);
   const boostedDepths = rawDepths.map((depth, index) => {
     const detail = depth - macroDepths[index];
-    return macroDepths[index] + detail * 0.9;
+    return macroDepths[index] + detail * 0.5;
   });
   const boostedMinDepth = Math.min(...boostedDepths);
   const boostedMaxDepth = Math.max(...boostedDepths);
@@ -1271,7 +1303,8 @@ export const buildRibToolOutline = (
       }
       current = next;
     }
-    return current;
+    // Extra organic smoothing pass: blend any remaining deviations
+    return smoothOrganicContour(current, 4);
   })();
 
   return {
