@@ -77,19 +77,40 @@ const drawPreview = (
   }
 
   context.clearRect(0, 0, width, height);
-  if (cropRect) {
-    context.drawImage(image, cropRect.x, cropRect.y, cropRect.w, cropRect.h, 0, 0, width, height);
-  } else {
-    context.drawImage(image, 0, 0, width, height);
-  }
 
   const tx = (px: number) =>
     cropRect ? ((px - cropRect.x) / cropRect.w) * width : (px / imageWidth) * width;
   const ty = (py: number) =>
     cropRect ? ((py - cropRect.y) / cropRect.h) * height : (py / imageHeight) * height;
 
+  // If we have a contour, clip to it: fill white bg then draw only inside the mug
   if (contour.length > 1) {
-    context.fillStyle = "rgba(246, 124, 57, 0.16)";
+    // Start by filling everything white (clean background)
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+
+    // Create clipping path from contour
+    context.save();
+    context.beginPath();
+    contour.forEach((point, index) => {
+      if (index === 0) {
+        context.moveTo(tx(point.x), ty(point.y));
+      } else {
+        context.lineTo(tx(point.x), ty(point.y));
+      }
+    });
+    context.closePath();
+    context.clip();
+
+    // Draw image inside the clipped contour
+    if (cropRect) {
+      context.drawImage(image, cropRect.x, cropRect.y, cropRect.w, cropRect.h, 0, 0, width, height);
+    } else {
+      context.drawImage(image, 0, 0, width, height);
+    }
+    context.restore();
+
+    // Draw orange contour outline on top
     context.strokeStyle = "#d85a1e";
     context.lineWidth = 3;
     context.beginPath();
@@ -101,8 +122,14 @@ const drawPreview = (
       }
     });
     context.closePath();
-    context.fill();
     context.stroke();
+  } else {
+    // No contour yet — draw normal full image
+    if (cropRect) {
+      context.drawImage(image, cropRect.x, cropRect.y, cropRect.w, cropRect.h, 0, 0, width, height);
+    } else {
+      context.drawImage(image, 0, 0, width, height);
+    }
   }
 
   if (workProfile.length > 1) {
