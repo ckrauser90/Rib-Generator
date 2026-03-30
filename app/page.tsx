@@ -64,7 +64,9 @@ const drawPreview = (
   const srcW = cropRect ? cropRect.w : imageWidth;
   const srcH = cropRect ? cropRect.h : imageHeight;
   const ratio = srcW / srcH;
-  const width = canvas.clientWidth;
+  // Use getBoundingClientRect to get actual rendered size (not internal canvas.width)
+  const renderedWidth = Math.round(canvas.getBoundingClientRect().width);
+  const width = renderedWidth;
   const height = Math.max(420, Math.round(width / ratio));
   canvas.width = width;
   canvas.height = height;
