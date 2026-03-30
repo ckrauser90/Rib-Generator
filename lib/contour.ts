@@ -1231,7 +1231,7 @@ export const buildRibToolOutline = (
   const macroDepths = smoothSeries(rawDepths, 10);
   const boostedDepths = rawDepths.map((depth, index) => {
     const detail = depth - macroDepths[index];
-    return macroDepths[index] + detail * 1.55;
+    return macroDepths[index] + detail * 0.9;
   });
   const boostedMinDepth = Math.min(...boostedDepths);
   const boostedMaxDepth = Math.max(...boostedDepths);
@@ -1254,18 +1254,20 @@ export const buildRibToolOutline = (
     buildTemplateCappedProfile(denseProfile, totalWidthMm, cavityDepthMm, topY, bottomY),
   );
 
-  // Final aggressive smoothing: 6 passes of wide-kernel median on x-coords
+  // Final aggressive smoothing: 10 passes of wide-kernel median on x-coords
   const finalSmoothed = (() => {
-    if (detailedProfile.length < 9) return detailedProfile;
+    if (detailedProfile.length < 11) return detailedProfile;
     let current = detailedProfile.map((p) => ({ ...p }));
-    for (let pass = 0; pass < 6; pass += 1) {
+    for (let pass = 0; pass < 10; pass += 1) {
       const next = current.map((p) => ({ ...p }));
-      for (let i = 3; i < current.length - 3; i += 1) {
-        const window7 = [
-          current[i - 3].x, current[i - 2].x, current[i - 1].x,
-          current[i].x, current[i + 1].x, current[i + 2].x, current[i + 3].x,
+      for (let i = 5; i < current.length - 5; i += 1) {
+        const window11 = [
+          current[i - 5].x, current[i - 4].x, current[i - 3].x,
+          current[i - 2].x, current[i - 1].x, current[i].x,
+          current[i + 1].x, current[i + 2].x, current[i + 3].x,
+          current[i + 4].x, current[i + 5].x,
         ];
-        next[i].x = median(window7);
+        next[i].x = median(window11);
       }
       current = next;
     }
