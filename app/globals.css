@@ -1,72 +1,56 @@
 @import url('https://fonts.googleapis.com/css2?family=Karla:wght@400;500;600&family=Cormorant+Garamond:wght@400;500;600&display=swap');
 
-/* ── Design tokens — inspired by elimente.com ── */
+/* ── Design tokens — matching elimente.com ── */
 :root {
-  --linen:          #FAF8F5;
-  --cream:          #F6F2EC;
-  --cream-warm:     #EDE7DD;
-  --cream-dark:     #DDD5C8;
-  --bark:           #3E3832;
-  --bark-light:     #5D554E;
-  --bark-muted:     #7A726B;
-  --sage:           #7A8E6E;
-  --sage-light:     #95A888;
-  --sage-pale:      #B5C4AB;
-  --terracotta:     #B87A5A;
+  --sage:             #7A8E6E;
+  --sage-light:       #95A888;
+  --sage-pale:        #B5C4AB;
+  --sage-muted:       #C8D4BF;
+  --cream:            #F6F2EC;
+  --cream-warm:       #EDE7DD;
+  --cream-dark:       #DDD5C8;
+  --linen:            #FAF8F5;
+  --bark:             #3E3832;
+  --bark-light:       #5D554E;
+  --bark-muted:       #7A726B;
+  --terracotta:       #B87A5A;
   --terracotta-light: #D4A07C;
-  --moss:           #5C6E52;
+  --moss:             #5C6E52;
 
-  /* App aliases */
-  --bg:             var(--linen);
-  --panel:          rgba(246, 242, 236, 0.88);
-  --panel-strong:   var(--cream-warm);
-  --line:           rgba(62, 56, 50, 0.1);
-  --text:           var(--bark);
-  --muted:          var(--bark-muted);
-  --accent:         var(--terracotta);
-  --accent-soft:    var(--terracotta-light);
-  --shadow:         0 8px 32px rgba(62, 56, 50, 0.08);
+  /* App aliases — sage is the primary action color */
+  --bg:            var(--linen);
+  --panel:         var(--cream);
+  --panel-strong:  var(--cream-warm);
+  --line:          rgba(122, 142, 110, 0.08);
+  --text:          var(--bark);
+  --muted:         var(--bark-muted);
+  --accent:        var(--sage);
+  --accent-hover:  var(--moss);
+  --accent-soft:   var(--sage-pale);
+  --shadow:        0 8px 28px rgba(62, 56, 50, 0.06);
 }
 
-[data-theme="dark"] {
-  --bg:             #1c1a17;
-  --panel:          rgba(40, 36, 30, 0.9);
-  --panel-strong:   #2e2922;
-  --line:           rgba(221, 213, 200, 0.1);
-  --text:           #F6F2EC;
-  --muted:          #9A9188;
-  --accent:         var(--terracotta-light);
-  --accent-soft:    #E0B08C;
-  --shadow:         0 8px 32px rgba(0, 0, 0, 0.28);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html {
-  font-family: 'Karla', system-ui, -apple-system, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  scroll-behavior: smooth;
-  -webkit-font-smoothing: antialiased;
-}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
   min-height: 100vh;
+  font-family: 'Karla', system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--text);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Subtle grain texture like elimente.com */
+/* Grain texture like elimente */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 9999;
   pointer-events: none;
-  opacity: 0.018;
+  opacity: 0.025;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
 }
 
@@ -76,26 +60,20 @@ h1, h2, h3, h4 {
   letter-spacing: -0.01em;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-button, input, select, textarea {
-  font: inherit;
-}
+a { color: inherit; text-decoration: none; }
+button, input, select, textarea { font: inherit; }
 
 ::selection {
-  background: var(--sage-muted, #C8D4BF);
+  background: var(--sage-muted);
   color: var(--bark);
 }
 
 :focus-visible {
-  outline: 2px solid rgba(184, 122, 90, 0.4);
+  outline: 2px solid rgba(122, 142, 110, 0.4);
   outline-offset: 2px;
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--cream-warm); }
-::-webkit-scrollbar-thumb { background: rgba(62, 56, 50, 0.2); border-radius: 999px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(62, 56, 50, 0.32); }
+::-webkit-scrollbar-track { background: var(--cream); }
+::-webkit-scrollbar-thumb { background: rgba(122, 142, 110, 0.25); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(122, 142, 110, 0.4); }

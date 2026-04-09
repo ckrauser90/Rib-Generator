@@ -40,7 +40,7 @@ export function Rib3DPreview({ outline, holes, thicknessMm }: Rib3DPreviewProps)
     }
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#EDE7DD");
+    scene.background = new THREE.Color("#F6F2EC");
 
     const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 2000);
 
@@ -93,7 +93,7 @@ export function Rib3DPreview({ outline, holes, thicknessMm }: Rib3DPreviewProps)
 
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(geometry, 22),
-      new THREE.LineBasicMaterial({ color: "#cf5d27" }),
+      new THREE.LineBasicMaterial({ color: "#7A8E6E" }),
     );
     edges.rotation.copy(mesh.rotation);
     scene.add(edges);

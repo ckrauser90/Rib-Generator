@@ -65,9 +65,9 @@ const drawPreview = (
   context.drawImage(image, 0, 0, width, height);
 
   if (contour.length > 1) {
-    context.fillStyle = "rgba(246, 124, 57, 0.16)";
-    context.strokeStyle = "#d85a1e";
-    context.lineWidth = 3;
+    context.fillStyle = "rgba(122, 142, 110, 0.14)";
+    context.strokeStyle = "#7A8E6E";
+    context.lineWidth = 2.5;
     context.beginPath();
     contour.forEach((point, index) => {
       const x = (point.x / imageWidth) * width;
@@ -82,7 +82,7 @@ const drawPreview = (
 
   if (workProfile.length > 1) {
     context.beginPath();
-    context.strokeStyle = "#fff7ef";
+    context.strokeStyle = "#B5C4AB";
     context.lineWidth = 2;
     workProfile.forEach((point, index) => {
       const x = (point.x / imageWidth) * width;
@@ -97,10 +97,10 @@ const drawPreview = (
     const x = (promptPoint.x / imageWidth) * width;
     const y = (promptPoint.y / imageHeight) * height;
     context.beginPath();
-    context.fillStyle = "#fff7ee";
-    context.strokeStyle = "#d85a1e";
+    context.fillStyle = "#FAF8F5";
+    context.strokeStyle = "#7A8E6E";
     context.lineWidth = 2;
-    context.arc(x, y, 8, 0, Math.PI * 2);
+    context.arc(x, y, 7, 0, Math.PI * 2);
     context.fill();
     context.stroke();
   }

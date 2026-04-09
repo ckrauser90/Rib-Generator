@@ -1,3 +1,8 @@
+/* ═══════════════════════════════════════════
+   RIB GENERATOR — elimente design language
+   Sage/Cream palette, editorial radius, clean
+   ═══════════════════════════════════════════ */
+
 /* ── Layout ── */
 
 .page {
@@ -15,27 +20,32 @@
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .uploadBtn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1px dashed rgba(162, 81, 43, 0.5);
-  background: rgba(255, 249, 241, 0.9);
-  color: var(--accent);
+  padding: 0.65rem 1.4rem;
+  border-radius: 4px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s;
+  transition: all 0.35s ease;
+  box-shadow: 0 2px 12px rgba(122, 142, 110, 0.25);
 }
 
 .uploadBtn:hover {
-  background: rgba(255, 243, 229, 0.95);
+  background: var(--accent-hover);
+  box-shadow: 0 4px 20px rgba(122, 142, 110, 0.35);
+  transform: translateY(-1px);
 }
 
 .hiddenInput {
@@ -43,24 +53,25 @@
 }
 
 .segBadge {
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 0.78rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  background: rgba(92, 63, 39, 0.08);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(62, 56, 50, 0.06);
   color: var(--muted);
   white-space: nowrap;
 }
 
 .segBadge[data-state="ready"] {
-  background: rgba(122, 142, 110, 0.15);
-  color: #5C6E52;
+  background: rgba(122, 142, 110, 0.14);
+  color: var(--accent);
 }
 
 .segBadge[data-state="error"] {
-  background: rgba(201, 70, 54, 0.1);
-  color: #9c3427;
+  background: rgba(184, 122, 90, 0.12);
+  color: var(--terracotta);
 }
 
 .statusText {
@@ -88,21 +99,39 @@
   flex-direction: column;
   gap: 10px;
   border: 1px solid var(--line);
-  border-radius: 20px;
-  padding: 14px;
+  border-radius: 12px;
+  padding: 16px;
   background: var(--panel);
-  backdrop-filter: blur(12px);
   box-shadow: var(--shadow);
   min-height: 0;
   overflow: hidden;
+  transition: box-shadow 0.35s ease;
 }
 
 .panelLabel {
-  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  text-align: center;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  justify-content: center;
+}
+
+.panelLabel::before {
+  content: '';
+  width: 20px;
+  height: 1.5px;
+  background: var(--accent-soft);
+}
+
+.panelLabel::after {
+  content: '';
+  width: 20px;
+  height: 1.5px;
+  background: var(--accent-soft);
 }
 
 /* ── Canvas ── */
@@ -110,10 +139,10 @@
 .canvasWrap {
   flex: 1;
   position: relative;
-  border-radius: 14px;
+  border-radius: 8px;
   overflow: hidden;
-  background: rgba(255, 253, 249, 0.7);
-  border: 1px solid rgba(62, 56, 50, 0.07);
+  background: var(--linen);
+  border: 1px solid rgba(122, 142, 110, 0.06);
   min-height: 0;
 }
 
@@ -144,18 +173,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
+  border-radius: 8px;
   overflow: hidden;
-  background:
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.65), rgba(237, 231, 221, 0.9)),
-    var(--panel);
-  border: 1px solid rgba(62, 56, 50, 0.07);
+  background: linear-gradient(180deg, var(--linen), var(--cream));
+  border: 1px solid rgba(122, 142, 110, 0.06);
   min-height: 0;
 }
 
 .previewEmpty {
   font-size: 0.82rem;
   color: var(--muted);
+  font-style: italic;
 }
 
 .outlineSvg {
@@ -165,16 +193,16 @@
 }
 
 .outlinePath {
-  fill: rgba(246, 124, 57, 0.12);
-  stroke: #d85a1e;
-  stroke-width: 2.4;
+  fill: rgba(122, 142, 110, 0.1);
+  stroke: var(--accent);
+  stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
 .holePath {
-  fill: rgba(255, 250, 243, 0.96);
-  stroke: #d85a1e;
-  stroke-width: 2.2;
+  fill: var(--linen);
+  stroke: var(--accent);
+  stroke-width: 1.8;
   vector-effect: non-scaling-stroke;
 }
 
@@ -183,12 +211,11 @@
 .settingsBar {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 14px 20px;
+  gap: 24px;
+  padding: 12px 20px;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 12px;
   background: var(--panel);
-  backdrop-filter: blur(12px);
   box-shadow: var(--shadow);
   flex-wrap: wrap;
 }
@@ -200,15 +227,18 @@
 }
 
 .settingLabel {
-  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--muted);
 }
 
 .settingLabel strong {
   color: var(--text);
-  font-weight: 600;
 }
 
 .sideToggle {
@@ -218,26 +248,28 @@
 
 .toggleBtn {
   appearance: none;
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(92, 63, 39, 0.14);
-  background: rgba(255, 250, 244, 0.8);
-  color: var(--text);
+  padding: 0.35rem 0.9rem;
+  border-radius: 3px;
+  border: 1px solid var(--cream-dark);
+  background: var(--linen);
+  color: var(--bark-light);
   font: inherit;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: all 0.3s ease;
 }
 
 .toggleBtn:hover {
-  background: rgba(255, 243, 229, 0.95);
+  border-color: var(--accent-soft);
+  color: var(--accent);
 }
 
 .toggleBtnActive {
-  border-color: rgba(162, 81, 43, 0.4);
-  background: rgba(250, 238, 222, 0.95);
-  font-weight: 600;
+  background: rgba(122, 142, 110, 0.14);
+  border-color: var(--accent-soft);
   color: var(--accent);
+  font-weight: 600;
 }
 
 .slider {
@@ -260,58 +292,68 @@
 
 .numInput {
   width: 62px;
-  padding: 6px 8px;
-  border-radius: 10px;
-  border: 1px solid rgba(92, 63, 39, 0.14);
-  background: rgba(255, 252, 247, 0.92);
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--cream-dark);
+  background: var(--linen);
   color: var(--text);
   font: inherit;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
+  transition: border-color 0.3s;
 }
 
 .numInput:focus {
-  outline: 2px solid rgba(216, 90, 30, 0.2);
-  border-color: rgba(162, 81, 43, 0.32);
+  outline: 2px solid rgba(122, 142, 110, 0.3);
+  border-color: var(--accent-soft);
 }
 
 .settingActions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   margin-left: auto;
+  align-items: center;
 }
 
 .ghostBtn {
   appearance: none;
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(162, 81, 43, 0.2);
-  background: rgba(255, 248, 239, 0.9);
-  color: var(--text);
+  padding: 0.5rem 0.2rem;
+  border: none;
+  border-bottom: 1.5px solid var(--cream-dark);
+  background: none;
+  color: var(--bark-light);
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.3s;
 }
 
 .ghostBtn:hover {
-  background: rgba(255, 241, 224, 0.95);
+  color: var(--accent);
+  border-color: var(--accent-soft);
 }
 
 .primaryBtn {
   appearance: none;
-  padding: 8px 20px;
-  border-radius: 999px;
-  border: 0;
-  background: linear-gradient(135deg, var(--accent), var(--accent-soft));
-  color: white;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.4rem;
+  border-radius: 4px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
   cursor: pointer;
-  transition: opacity 0.15s, transform 0.15s;
+  transition: all 0.35s ease;
+  box-shadow: 0 2px 12px rgba(122, 142, 110, 0.25);
 }
 
 .primaryBtn:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 4px 20px rgba(122, 142, 110, 0.35);
   transform: translateY(-1px);
 }
 
@@ -319,6 +361,7 @@
   opacity: 0.4;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 
 /* ── Responsive ── */
