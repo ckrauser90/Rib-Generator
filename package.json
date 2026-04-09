@@ -10,18 +10,17 @@
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.34",
-    "next": "^16.2.1",
+    "earcut": "^3.0.2",
+    "next": "15.3.1",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "three": "^0.183.2"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "22.15.3",
     "@types/react": "19.1.2",
     "@types/react-dom": "19.1.2",
-    "autoprefixer": "^10.4.27",
-    "postcss": "^8.5.8",
-    "tailwindcss": "^4.2.2",
+    "@types/three": "^0.183.1",
     "typescript": "5.8.3"
   }
 }

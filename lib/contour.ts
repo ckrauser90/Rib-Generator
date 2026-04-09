@@ -1,6 +1,13 @@
+import earcut from "earcut";
+
 export type Point = {
   x: number;
   y: number;
+};
+
+export type ToolHole = {
+  center: Point;
+  radius: number;
 };
 
 export type ContourResult = {
@@ -34,6 +41,7 @@ export type DetectionOptions = {
 export type ToolOutlineResult = {
   outline: Point[];
   profile: Point[];
+  holes: ToolHole[];
 };
 
 export type WorkProfileSide = "left" | "right";
@@ -176,6 +184,24 @@ const getBounds = (points: Point[]) => {
   return { minX, minY, maxX, maxY };
 };
 
+const polygonArea = (points: Point[]) => {
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const next = (index + 1) % points.length;
+    area += points[index].x * points[next].y - points[next].x * points[index].y;
+  }
+  return area / 2;
+};
+
+const ensureOrientation = (points: Point[], clockwise: boolean) => {
+  const isClockwise = polygonArea(points) < 0;
+  if (isClockwise === clockwise) {
+    return points.slice();
+  }
+
+  return points.slice().reverse();
+};
+
 const densifyPolyline = (points: Point[], subdivisions: number) => {
   if (points.length < 2 || subdivisions <= 1) {
     return points.slice();
@@ -231,7 +257,7 @@ const suppressProfileSpikes = (points: Point[]) => {
 
   let current = points.map((point) => ({ ...point }));
 
-  for (let pass = 0; pass < 4; pass += 1) {
+  for (let pass = 0; pass < 2; pass += 1) {
     const next = current.map((point) => ({ ...point }));
 
     for (let index = 3; index < current.length - 3; index += 1) {
@@ -269,7 +295,7 @@ const removeMicroKinks = (points: Point[]) => {
 
   let current = points.map((point) => ({ ...point }));
 
-  for (let pass = 0; pass < 6; pass += 1) {
+  for (let pass = 0; pass < 2; pass += 1) {
     const next = current.map((point) => ({ ...point }));
 
     for (let index = 2; index < current.length - 2; index += 1) {
@@ -288,108 +314,16 @@ const removeMicroKinks = (points: Point[]) => {
       const shortReversal =
         Math.sign(current[index].x - current[index - 1].x) !==
         Math.sign(current[index + 1].x - current[index].x);
-      const threshold = Math.max(0.2, localStep * 0.8);
+      const threshold = Math.max(0.42, localStep * 1.2);
 
       if (shortReversal && deviationFromMedian > threshold && deviationFromLine > threshold * 0.8) {
-        next[index].x = interpolatedX * 0.6 + localMedian * 0.4;
+        next[index].x = interpolatedX * 0.78 + localMedian * 0.22;
       }
     }
 
     current = next;
   }
 
-  return current;
-};
-
-// Catmull-Rom spline interpolation — creates smooth organic curves through points
-const catmullRomSpline = (points: Point[], numSamples: number): Point[] => {
-  if (points.length < 4) return points.slice();
-
-  const result: Point[] = [];
-  const n = points.length - 1;
-
-  for (let i = 0; i < n; i += 1) {
-    const p0 = points[Math.max(0, i - 1)];
-    const p1 = points[i];
-    const p2 = points[Math.min(n, i + 1)];
-    const p3 = points[Math.min(n, i + 2)];
-
-    for (let j = 0; j < numSamples; j += 1) {
-      const t = j / numSamples;
-      const t2 = t * t;
-      const t3 = t2 * t;
-
-      const x =
-        0.5 *
-        ((2 * p1.x) +
-          (-p0.x + p2.x) * t +
-          (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-          (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
-
-      const y =
-        0.5 *
-        ((2 * p1.y) +
-          (-p0.y + p2.y) * t +
-          (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-          (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
-
-      result.push({ x, y });
-    }
-  }
-
-  result.push(points[n]);
-  return result;
-};
-
-// Smooth a profile by fitting a Catmull-Rom spline and resampling it evenly
-const fitSplineAndResample = (points: Point[], numOutput: number): Point[] => {
-  if (points.length < 4 || numOutput < 4) return points.slice();
-  const spline = catmullRomSpline(points, 4);
-  // Resample spline at evenly spaced intervals
-  const result: Point[] = [];
-  for (let i = 0; i < numOutput; i += 1) {
-    const t = spline.length > 1 ? (i / (numOutput - 1)) * (spline.length - 1) : 0;
-    const idx = Math.floor(t);
-    const frac = t - idx;
-    if (idx >= spline.length - 1) {
-      result.push({ ...spline[spline.length - 1] });
-    } else {
-      result.push({
-        x: spline[idx].x + (spline[idx + 1].x - spline[idx].x) * frac,
-        y: spline[idx].y + (spline[idx + 1].y - spline[idx].y) * frac,
-      });
-    }
-  }
-  return result;
-};
-
-// Curvature-aware aggressive smoothing for organic pottery shapes.
-// Points that deviate significantly from their neighbors are smoothed more.
-const smoothOrganicContour = (points: Point[], passes: number): Point[] => {
-  if (points.length < 7 || passes === 0) return points.slice();
-  let current = points.map((p) => ({ ...p }));
-  for (let pass = 0; pass < passes; pass += 1) {
-    const next = current.map((p) => ({ ...p }));
-    for (let i = 3; i < current.length - 3; i += 1) {
-      const neighbors = [
-        current[i - 3].x, current[i - 2].x, current[i - 1].x,
-        current[i].x, current[i + 1].x, current[i + 2].x, current[i + 3].x,
-      ];
-      const localMedian = median(neighbors);
-      const deviation = Math.abs(current[i].x - localMedian);
-      const localStep = average([
-        Math.abs(current[i - 1].x - current[i - 2].x),
-        Math.abs(current[i].x - current[i - 1].x),
-        Math.abs(current[i + 1].x - current[i].x),
-        Math.abs(current[i + 2].x - current[i + 1].x),
-      ]);
-      // Aggressive: blend heavily toward neighbor average for any meaningful deviation
-      const blendFactor = Math.min(0.85, Math.max(0.3, deviation / Math.max(localStep, 0.5)));
-      const neighborAvg = (current[i - 1].x + current[i + 1].x) / 2;
-      next[i].x = current[i].x * (1 - blendFactor) + neighborAvg * blendFactor;
-    }
-    current = next;
-  }
   return current;
 };
 
@@ -450,6 +384,81 @@ const buildTemplateCappedProfile = (
     },
     { x: bottomCapX, y: bottomY },
   ];
+};
+
+const sampleProfileXAtY = (profile: Point[], y: number) => {
+  if (profile.length === 0) {
+    return 0;
+  }
+
+  if (y <= profile[0].y) {
+    return profile[0].x;
+  }
+
+  for (let index = 1; index < profile.length; index += 1) {
+    const previous = profile[index - 1];
+    const current = profile[index];
+    if (y > current.y) {
+      continue;
+    }
+
+    const span = Math.max(1e-6, current.y - previous.y);
+    const t = clamp((y - previous.y) / span, 0, 1);
+    return lerp(previous.x, current.x, t);
+  }
+
+  return profile[profile.length - 1].x;
+};
+
+const buildGripHoles = (
+  totalWidthMm: number,
+  totalHeight: number,
+  profile: Point[],
+): ToolHole[] => {
+  if (totalWidthMm < 42 || totalHeight < 80 || profile.length < 2) {
+    return [];
+  }
+
+  const targetRadius = clamp(totalWidthMm * 0.082, 5.2, 7.2);
+  const smoothSideMargin = clamp(totalWidthMm * 0.145, 9.5, 12.5);
+  const materialClearance = clamp(totalWidthMm * 0.038, 2.2, 3.4);
+  const verticalMargin = clamp(totalHeight * 0.1, 10, 14);
+  const centerYs = [totalHeight * 0.32, totalHeight * 0.74];
+
+  return centerYs.flatMap((rawCenterY) => {
+    const centerY = clamp(rawCenterY, verticalMargin, totalHeight - verticalMargin);
+    const localProfileX = sampleProfileXAtY(profile, centerY);
+    const maxRadiusFromMaterial = (localProfileX - smoothSideMargin - materialClearance) / 2;
+    const radius = Math.min(targetRadius, maxRadiusFromMaterial);
+
+    if (!Number.isFinite(radius) || radius < 4) {
+      return [];
+    }
+
+    return [
+      {
+        center: {
+          x: smoothSideMargin + radius,
+          y: centerY,
+        },
+        radius,
+      },
+    ];
+  });
+};
+
+const buildCircularHolePolygon = (hole: ToolHole, segments = 28) => {
+  const points: Point[] = [];
+
+  for (let index = 0; index < segments; index += 1) {
+    const angle = (Math.PI * 2 * index) / segments;
+    points.push({
+      x: hole.center.x + Math.cos(angle) * hole.radius,
+      y: hole.center.y + Math.sin(angle) * hole.radius,
+    });
+  }
+
+  return points;
 };
 
 type ComponentStats = {
@@ -1299,45 +1308,43 @@ export const buildRibToolOutline = (
     return {
       outline: [],
       profile: [],
+      holes: [],
     };
   }
 
-  // Fit Catmull-Rom spline to the workProfile — this makes the contour truly organic
-  // by describing it as a smooth mathematical curve rather than noisy pixel samples.
-  // Target ~150 points for the spline (enough detail, smooth result)
-  const splineProfile = fitSplineAndResample(workProfile, 150);
-
-  const bounds = getBounds(splineProfile);
-  const profileMinX = Math.min(...splineProfile.map((point) => point.x));
-  const profileMaxX = Math.max(...splineProfile.map((point) => point.x));
+  const bounds = getBounds(workProfile);
+  const profileMinX = Math.min(...workProfile.map((point) => point.x));
+  const profileMaxX = Math.max(...workProfile.map((point) => point.x));
   const silhouetteWidth = Math.max(1, profileMaxX - profileMinX);
   const sourceMinY = referenceBounds?.minY ?? bounds.minY;
   const sourceMaxY = referenceBounds?.maxY ?? bounds.maxY;
   const silhouetteHeight = Math.max(1, sourceMaxY - sourceMinY);
   const scaleY = toolHeightMm / silhouetteHeight;
   const totalWidthMm = toolWidthMm;
-  const cavityDepthMm = totalWidthMm * 0.3;
   const profileAnchorX = totalWidthMm;
   const topPad = toolHeightMm * 0.06;
   const bottomPad = toolHeightMm * 0.06;
   const totalHeight = toolHeightMm + topPad + bottomPad;
 
-  const rawDepths = splineProfile.map((point) =>
+  const rawDepthsPx = workProfile.map((point) =>
     side === "left" ? profileMaxX - point.x : point.x - profileMinX,
   );
-  const macroDepths = smoothSeries(rawDepths, 10);
-  const boostedDepths = rawDepths.map((depth, index) => {
-    const detail = depth - macroDepths[index];
-    return macroDepths[index] + detail * 0.5;
+  const sourceDepthsMm = rawDepthsPx.map((depth) => Math.max(0, depth * scaleY));
+  const sourceMaxDepthMm = Math.max(0, ...sourceDepthsMm);
+  const minimumBackMaterialMm = clamp(totalWidthMm * 0.24, 13, 19);
+  const maxAllowedDepthMm = Math.max(8, totalWidthMm - minimumBackMaterialMm);
+  const depthScale = sourceMaxDepthMm > maxAllowedDepthMm ? maxAllowedDepthMm / sourceMaxDepthMm : 1;
+  const macroDepthsMm = smoothSeries(sourceDepthsMm, 8);
+  const mappedDepthsMm = sourceDepthsMm.map((depth, index) => {
+    const detail = depth - macroDepthsMm[index];
+    const preservedDepth = macroDepthsMm[index] + detail * 1.08;
+    return clamp(preservedDepth * depthScale, 0, maxAllowedDepthMm);
   });
-  const boostedMinDepth = Math.min(...boostedDepths);
-  const boostedMaxDepth = Math.max(...boostedDepths);
-  const boostedRange = Math.max(1, boostedMaxDepth - boostedMinDepth);
+  const cavityDepthMm = Math.max(0, ...mappedDepthsMm);
 
-  const profile = splineProfile.map((point, index) => {
-    const normalizedDepth = (boostedDepths[index] - boostedMinDepth) / boostedRange;
+  const profile = workProfile.map((point, index) => {
     return {
-      x: profileAnchorX - normalizedDepth * cavityDepthMm,
+      x: profileAnchorX - mappedDepthsMm[index],
       y: topPad + (point.y - sourceMinY) * scaleY,
     };
   });
@@ -1350,37 +1357,17 @@ export const buildRibToolOutline = (
   const detailedProfile = removeMicroKinks(
     buildTemplateCappedProfile(denseProfile, totalWidthMm, cavityDepthMm, topY, bottomY),
   );
-
-  // Final aggressive smoothing: 10 passes of wide-kernel median on x-coords
-  const finalSmoothed = (() => {
-    if (detailedProfile.length < 11) return detailedProfile;
-    let current = detailedProfile.map((p) => ({ ...p }));
-    for (let pass = 0; pass < 10; pass += 1) {
-      const next = current.map((p) => ({ ...p }));
-      for (let i = 5; i < current.length - 5; i += 1) {
-        const window11 = [
-          current[i - 5].x, current[i - 4].x, current[i - 3].x,
-          current[i - 2].x, current[i - 1].x, current[i].x,
-          current[i + 1].x, current[i + 2].x, current[i + 3].x,
-          current[i + 4].x, current[i + 5].x,
-        ];
-        next[i].x = median(window11);
-      }
-      current = next;
-    }
-    // Extra organic smoothing pass: blend any remaining deviations
-    return smoothOrganicContour(current, 4);
-  })();
+  const holes = buildGripHoles(totalWidthMm, totalHeight, detailedProfile);
 
   return {
     outline: [
       { x: outerLeftX, y: topY },
-      { x: finalSmoothed[0]?.x ?? outerRightX, y: topY },
-      ...finalSmoothed,
-      { x: finalSmoothed[finalSmoothed.length - 1]?.x ?? outerRightX, y: bottomY },
+      { x: detailedProfile[0]?.x ?? outerRightX, y: topY },
+      ...detailedProfile,
       { x: outerLeftX, y: bottomY },
     ],
-    profile: finalSmoothed,
+    profile: detailedProfile,
+    holes,
   };
 };
 
@@ -1414,7 +1401,7 @@ export function createExtrudedStl(
     throw new Error("Nicht genug Konturpunkte fuer den STL-Export.");
   }
 
-  const toolOutline = buildRibToolOutline(
+  const toolGeometry = buildRibToolOutline(
     workProfile,
     imageWidth,
     imageHeight,
@@ -1422,23 +1409,46 @@ export function createExtrudedStl(
     toolHeightMm,
     side,
     referenceBounds,
-  ).outline;
+  );
+  const toolOutline = ensureOrientation(toolGeometry.outline, false);
+  const holePolygons = toolGeometry.holes.map((hole) =>
+    ensureOrientation(buildCircularHolePolygon(hole), true),
+  );
 
   const frontZ = thicknessMm / 2;
   const backZ = -thicknessMm / 2;
   const facets: string[] = [];
 
-  for (let i = 1; i < toolOutline.length - 1; i += 1) {
-    const a = pointToFacetVertex(toolOutline[0], frontZ, 1, 1);
-    const b = pointToFacetVertex(toolOutline[i], frontZ, 1, 1);
-    const c = pointToFacetVertex(toolOutline[i + 1], frontZ, 1, 1);
+  const flatVertices: number[] = [];
+  const vertices: Point[] = [];
+  const holeIndices: number[] = [];
+
+  for (const point of toolOutline) {
+    flatVertices.push(point.x, point.y);
+    vertices.push(point);
+  }
+
+  for (const hole of holePolygons) {
+    holeIndices.push(vertices.length);
+    for (const point of hole) {
+      flatVertices.push(point.x, point.y);
+      vertices.push(point);
+    }
+  }
+
+  const triangles = earcut(flatVertices, holeIndices, 2);
+
+  for (let i = 0; i < triangles.length; i += 3) {
+    const a = pointToFacetVertex(vertices[triangles[i]], frontZ, 1, 1);
+    const b = pointToFacetVertex(vertices[triangles[i + 1]], frontZ, 1, 1);
+    const c = pointToFacetVertex(vertices[triangles[i + 2]], frontZ, 1, 1);
     facets.push(facet([0, 0, 1], a, b, c));
   }
 
-  for (let i = 1; i < toolOutline.length - 1; i += 1) {
-    const a = pointToFacetVertex(toolOutline[0], backZ, 1, 1);
-    const b = pointToFacetVertex(toolOutline[i + 1], backZ, 1, 1);
-    const c = pointToFacetVertex(toolOutline[i], backZ, 1, 1);
+  for (let i = 0; i < triangles.length; i += 3) {
+    const a = pointToFacetVertex(vertices[triangles[i]], backZ, 1, 1);
+    const b = pointToFacetVertex(vertices[triangles[i + 2]], backZ, 1, 1);
+    const c = pointToFacetVertex(vertices[triangles[i + 1]], backZ, 1, 1);
     facets.push(facet([0, 0, -1], a, b, c));
   }
 
@@ -1453,74 +1463,18 @@ export function createExtrudedStl(
     facets.push(facet([0, 1, 0], aFront, bBack, bFront));
   }
 
-  return `solid rib_tool\n${facets.join("\n")}\nendsolid rib_tool\n`;
-}
+  for (const hole of holePolygons) {
+    for (let i = 0; i < hole.length; i += 1) {
+      const next = (i + 1) % hole.length;
+      const aFront = pointToFacetVertex(hole[i], frontZ, 1, 1);
+      const bFront = pointToFacetVertex(hole[next], frontZ, 1, 1);
+      const aBack = pointToFacetVertex(hole[i], backZ, 1, 1);
+      const bBack = pointToFacetVertex(hole[next], backZ, 1, 1);
 
-export type PerspectiveAnalysis = {
-  verticalDeg: number;
-  horizontalDeg: number;
-  score: number;
-};
-
-export function analyzePerspective(
-  maskData: Uint8Array,
-  width: number,
-  height: number,
-): PerspectiveAnalysis {
-  const topStart = Math.floor(height * 0.1);
-  const topEnd = Math.floor(height * 0.35);
-  const bottomStart = Math.floor(height * 0.65);
-  const bottomEnd = Math.floor(height * 0.9);
-
-  const zoneScan = (yStart: number, yEnd: number) => {
-    let widthSum = 0;
-    let centerSum = 0;
-    let count = 0;
-    for (let y = yStart; y < yEnd; y += 1) {
-      let left = -1;
-      let right = -1;
-      for (let x = 0; x < width; x += 1) {
-        if (maskData[y * width + x]) {
-          left = x;
-          break;
-        }
-      }
-      for (let x = width - 1; x >= 0; x -= 1) {
-        if (maskData[y * width + x]) {
-          right = x;
-          break;
-        }
-      }
-      if (left >= 0 && right > left) {
-        widthSum += right - left;
-        centerSum += (left + right) / 2;
-        count += 1;
-      }
+      facets.push(facet([0, -1, 0], aFront, bBack, aBack));
+      facets.push(facet([0, -1, 0], aFront, bFront, bBack));
     }
-    return count > 0 ? { width: widthSum / count, center: centerSum / count } : null;
-  };
-
-  const top = zoneScan(topStart, topEnd);
-  const bottom = zoneScan(bottomStart, bottomEnd);
-
-  if (!top || !bottom) {
-    return { verticalDeg: 0, horizontalDeg: 0, score: 0 };
   }
 
-  const spanY = height * 0.55;
-  const widthDiff = bottom.width - top.width;
-  const verticalDeg = (Math.atan2(widthDiff / 2, spanY) * 180) / Math.PI;
-
-  const centerDiff = bottom.center - top.center;
-  const horizontalDeg = (Math.atan2(centerDiff, spanY) * 180) / Math.PI;
-
-  const widthRatio =
-    Math.max(top.width, bottom.width) / Math.min(top.width, bottom.width);
-  const score = Math.min(1, (widthRatio - 1) * 2);
-
-  return {
-    verticalDeg: Math.max(-30, Math.min(30, verticalDeg)),
-    horizontalDeg: Math.max(-30, Math.min(30, horizontalDeg)),
-    score,
-  };
+  return `solid rib_tool\n${facets.join("\n")}\nendsolid rib_tool\n`;
 }
