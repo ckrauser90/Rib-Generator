@@ -40,10 +40,9 @@ export function Rib3DPreview({ outline, holes, thicknessMm }: Rib3DPreviewProps)
     }
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#f6efe5");
+    scene.background = new THREE.Color("#EDE7DD");
 
     const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 2000);
-    camera.position.set(95, -80, 120);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -53,9 +52,7 @@ export function Rib3DPreview({ outline, holes, thicknessMm }: Rib3DPreviewProps)
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.enablePan = false;
-    controls.minDistance = 55;
-    controls.maxDistance = 280;
-    controls.target.set(25, -55, 0);
+    controls.target.set(0, 0, 0);
 
     const ambientLight = new THREE.HemisphereLight("#fff6eb", "#cfb397", 1.15);
     scene.add(ambientLight);
@@ -101,14 +98,19 @@ export function Rib3DPreview({ outline, holes, thicknessMm }: Rib3DPreviewProps)
     edges.rotation.copy(mesh.rotation);
     scene.add(edges);
 
-    const grid = new THREE.GridHelper(180, 8, "#e8d6c5", "#efe4d9");
-    grid.rotation.x = Math.PI / 2;
-    grid.position.z = -thicknessMm / 2 - 10;
-    scene.add(grid);
+    // Position camera to fit geometry — based on bounding sphere
+    geometry.computeBoundingSphere();
+    const radius = geometry.boundingSphere?.radius ?? 80;
+    const distance = radius * 3.2;
+    camera.position.set(distance * 0.7, -distance * 0.5, distance);
+    camera.near = distance * 0.01;
+    camera.far = distance * 10;
+    controls.minDistance = radius * 1.2;
+    controls.maxDistance = radius * 8;
 
     const fit = () => {
-      const width = Math.max(280, mountNode.clientWidth);
-      const height = Math.max(320, mountNode.clientHeight);
+      const width = Math.max(1, mountNode.clientWidth);
+      const height = Math.max(1, mountNode.clientHeight);
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
