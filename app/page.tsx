@@ -13,7 +13,6 @@ import {
 import { loadInteractiveSegmenter, segmentRasterFromPoint } from "../lib/interactive-segmenter";
 import {
   deriveNormalizedProfileFromMask,
-  type ProfileQuality,
   smoothWorkProfileCurve,
 } from "../lib/profile-normalization";
 import { getRasterSize, type RasterSource } from "../lib/perspective";
@@ -22,8 +21,7 @@ const DEFAULT_MASK_THRESHOLD = 0.18;
 const DEFAULT_MASK_SMOOTH_PASSES = 1;
 const DEFAULT_CROP_BOTTOM_RATIO = 0.04;
 
-const initialStatus =
-  "Foto laden, auf das Gefaess klicken und die MediaPipe-Maske in eine Rib-Kontur umwandeln.";
+const initialStatus = "Foto laden, auf das Gefäss klicken — MediaPipe erkennt die Kontur.";
 
 const loadImageFromUrl = (url: string) =>
   new Promise<HTMLImageElement>((resolve, reject) => {
@@ -61,9 +59,7 @@ const drawPreview = (
   canvas.height = height;
 
   const context = canvas.getContext("2d");
-  if (!context) {
-    return;
-  }
+  if (!context) return;
 
   context.clearRect(0, 0, width, height);
   context.drawImage(image, 0, 0, width, height);
@@ -76,11 +72,8 @@ const drawPreview = (
     contour.forEach((point, index) => {
       const x = (point.x / imageWidth) * width;
       const y = (point.y / imageHeight) * height;
-      if (index === 0) {
-        context.moveTo(x, y);
-      } else {
-        context.lineTo(x, y);
-      }
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
     });
     context.closePath();
     context.fill();
@@ -94,11 +87,8 @@ const drawPreview = (
     workProfile.forEach((point, index) => {
       const x = (point.x / imageWidth) * width;
       const y = (point.y / imageHeight) * height;
-      if (index === 0) {
-        context.moveTo(x, y);
-      } else {
-        context.lineTo(x, y);
-      }
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
     });
     context.stroke();
   }
@@ -117,10 +107,7 @@ const drawPreview = (
 };
 
 const buildSvgPath = (points: Point[]) => {
-  if (points.length === 0) {
-    return "";
-  }
-
+  if (points.length === 0) return "";
   return points
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
     .join(" ")
@@ -128,18 +115,14 @@ const buildSvgPath = (points: Point[]) => {
 };
 
 const getOutlineBounds = (outline: Point[]) => {
-  if (outline.length === 0) {
-    return null;
-  }
-
-  const xs = outline.map((point) => point.x);
-  const ys = outline.map((point) => point.y);
+  if (outline.length === 0) return null;
+  const xs = outline.map((p) => p.x);
+  const ys = outline.map((p) => p.y);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
   const padding = Math.max((maxX - minX) * 0.08, (maxY - minY) * 0.05, 4);
-
   return {
     minX: minX - padding,
     minY: minY - padding,
@@ -155,10 +138,7 @@ export default function Home() {
   const [contour, setContour] = useState<Point[]>([]);
   const [leftWorkProfile, setLeftWorkProfile] = useState<Point[]>([]);
   const [rightWorkProfile, setRightWorkProfile] = useState<Point[]>([]);
-  const [referenceBounds, setReferenceBounds] = useState<{ minY: number; maxY: number } | null>(
-    null,
-  );
-  const [, setProfileQuality] = useState<ProfileQuality | null>(null);
+  const [referenceBounds, setReferenceBounds] = useState<{ minY: number; maxY: number } | null>(null);
   const [toolOutline, setToolOutline] = useState<Point[]>([]);
   const [toolHoles, setToolHoles] = useState<ToolHole[]>([]);
   const [workProfileSide, setWorkProfileSide] = useState<WorkProfileSide>("right");
@@ -168,7 +148,6 @@ export default function Home() {
   const [thicknessMm, setThicknessMm] = useState(4.2);
   const [status, setStatus] = useState(initialStatus);
   const [segmenterState, setSegmenterState] = useState<"loading" | "ready" | "error">("loading");
-  const [, setSegmenterError] = useState<string | null>(null);
   const [segmenting, setSegmenting] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -184,42 +163,28 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-
     void loadInteractiveSegmenter()
       .then(() => {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
         setSegmenterState("ready");
-        setStatus("MediaPipe ist bereit. Lade jetzt ein Foto hoch und klicke direkt in das Gefaess.");
+        setStatus("Bereit. Lade ein Foto hoch und klicke ins Gefäss.");
       })
-      .catch((error) => {
-        if (cancelled) {
-          return;
-        }
+      .catch(() => {
+        if (cancelled) return;
         setSegmenterState("error");
-        setSegmenterError(error instanceof Error ? error.message : "MediaPipe konnte nicht geladen werden.");
         setStatus("MediaPipe konnte nicht geladen werden.");
       });
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     return () => {
-      if (imageUrl?.startsWith("blob:")) {
-        URL.revokeObjectURL(imageUrl);
-      }
+      if (imageUrl?.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
     };
   }, [imageUrl]);
 
   useEffect(() => {
-    if (!sourceRaster || !canvasRef.current) {
-      return;
-    }
-
+    if (!sourceRaster || !canvasRef.current) return;
     drawPreview(canvasRef.current, sourceRaster, contour, workProfile, promptPoint);
   }, [contour, promptPoint, sourceRaster, workProfile]);
 
@@ -229,7 +194,6 @@ export default function Home() {
         setContour([]);
         setLeftWorkProfile([]);
         setRightWorkProfile([]);
-        setProfileQuality(null);
         setToolOutline([]);
         setToolHoles([]);
       }
@@ -246,10 +210,7 @@ export default function Home() {
         workerCanvas.width = width;
         workerCanvas.height = height;
         const workerContext = workerCanvas.getContext("2d");
-
-        if (!workerContext) {
-          throw new Error("Bild konnte nicht fuer die Konturverfeinerung vorbereitet werden.");
-        }
+        if (!workerContext) throw new Error("Canvas konnte nicht erstellt werden.");
 
         workerContext.drawImage(sourceRaster, 0, 0, width, height);
         const sourceImageData = workerContext.getImageData(0, 0, width, height);
@@ -259,53 +220,35 @@ export default function Home() {
           DEFAULT_MASK_THRESHOLD,
         );
 
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         const contourResult = deriveNormalizedProfileFromMask(
           result.binaryMask,
           result.width,
           result.height,
-          {
-            smoothPasses: DEFAULT_MASK_SMOOTH_PASSES,
-            cropBottomRatio: DEFAULT_CROP_BOTTOM_RATIO,
-            seedPoint: promptPoint,
-          },
+          { smoothPasses: DEFAULT_MASK_SMOOTH_PASSES, cropBottomRatio: DEFAULT_CROP_BOTTOM_RATIO, seedPoint: promptPoint },
           sourceImageData,
           result.confidence,
         );
 
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         const profileWindowRadius = 3 + Math.round(curveSmoothing / 12);
         const profileBlend = Math.min(0.18 + (curveSmoothing / 100) * 0.82, 0.96);
-        const smoothedLeftWorkProfile = smoothWorkProfileCurve(contourResult.leftWorkProfile, {
-          windowRadius: profileWindowRadius,
-          blend: profileBlend,
-        });
-        const smoothedRightWorkProfile = smoothWorkProfileCurve(contourResult.rightWorkProfile, {
-          windowRadius: profileWindowRadius,
-          blend: profileBlend,
-        });
+        const smoothedLeftWorkProfile = smoothWorkProfileCurve(contourResult.leftWorkProfile, { windowRadius: profileWindowRadius, blend: profileBlend });
+        const smoothedRightWorkProfile = smoothWorkProfileCurve(contourResult.rightWorkProfile, { windowRadius: profileWindowRadius, blend: profileBlend });
 
         setContour(contourResult.contour);
         setLeftWorkProfile(smoothedLeftWorkProfile);
         setRightWorkProfile(smoothedRightWorkProfile);
         setReferenceBounds(contourResult.referenceBounds);
-        setProfileQuality(contourResult.quality);
 
-        const selectedProfile =
-          workProfileSide === "left"
-            ? smoothedLeftWorkProfile
-            : smoothedRightWorkProfile;
+        const selectedProfile = workProfileSide === "left" ? smoothedLeftWorkProfile : smoothedRightWorkProfile;
 
         if (selectedProfile.length === 0) {
           setToolOutline([]);
           setToolHoles([]);
-          setStatus("Die MediaPipe-Maske war da, aber daraus konnte noch keine stabile Gefaesskontur abgeleitet werden.");
+          setStatus("Maske erkannt, aber keine stabile Kontur ableitbar.");
           return;
         }
 
@@ -321,49 +264,28 @@ export default function Home() {
         setToolOutline(ribGeometry.outline);
         setToolHoles(ribGeometry.holes);
         setStatus(
-          `MediaPipe-Maske erkannt. ${contourResult.usableColumns} Zeilen ausgewertet, aktive Seite: ${
-            workProfileSide === "left" ? "links" : "rechts"
-          }. Profil-Confidence: ${(contourResult.quality.confidence * 100).toFixed(0)}%, Kurvenglaettung: ${(profileBlend * 100).toFixed(0)}%.`,
+          `Kontur erkannt — ${contourResult.usableColumns} Zeilen, Seite: ${workProfileSide === "left" ? "links" : "rechts"}, Confidence: ${(contourResult.quality.confidence * 100).toFixed(0)}%`,
         );
       } catch (error) {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
         setContour([]);
         setLeftWorkProfile([]);
         setRightWorkProfile([]);
-        setProfileQuality(null);
         setReferenceBounds(null);
         setToolOutline([]);
         setToolHoles([]);
-        setStatus(error instanceof Error ? error.message : "Die Segmentierung ist fehlgeschlagen.");
+        setStatus(error instanceof Error ? error.message : "Segmentierung fehlgeschlagen.");
       } finally {
-        if (!cancelled) {
-          setSegmenting(false);
-        }
+        if (!cancelled) setSegmenting(false);
       }
     };
 
     void runSegmentation();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    curveSmoothing,
-    promptPoint,
-    segmenterState,
-    sourceRaster,
-    toolHeightMm,
-    toolWidthMm,
-    workProfileSide,
-  ]);
+    return () => { cancelled = true; };
+  }, [curveSmoothing, promptPoint, segmenterState, sourceRaster, toolHeightMm, toolWidthMm, workProfileSide]);
 
   const handleImageUpload = async (file: File) => {
-    if (imageUrl?.startsWith("blob:")) {
-      URL.revokeObjectURL(imageUrl);
-    }
-
+    if (imageUrl?.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
     const url = URL.createObjectURL(file);
     const image = await loadImageFromUrl(url);
     setImageUrl(url);
@@ -372,70 +294,43 @@ export default function Home() {
     setContour([]);
     setLeftWorkProfile([]);
     setRightWorkProfile([]);
-    setProfileQuality(null);
     setReferenceBounds(null);
     setToolOutline([]);
     setToolHoles([]);
-    setStatus(`Datei geladen: ${file.name}. Klicke jetzt direkt in das Gefaess.`);
+    setStatus(`"${file.name}" geladen. Klicke ins Gefäss.`);
   };
 
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    await handleImageUpload(file);
+    if (file) await handleImageUpload(file);
   };
 
-  const updateNumericValue = (
-    value: string,
-    setter: (nextValue: number) => void,
-    min: number,
-    max: number,
-  ) => {
+  const updateNumericValue = (value: string, setter: (n: number) => void, min: number, max: number) => {
     const parsed = Number(value);
-    if (!Number.isFinite(parsed)) {
-      return;
-    }
-
-    setter(Math.min(max, Math.max(min, parsed)));
+    if (Number.isFinite(parsed)) setter(Math.min(max, Math.max(min, parsed)));
   };
 
   const handleCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current || !sourceRaster || segmenterState !== "ready") {
-      return;
-    }
-
+    if (!canvasRef.current || !sourceRaster || segmenterState !== "ready") return;
     setPromptPoint(mapCanvasToImage(event, canvasRef.current, sourceRaster));
-    setStatus("Punkt gesetzt. MediaPipe segmentiert jetzt das Gefaess.");
+    setStatus("Punkt gesetzt — MediaPipe segmentiert...");
   };
 
   const handleDownload = () => {
     if (!sourceRaster || workProfile.length === 0) {
-      setStatus("Vor dem STL-Download brauchen wir zuerst eine brauchbare Gefaesskontur.");
+      setStatus("Zuerst eine Kontur erkennen, dann STL exportieren.");
       return;
     }
-
     const { width, height } = getRasterSize(sourceRaster);
-    const stl = createExtrudedStl(
-      workProfile,
-      width,
-      height,
-      toolWidthMm,
-      toolHeightMm,
-      thicknessMm,
-      workProfileSide,
-      referenceBounds ?? undefined,
-    );
+    const stl = createExtrudedStl(workProfile, width, height, toolWidthMm, toolHeightMm, thicknessMm, workProfileSide, referenceBounds ?? undefined);
     const blob = new Blob([stl], { type: "model/stl" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "rib-tool-preview.stl";
+    link.download = "rib-tool.stl";
     link.click();
     URL.revokeObjectURL(url);
-    setStatus("Die STL wurde exportiert. Vergleiche jetzt Kontur und Rib-Vorschau.");
+    setStatus("STL exportiert.");
   };
 
   const resetSelection = () => {
@@ -443,282 +338,189 @@ export default function Home() {
     setContour([]);
     setLeftWorkProfile([]);
     setRightWorkProfile([]);
-    setProfileQuality(null);
     setReferenceBounds(null);
     setToolOutline([]);
     setToolHoles([]);
-    setStatus(sourceRaster ? "Auswahl zurueckgesetzt. Klicke erneut in das Gefaess." : initialStatus);
+    setStatus(sourceRaster ? "Zurückgesetzt. Klicke erneut ins Gefäss." : initialStatus);
   };
+
+  const segmenterLabel =
+    segmenting ? "Segmentiert…" :
+    segmenterState === "ready" ? "Bereit" :
+    segmenterState === "loading" ? "Lädt…" : "Fehler";
 
   return (
     <main className={styles.page}>
-      <div className={styles.shell}>
-        <section className={styles.hero}>
-          <div className={styles.heroCopy}>
-            <span className={styles.eyebrow}>Rib Generator</span>
-            <h1 className={styles.title}>Kontur pruefen, Rib beurteilen, STL exportieren.</h1>
-            <p className={styles.lede}>
-              Links steuerst du den Workflow, rechts vergleichst du direkt Foto, 2D-Rib und
-              3D-Form. Die 2D-Ansicht bleibt die wichtigste Referenz fuer die Kontur.
-            </p>
+      {/* ── Toolbar ── */}
+      <div className={styles.toolbar}>
+        <label className={styles.uploadBtn}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+            <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          Hochladen
+          <input type="file" accept="image/*" onChange={(e) => { void handleFile(e); }} className={styles.hiddenInput} />
+        </label>
+
+        <span className={styles.segBadge} data-state={segmenterState}>
+          {segmenterLabel}
+        </span>
+
+        <p className={styles.statusText}>{segmenting ? "MediaPipe segmentiert…" : status}</p>
+      </div>
+
+      {/* ── Work area: 3 columns ── */}
+      <div className={styles.workArea}>
+        {/* Canvas */}
+        <div className={styles.panel}>
+          <span className={styles.panelLabel}>Bild mit Marker zum Auswählen</span>
+          <div className={styles.canvasWrap}>
+            <canvas ref={canvasRef} className={styles.canvas} onClick={handleCanvasClick} />
+            {!sourceRaster && (
+              <div className={styles.canvasEmpty}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>Foto hochladen</span>
+              </div>
+            )}
           </div>
+        </div>
 
-          <div className={styles.heroMeta}>
-            <div className={styles.heroBadge}>
-              <span className={styles.heroBadgeLabel}>Status</span>
-              <strong>
-                {segmenting
-                  ? "Segmentierung laeuft"
-                  : segmenterState === "ready"
-                    ? "Bereit fuer Bildklick"
-                    : segmenterState === "loading"
-                      ? "Modell wird geladen"
-                      : "Segmentierung nicht verfuegbar"}
-              </strong>
-            </div>
-            <div className={styles.heroBadge}>
-              <span className={styles.heroBadgeLabel}>Ansicht</span>
-              <strong>2D fuer Bewertung, 3D als Zusatz</strong>
-            </div>
+        {/* 2D preview */}
+        <div className={styles.panel}>
+          <span className={styles.panelLabel}>2D Vorschau</span>
+          <div className={styles.previewWrap}>
+            {toolOutline.length > 1 ? (
+              <svg
+                className={styles.outlineSvg}
+                viewBox={outlineViewBox}
+                preserveAspectRatio="xMidYMid meet"
+                aria-label="2D Rib-Vorschau"
+              >
+                <rect
+                  x={outlineBounds?.minX ?? 0}
+                  y={outlineBounds?.minY ?? 0}
+                  width={outlineBounds?.width ?? 100}
+                  height={outlineBounds?.height ?? 140}
+                  fill="rgba(255,255,255,0.001)"
+                />
+                <path className={styles.outlinePath} d={outlinePath} />
+                {toolHoles.map((hole, index) => (
+                  <circle
+                    key={`${hole.center.x}-${hole.center.y}-${index}`}
+                    className={styles.holePath}
+                    cx={hole.center.x}
+                    cy={hole.center.y}
+                    r={hole.radius}
+                  />
+                ))}
+              </svg>
+            ) : (
+              <div className={styles.previewEmpty}>Noch keine Kontur</div>
+            )}
           </div>
-        </section>
+        </div>
 
-        <section className={styles.grid}>
-          <aside className={`${styles.panel} ${styles.sidebar}`}>
-            <h2 className={styles.sectionTitle}>Workflow</h2>
+        {/* 3D preview */}
+        <div className={styles.panel}>
+          <span className={styles.panelLabel}>3D Vorschau</span>
+          <div className={styles.previewWrap}>
+            {toolOutline.length > 1 ? (
+              <Rib3DPreview outline={toolOutline} holes={toolHoles} thicknessMm={thicknessMm} />
+            ) : (
+              <div className={styles.previewEmpty}>Noch keine Kontur</div>
+            )}
+          </div>
+        </div>
+      </div>
 
-            <div className={styles.sidebarGroup}>
-              <div className={`${styles.field} ${styles.upload}`}>
-                <label htmlFor="file">Foto hochladen</label>
-                <input
-                  id="file"
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => {
-                    void handleFile(event);
-                  }}
-                />
-                <p className={styles.small}>
-                  Am besten funktioniert eine seitliche Aufnahme mit moeglichst ruhigem
-                  Hintergrund. Danach einmal direkt in das Gefaess klicken.
-                </p>
-              </div>
-            </div>
+      {/* ── Settings bar ── */}
+      <div className={styles.settingsBar}>
+        <div className={styles.settingGroup}>
+          <span className={styles.settingLabel}>Seite</span>
+          <div className={styles.sideToggle}>
+            <button
+              type="button"
+              className={`${styles.toggleBtn} ${workProfileSide === "left" ? styles.toggleBtnActive : ""}`}
+              onClick={() => setWorkProfileSide("left")}
+            >
+              Links
+            </button>
+            <button
+              type="button"
+              className={`${styles.toggleBtn} ${workProfileSide === "right" ? styles.toggleBtnActive : ""}`}
+              onClick={() => setWorkProfileSide("right")}
+            >
+              Rechts
+            </button>
+          </div>
+        </div>
 
-            <div className={styles.sidebarGroup}>
-              <div className={styles.field}>
-                <label>Arbeitskante fuer STL</label>
-                <div className={styles.sideToggle}>
-                  <button
-                    type="button"
-                    className={`${styles.modeButton} ${workProfileSide === "left" ? styles.modeButtonActive : ""}`}
-                    onClick={() => setWorkProfileSide("left")}
-                  >
-                    <strong>Links</strong>
-                    <span>Nutze die linke erkannte Gefaessseite als Rib-Profil.</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.modeButton} ${workProfileSide === "right" ? styles.modeButtonActive : ""}`}
-                    onClick={() => setWorkProfileSide("right")}
-                  >
-                    <strong>Rechts</strong>
-                    <span>Nutze die rechte erkannte Gefaessseite als Rib-Profil.</span>
-                  </button>
-                </div>
-              </div>
+        <div className={styles.settingGroup}>
+          <label htmlFor="smoothing" className={styles.settingLabel}>
+            Glättung <strong>{curveSmoothing}%</strong>
+          </label>
+          <input
+            id="smoothing"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value={curveSmoothing}
+            onChange={(e) => setCurveSmoothing(Number(e.target.value))}
+            className={styles.slider}
+          />
+        </div>
 
-              <div className={styles.field}>
-                <label htmlFor="curve-smoothing">Kurvenglaettung: {curveSmoothing}%</label>
-                <input
-                  id="curve-smoothing"
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={curveSmoothing}
-                  onChange={(event) => setCurveSmoothing(Number(event.target.value))}
-                />
-              </div>
-            </div>
+        <div className={styles.settingGroup}>
+          <span className={styles.settingLabel}>Maße (mm)</span>
+          <div className={styles.dimRow}>
+            <label className={styles.dimField}>
+              <span>H</span>
+              <input
+                type="number"
+                className={styles.numInput}
+                min="60" max="180" step="1"
+                value={toolHeightMm}
+                onChange={(e) => updateNumericValue(e.target.value, setToolHeightMm, 60, 180)}
+              />
+            </label>
+            <label className={styles.dimField}>
+              <span>B</span>
+              <input
+                type="number"
+                className={styles.numInput}
+                min="35" max="120" step="1"
+                value={toolWidthMm}
+                onChange={(e) => updateNumericValue(e.target.value, setToolWidthMm, 35, 120)}
+              />
+            </label>
+            <label className={styles.dimField}>
+              <span>D</span>
+              <input
+                type="number"
+                className={styles.numInput}
+                min="2" max="10" step="0.1"
+                value={thicknessMm}
+                onChange={(e) => updateNumericValue(e.target.value, setThicknessMm, 2, 10)}
+              />
+            </label>
+          </div>
+        </div>
 
-            <div className={styles.sidebarGroup}>
-              <span className={styles.groupLabel}>Werkzeugmasse</span>
-              <div className={styles.inputGrid}>
-                <div className={styles.field}>
-                  <label htmlFor="height">Werkzeughoehe</label>
-                  <input
-                    id="height"
-                    className={styles.textInput}
-                    type="number"
-                    inputMode="numeric"
-                    min="60"
-                    max="180"
-                    step="1"
-                    value={toolHeightMm}
-                    onChange={(event) =>
-                      updateNumericValue(event.target.value, setToolHeightMm, 60, 180)
-                    }
-                  />
-                </div>
-
-                <div className={styles.field}>
-                  <label htmlFor="width">Werkzeugbreite</label>
-                  <input
-                    id="width"
-                    className={styles.textInput}
-                    type="number"
-                    inputMode="numeric"
-                    min="35"
-                    max="120"
-                    step="1"
-                    value={toolWidthMm}
-                    onChange={(event) =>
-                      updateNumericValue(event.target.value, setToolWidthMm, 35, 120)
-                    }
-                  />
-                </div>
-
-                <div className={styles.field}>
-                  <label htmlFor="thickness">Materialstaerke</label>
-                  <input
-                    id="thickness"
-                    className={styles.textInput}
-                    type="number"
-                    inputMode="decimal"
-                    min="2"
-                    max="10"
-                    step="0.1"
-                    value={thicknessMm}
-                    onChange={(event) =>
-                      updateNumericValue(event.target.value, setThicknessMm, 2, 10)
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className={styles.sidebarActions}>
-              <button
-                className={`${styles.button} ${styles.ghostButton}`}
-                onClick={resetSelection}
-              >
-                Auswahl zuruecksetzen
-              </button>
-
-              <button
-                className={styles.button}
-                onClick={handleDownload}
-                disabled={workProfile.length === 0 || segmenting}
-              >
-                STL herunterladen
-              </button>
-            </div>
-
-            <div className={styles.statusCard}>
-              <span className={styles.groupLabel}>Rueckmeldung</span>
-              <p className={styles.hint}>
-                {segmenting ? "MediaPipe segmentiert das Gefaess..." : status}
-              </p>
-            </div>
-          </aside>
-
-          <section className={styles.stage}>
-            <div className={styles.stageHeader}>
-              <div>
-                <h2 className={styles.sectionTitle}>Vorschau</h2>
-                <p className={styles.stageLead}>
-                  Links pruefst du die erkannte Tassenkontur direkt im Bild. Rechts vergleichst du
-                  die exportierte 2D-Rib und die 3D-Form.
-                </p>
-              </div>
-            </div>
-
-            <div className={styles.previewGrid}>
-              <div className={`${styles.canvasCard} ${styles.previewCard}`}>
-                <div className={styles.cardHeader}>
-                  <h3 className={styles.cardTitle}>Originalbild mit Kontur</h3>
-                  <span className={styles.cardMeta}>Klick ins Gefaess setzt den Startpunkt</span>
-                </div>
-                <div className={styles.canvasWrap}>
-                  <canvas
-                    ref={canvasRef}
-                    className={styles.previewCanvas}
-                    onClick={handleCanvasClick}
-                  />
-                </div>
-              </div>
-
-              <div className={styles.previewColumn}>
-                <div className={`${styles.panel} ${styles.previewCard}`}>
-                  <div className={styles.cardHeader}>
-                    <h3 className={styles.cardTitle}>Exportierte Rib-Form</h3>
-                    <span className={styles.cardMeta}>2D Referenz fuer Konturvergleich</span>
-                  </div>
-                  <div className={styles.outlineCard}>
-                    {toolOutline.length > 1 ? (
-                      <svg
-                        className={styles.outlineSvg}
-                        viewBox={outlineViewBox}
-                        preserveAspectRatio="xMidYMid meet"
-                        aria-label="2D Rib-Vorschau"
-                      >
-                        <rect
-                          className={styles.outlineBg}
-                          x={outlineBounds?.minX ?? 0}
-                          y={outlineBounds?.minY ?? 0}
-                          width={outlineBounds?.width ?? 100}
-                          height={outlineBounds?.height ?? 140}
-                        />
-                        <path className={styles.outlinePath} d={outlinePath} />
-                        {toolHoles.map((hole, index) => (
-                          <circle
-                            key={`${hole.center.x}-${hole.center.y}-${index}`}
-                            className={styles.holePath}
-                            cx={hole.center.x}
-                            cy={hole.center.y}
-                            r={hole.radius}
-                          />
-                        ))}
-                      </svg>
-                    ) : null}
-                  </div>
-                  <p className={styles.small}>
-                    Hier siehst du die exportierte Rib-Silhouette inklusive Griffloechern und
-                    Abschlusskanten.
-                  </p>
-                </div>
-
-                <div className={`${styles.panel} ${styles.previewCard}`}>
-                  <div className={styles.cardHeader}>
-                    <h3 className={styles.cardTitle}>3D Rib-Vorschau</h3>
-                    <span className={styles.cardMeta}>Zusatz fuer Material und Kanten</span>
-                  </div>
-                  <div className={`${styles.outlineCard} ${styles.outlineCardCompact}`}>
-                    {toolOutline.length > 1 ? (
-                      <Rib3DPreview
-                        outline={toolOutline}
-                        holes={toolHoles}
-                        thicknessMm={thicknessMm}
-                      />
-                    ) : null}
-                  </div>
-                  <p className={styles.small}>
-                    Die 3D-Ansicht ist nur die Ergaenzung: Materialstaerke, Fasen und Lochlage
-                    lassen sich hier besser pruefen. Mit der Maus kannst du drehen und zoomen.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className={styles.workflowStrip}>
-              <div className={styles.workflowChip}>1. Foto laden</div>
-              <div className={styles.workflowChip}>2. Klick zur Segmentierung</div>
-              <div className={styles.workflowChip}>3. Kontur pruefen</div>
-              <div className={styles.workflowChip}>4. STL exportieren</div>
-            </div>
-          </section>
-        </section>
+        <div className={styles.settingActions}>
+          <button type="button" className={styles.ghostBtn} onClick={resetSelection}>
+            Zurücksetzen
+          </button>
+          <button
+            type="button"
+            className={styles.primaryBtn}
+            onClick={handleDownload}
+            disabled={workProfile.length === 0 || segmenting}
+          >
+            STL herunterladen
+          </button>
+        </div>
       </div>
     </main>
   );
