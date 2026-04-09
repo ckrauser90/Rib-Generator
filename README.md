@@ -21,6 +21,9 @@ Der Fokus liegt nicht auf fotorealistischer 3D-Rekonstruktion, sondern auf einer
 - 3D-Vorschau als Ergaenzung fuer Dicke, Loecher und Material
 - STL-Export fuer 3D-Druck
 - Druckfreundlicher Exportpfad mit zusaetzlicher Kurvenvereinfachung und Refit
+- Echte 3D-Fase im Vorschau- und STL-Koerper
+- Drag-and-Drop fuer Bild-Upload
+- Robusterer Segmentierungs-Reset bei degenerierten MediaPipe-Masken
 
 ## Fuer wen das gebaut ist
 
@@ -71,6 +74,7 @@ npm run start
 ### 1. Bild laden
 
 - Ein Foto oder Webbild hochladen
+- alternativ per Drag-and-Drop in die Bildflaeche ziehen
 - Idealerweise moeglichst seitliche Ansicht
 - Ruhiger Hintergrund hilft deutlich
 - Ein einzelnes Gefaess funktioniert am besten
@@ -86,6 +90,8 @@ Die App versucht daraus:
 - die linke und rechte Arbeitskante
 
 abzuleiten.
+
+Falls MediaPipe eine unbrauchbare oder degenerierte Maske liefert, versucht die App den Segmenter automatisch neu aufzusetzen, statt erst nach einem kompletten Seiten-Reload wieder zu funktionieren.
 
 ### 3. Seite waehlen
 
@@ -178,6 +184,7 @@ Sie hilft vor allem bei:
 
 - Materialstaerke
 - Griffloecher
+- 3D-Fasen / Chamfer-Kanten
 - Raumwirkung des Werkzeugs
 - groben Fehlproportionen
 
@@ -215,7 +222,7 @@ Wenn 2D und 3D voneinander abweichen, ist die 2D-Vorschau fuer die Konturbewertu
   Layout und Styling der Hauptansicht
 
 - [app/rib-3d-preview.tsx](C:\Users\chris\Documents\New project\app\rib-3d-preview.tsx)
-  Three.js-Vorschau des extrudierten Rib-Koerpers
+  Three.js-Vorschau des extrudierten Rib-Koerpers mit echter Fase
 
 - [app/globals.css](C:\Users\chris\Documents\New project\app\globals.css)
   globale Design-Tokens und Basistypografie
@@ -223,13 +230,13 @@ Wenn 2D und 3D voneinander abweichen, ist die 2D-Vorschau fuer die Konturbewertu
 ### Bild- und Profilverarbeitung
 
 - [lib/interactive-segmenter.ts](C:\Users\chris\Documents\New project\lib\interactive-segmenter.ts)
-  MediaPipe-Integration und Umwandlung von Klick -> Maske
+  MediaPipe-Integration, Masken-Bridge und robuster Retry bei schlechten Segmentierungen
 
 - [lib/profile-normalization.ts](C:\Users\chris\Documents\New project\lib\profile-normalization.ts)
   Profilanalyse, Whittaker-Glaettung und formbewahrendes Refit der Arbeitskante
 
 - [lib/contour.ts](C:\Users\chris\Documents\New project\lib\contour.ts)
-  Rohkontur, Spike-Filter, Rib-Template, Loecher, STL-Erzeugung
+  Rohkontur, Spike-Filter, Rib-Template, Loecher, 3D-Fase und STL-Erzeugung
 
 - [lib/perspective.ts](C:\Users\chris\Documents\New project\lib\perspective.ts)
   Hilfsfunktionen fuer Rastergroessen und fruehere Perspektiv-Experimente

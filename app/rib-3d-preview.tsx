@@ -3,31 +3,12 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { Point, ToolHole } from "../lib/contour";
+import { createRibExtrudeGeometry, type Point, type ToolHole } from "../lib/contour";
 
 type Rib3DPreviewProps = {
   outline: Point[];
   holes: ToolHole[];
   thicknessMm: number;
-};
-
-const buildHolePath = (hole: ToolHole, segments = 32) => {
-  const path = new THREE.Path();
-
-  for (let index = 0; index <= segments; index += 1) {
-    const angle = (Math.PI * 2 * index) / segments;
-    const x = hole.center.x + Math.cos(angle) * hole.radius;
-    const y = hole.center.y + Math.sin(angle) * hole.radius;
-
-    if (index === 0) {
-      path.moveTo(x, y);
-    } else {
-      path.lineTo(x, y);
-    }
-  }
-
-  path.closePath();
-  return path;
 };
 
 export function Rib3DPreview({ outline, holes, thicknessMm }: Rib3DPreviewProps) {
@@ -65,20 +46,7 @@ export function Rib3DPreview({ outline, holes, thicknessMm }: Rib3DPreviewProps)
     rimLight.position.set(-80, 60, 110);
     scene.add(rimLight);
 
-    const shapePoints = outline.map((point) => new THREE.Vector2(point.x, -point.y));
-    const shape = new THREE.Shape(shapePoints);
-    shape.autoClose = true;
-    shape.holes = holes.map((hole) => buildHolePath({
-      center: { x: hole.center.x, y: -hole.center.y },
-      radius: hole.radius,
-    }));
-
-    const geometry = new THREE.ExtrudeGeometry(shape, {
-      depth: thicknessMm,
-      bevelEnabled: false,
-      curveSegments: 24,
-      steps: 1,
-    });
+    const geometry = createRibExtrudeGeometry(outline, holes, thicknessMm);
     geometry.center();
 
     const material = new THREE.MeshStandardMaterial({

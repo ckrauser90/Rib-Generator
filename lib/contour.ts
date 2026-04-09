@@ -1,4 +1,6 @@
 import earcut from "earcut";
+import * as THREE from "three";
+import { STLExporter } from "three/examples/jsm/exporters/STLExporter.js";
 
 export type Point = {
   x: number;
@@ -1570,6 +1572,61 @@ function facet(normal: [number, number, number], a: string, b: string, c: string
   ].join("\n");
 }
 
+const buildHolePath = (hole: ToolHole, segments = 40) => {
+  const path = new THREE.Path();
+
+  for (let index = 0; index <= segments; index += 1) {
+    const angle = (Math.PI * 2 * index) / segments;
+    const x = hole.center.x + Math.cos(angle) * hole.radius;
+    const y = hole.center.y + Math.sin(angle) * hole.radius;
+
+    if (index === 0) {
+      path.moveTo(x, y);
+    } else {
+      path.lineTo(x, y);
+    }
+  }
+
+  path.closePath();
+  return path;
+};
+
+const getRibBevelSettings = (thicknessMm: number) => {
+  // Sharper chamfer like the physical rib reference:
+  // more lateral inset, less vertical rounding, fewer segments.
+  const bevelSize = clamp(thicknessMm * 0.34, 0.95, 1.9);
+  const bevelThickness = clamp(thicknessMm * 0.09, 0.24, 0.52);
+  const bevelSegments = 1;
+
+  return {
+    bevelEnabled: true,
+    bevelSize,
+    bevelThickness,
+    bevelSegments,
+    curveSegments: 32,
+    steps: 1,
+    depth: thicknessMm,
+  } satisfies THREE.ExtrudeGeometryOptions;
+};
+
+export function createRibExtrudeGeometry(
+  outline: Point[],
+  holes: ToolHole[],
+  thicknessMm: number,
+) {
+  const shapePoints = outline.map((point) => new THREE.Vector2(point.x, -point.y));
+  const shape = new THREE.Shape(shapePoints);
+  shape.autoClose = true;
+  shape.holes = holes.map((hole) =>
+    buildHolePath({
+      center: { x: hole.center.x, y: -hole.center.y },
+      radius: hole.radius,
+    }),
+  );
+
+  return new THREE.ExtrudeGeometry(shape, getRibBevelSettings(thicknessMm));
+}
+
 export function createExtrudedStl(
   workProfile: Point[],
   imageWidth: number,
@@ -1599,67 +1656,16 @@ export function createExtrudedStl(
   const holePolygons = toolGeometry.holes.map((hole) =>
     ensureOrientation(buildCircularHolePolygon(hole), true),
   );
+  const geometry = createRibExtrudeGeometry(toolOutline, toolGeometry.holes, thicknessMm);
+  geometry.computeVertexNormals();
 
-  const frontZ = thicknessMm / 2;
-  const backZ = -thicknessMm / 2;
-  const facets: string[] = [];
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshNormalMaterial());
+  const exporter = new STLExporter();
+  const stl = exporter.parse(mesh) as string;
 
-  const flatVertices: number[] = [];
-  const vertices: Point[] = [];
-  const holeIndices: number[] = [];
+  geometry.dispose();
+  mesh.geometry.dispose();
+  (mesh.material as THREE.Material).dispose();
 
-  for (const point of toolOutline) {
-    flatVertices.push(point.x, point.y);
-    vertices.push(point);
-  }
-
-  for (const hole of holePolygons) {
-    holeIndices.push(vertices.length);
-    for (const point of hole) {
-      flatVertices.push(point.x, point.y);
-      vertices.push(point);
-    }
-  }
-
-  const triangles = earcut(flatVertices, holeIndices, 2);
-
-  for (let i = 0; i < triangles.length; i += 3) {
-    const a = pointToFacetVertex(vertices[triangles[i]], frontZ, 1, 1);
-    const b = pointToFacetVertex(vertices[triangles[i + 1]], frontZ, 1, 1);
-    const c = pointToFacetVertex(vertices[triangles[i + 2]], frontZ, 1, 1);
-    facets.push(facet([0, 0, 1], a, b, c));
-  }
-
-  for (let i = 0; i < triangles.length; i += 3) {
-    const a = pointToFacetVertex(vertices[triangles[i]], backZ, 1, 1);
-    const b = pointToFacetVertex(vertices[triangles[i + 2]], backZ, 1, 1);
-    const c = pointToFacetVertex(vertices[triangles[i + 1]], backZ, 1, 1);
-    facets.push(facet([0, 0, -1], a, b, c));
-  }
-
-  for (let i = 0; i < toolOutline.length; i += 1) {
-    const next = (i + 1) % toolOutline.length;
-    const aFront = pointToFacetVertex(toolOutline[i], frontZ, 1, 1);
-    const bFront = pointToFacetVertex(toolOutline[next], frontZ, 1, 1);
-    const aBack = pointToFacetVertex(toolOutline[i], backZ, 1, 1);
-    const bBack = pointToFacetVertex(toolOutline[next], backZ, 1, 1);
-
-    facets.push(facet([0, 1, 0], aFront, aBack, bBack));
-    facets.push(facet([0, 1, 0], aFront, bBack, bFront));
-  }
-
-  for (const hole of holePolygons) {
-    for (let i = 0; i < hole.length; i += 1) {
-      const next = (i + 1) % hole.length;
-      const aFront = pointToFacetVertex(hole[i], frontZ, 1, 1);
-      const bFront = pointToFacetVertex(hole[next], frontZ, 1, 1);
-      const aBack = pointToFacetVertex(hole[i], backZ, 1, 1);
-      const bBack = pointToFacetVertex(hole[next], backZ, 1, 1);
-
-      facets.push(facet([0, -1, 0], aFront, bBack, aBack));
-      facets.push(facet([0, -1, 0], aFront, bFront, bBack));
-    }
-  }
-
-  return `solid rib_tool\n${facets.join("\n")}\nendsolid rib_tool\n`;
+  return stl;
 }

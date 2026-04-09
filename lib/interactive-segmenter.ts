@@ -11,6 +11,8 @@ let segmenterPromise: Promise<import("@mediapipe/tasks-vision").InteractiveSegme
 const BENIGN_MEDIAPIPE_LOGS = [
   "INFO: Created TensorFlow Lite XNNPACK delegate for CPU.",
   "Created TensorFlow Lite XNNPACK delegate for CPU.",
+  "OpenGL error checking is disabled",
+  "Feedback manager requires a model with a single signature inference",
 ];
 
 const stringifyConsoleArgs = (args: unknown[]) =>
@@ -34,20 +36,30 @@ const stringifyConsoleArgs = (args: unknown[]) =>
 
 async function suppressBenignMediapipeLogs<T>(task: () => Promise<T> | T): Promise<T> {
   const originalConsoleError = console.error;
+  const originalConsoleWarn = console.warn;
 
-  console.error = (...args: unknown[]) => {
+  const shouldSuppress = (...args: unknown[]) => {
     const message = stringifyConsoleArgs(args);
-    if (BENIGN_MEDIAPIPE_LOGS.some((entry) => message.includes(entry))) {
+    return BENIGN_MEDIAPIPE_LOGS.some((entry) => message.includes(entry));
+  };
+  console.error = (...args: unknown[]) => {
+    if (shouldSuppress(...args)) {
       return;
     }
-
     originalConsoleError(...args);
+  };
+  console.warn = (...args: unknown[]) => {
+    if (shouldSuppress(...args)) {
+      return;
+    }
+    originalConsoleWarn(...args);
   };
 
   try {
     return await task();
   } finally {
     console.error = originalConsoleError;
+    console.warn = originalConsoleWarn;
   }
 }
 
@@ -67,7 +79,35 @@ export async function loadInteractiveSegmenter() {
   return segmenterPromise;
 }
 
-export async function segmentRasterFromPoint(
+export function resetInteractiveSegmenter() {
+  segmenterPromise = null;
+}
+
+const summariseMask = (confidence: Float32Array, binaryMask: Uint8Array) => {
+  let foreground = 0;
+  let minConfidence = Number.POSITIVE_INFINITY;
+  let maxConfidence = Number.NEGATIVE_INFINITY;
+
+  for (let index = 0; index < confidence.length; index += 1) {
+    if (binaryMask[index] === 1) {
+      foreground += 1;
+    }
+    minConfidence = Math.min(minConfidence, confidence[index]);
+    maxConfidence = Math.max(maxConfidence, confidence[index]);
+  }
+
+  return {
+    foregroundRatio: foreground / Math.max(1, binaryMask.length),
+    confidenceSpread: maxConfidence - minConfidence,
+  };
+};
+
+const isDegenerateMask = (summary: { foregroundRatio: number; confidenceSpread: number }) =>
+  summary.foregroundRatio < 0.0015 ||
+  summary.foregroundRatio > 0.985 ||
+  summary.confidenceSpread < 0.025;
+
+async function runSegmentation(
   raster: RasterSource,
   normalizedPoint: { x: number; y: number },
   confidenceCutoff: number,
@@ -101,5 +141,21 @@ export async function segmentRasterFromPoint(
     height: mask.height,
     confidence,
     binaryMask,
+    ...summariseMask(confidence, binaryMask),
   };
+}
+
+export async function segmentRasterFromPoint(
+  raster: RasterSource,
+  normalizedPoint: { x: number; y: number },
+  confidenceCutoff: number,
+) {
+  let segmentation = await runSegmentation(raster, normalizedPoint, confidenceCutoff);
+
+  if (isDegenerateMask(segmentation)) {
+    resetInteractiveSegmenter();
+    segmentation = await runSegmentation(raster, normalizedPoint, confidenceCutoff);
+  }
+
+  return segmentation;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./page.module.css";
 import { Rib3DPreview } from "./rib-3d-preview";
 import {
@@ -20,6 +20,7 @@ import { getRasterSize, type RasterSource } from "../lib/perspective";
 const DEFAULT_MASK_THRESHOLD = 0.18;
 const DEFAULT_MASK_SMOOTH_PASSES = 1;
 const DEFAULT_CROP_BOTTOM_RATIO = 0.04;
+const EXTREME_ASPECT_RATIO = 3.2;
 
 const initialStatus = "Foto laden, auf das Gefäss klicken — MediaPipe erkennt die Kontur.";
 
@@ -53,8 +54,8 @@ const drawPreview = (
 ) => {
   const { width: imageWidth, height: imageHeight } = getRasterSize(image);
   const ratio = imageWidth / imageHeight;
-  const width = canvas.clientWidth;
-  const height = Math.max(420, Math.round(width / ratio));
+  const width = Math.max(1, canvas.parentElement?.clientWidth ?? canvas.clientWidth);
+  const height = Math.max(220, Math.round(width / ratio));
   canvas.width = width;
   canvas.height = height;
 
@@ -150,6 +151,7 @@ export default function Home() {
   const [status, setStatus] = useState(initialStatus);
   const [segmenterState, setSegmenterState] = useState<"loading" | "ready" | "error">("loading");
   const [segmenting, setSegmenting] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const workProfile = useMemo(
@@ -216,7 +218,7 @@ export default function Home() {
         workerContext.drawImage(sourceRaster, 0, 0, width, height);
         const sourceImageData = workerContext.getImageData(0, 0, width, height);
         const result = await segmentRasterFromPoint(
-          sourceRaster,
+          workerCanvas,
           { x: promptPoint.x / width, y: promptPoint.y / height },
           DEFAULT_MASK_THRESHOLD,
         );
@@ -290,6 +292,8 @@ export default function Home() {
     if (imageUrl?.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
     const url = URL.createObjectURL(file);
     const image = await loadImageFromUrl(url);
+    const ratio = image.naturalWidth / Math.max(1, image.naturalHeight);
+    const extremeRatio = ratio >= EXTREME_ASPECT_RATIO || ratio <= 1 / EXTREME_ASPECT_RATIO;
     setImageUrl(url);
     setSourceRaster(image);
     setPromptPoint(null);
@@ -299,6 +303,12 @@ export default function Home() {
     setReferenceBounds(null);
     setToolOutline([]);
     setToolHoles([]);
+    if (extremeRatio) {
+      setStatus(
+        `"${file.name}" geladen. Sehr breites oder hohes Bild erkannt - Vorschau bleibt unverzerrt, Segmentierung kann aber unzuverlaessiger sein.`,
+      );
+      return;
+    }
     setStatus(`"${file.name}" geladen. Klicke ins Gefäss.`);
   };
 
@@ -316,6 +326,32 @@ export default function Home() {
     if (!canvasRef.current || !sourceRaster || segmenterState !== "ready") return;
     setPromptPoint(mapCanvasToImage(event, canvasRef.current, sourceRaster));
     setStatus("Punkt gesetzt — MediaPipe segmentiert...");
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      return;
+    }
+    setDragActive(false);
+  };
+
+  const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragActive(false);
+    const file = Array.from(event.dataTransfer.files).find((candidate) =>
+      candidate.type.startsWith("image/"),
+    );
+    if (!file) {
+      setStatus("Bitte ein Bild per Drag-and-Drop hineinziehen.");
+      return;
+    }
+    await handleImageUpload(file);
   };
 
   const handleDownload = () => {
@@ -496,14 +532,19 @@ export default function Home() {
         {/* Canvas */}
         <div className={styles.panel}>
           <span className={styles.panelLabel}>Bild mit Marker zum Auswählen</span>
-          <div className={styles.canvasWrap}>
+          <div
+            className={`${styles.canvasWrap} ${dragActive ? styles.canvasWrapDragActive : ""}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={(event) => { void handleDrop(event); }}
+          >
             <canvas ref={canvasRef} className={styles.canvas} onClick={handleCanvasClick} />
             {!sourceRaster && (
               <div className={styles.canvasEmpty}>
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden>
                   <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                <span>Foto hochladen</span>
+                <span>Foto hochladen oder hineinziehen</span>
               </div>
             )}
           </div>
