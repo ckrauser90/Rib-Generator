@@ -143,6 +143,7 @@ export default function Home() {
   const [toolHoles, setToolHoles] = useState<ToolHole[]>([]);
   const [workProfileSide, setWorkProfileSide] = useState<WorkProfileSide>("right");
   const [curveSmoothing, setCurveSmoothing] = useState(34);
+  const [printFriendliness, setPrintFriendliness] = useState(58);
   const [toolHeightMm, setToolHeightMm] = useState(120);
   const [toolWidthMm, setToolWidthMm] = useState(70);
   const [thicknessMm, setThicknessMm] = useState(4.2);
@@ -260,6 +261,7 @@ export default function Home() {
           toolHeightMm,
           workProfileSide,
           contourResult.referenceBounds,
+          printFriendliness,
         );
         setToolOutline(ribGeometry.outline);
         setToolHoles(ribGeometry.holes);
@@ -282,7 +284,7 @@ export default function Home() {
 
     void runSegmentation();
     return () => { cancelled = true; };
-  }, [curveSmoothing, promptPoint, segmenterState, sourceRaster, toolHeightMm, toolWidthMm, workProfileSide]);
+  }, [curveSmoothing, printFriendliness, promptPoint, segmenterState, sourceRaster, toolHeightMm, toolWidthMm, workProfileSide]);
 
   const handleImageUpload = async (file: File) => {
     if (imageUrl?.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
@@ -322,7 +324,17 @@ export default function Home() {
       return;
     }
     const { width, height } = getRasterSize(sourceRaster);
-    const stl = createExtrudedStl(workProfile, width, height, toolWidthMm, toolHeightMm, thicknessMm, workProfileSide, referenceBounds ?? undefined);
+    const stl = createExtrudedStl(
+      workProfile,
+      width,
+      height,
+      toolWidthMm,
+      toolHeightMm,
+      thicknessMm,
+      workProfileSide,
+      referenceBounds ?? undefined,
+      printFriendliness,
+    );
     const blob = new Blob([stl], { type: "model/stl" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -441,6 +453,28 @@ export default function Home() {
             </label>
           </div>
         </div>
+
+        <details className={styles.advancedDetails}>
+          <summary className={styles.advancedSummary}>Erweitert</summary>
+          <div className={styles.advancedBody}>
+            <label htmlFor="print-friendliness" className={styles.settingLabel}>
+              Druckfreundlichkeit <strong>{printFriendliness}%</strong>
+            </label>
+            <input
+              id="print-friendliness"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={printFriendliness}
+              onChange={(e) => setPrintFriendliness(Number(e.target.value))}
+              className={styles.slider}
+            />
+            <p className={styles.advancedHint}>
+              Hoeher = ruhigere STL-Kante mit weniger Mikrozacken. Die sichtbare Bildkontur bleibt unveraendert.
+            </p>
+          </div>
+        </details>
 
         <div className={styles.settingActions}>
           <button type="button" className={styles.ghostBtn} onClick={resetSelection}>

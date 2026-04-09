@@ -226,6 +226,43 @@
   gap: 6px;
 }
 
+.advancedDetails {
+  min-width: 210px;
+  padding: 0.35rem 0.2rem;
+  border-radius: 8px;
+  border: 1px solid rgba(122, 142, 110, 0.12);
+  background: rgba(250, 248, 245, 0.72);
+}
+
+.advancedSummary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.advancedSummary::-webkit-details-marker {
+  display: none;
+}
+
+.advancedBody {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.advancedHint {
+  margin: 0;
+  max-width: 28ch;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
 .settingLabel {
   display: inline-flex;
   align-items: center;

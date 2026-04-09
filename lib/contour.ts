@@ -229,6 +229,53 @@ const densifyPolyline = (points: Point[], subdivisions: number) => {
   return dense;
 };
 
+const perpendicularDistanceToSegment = (point: Point, start: Point, end: Point) => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+
+  if (Math.abs(dx) < 1e-8 && Math.abs(dy) < 1e-8) {
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  }
+
+  const t = clamp(
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy),
+    0,
+    1,
+  );
+  const projectedX = start.x + dx * t;
+  const projectedY = start.y + dy * t;
+  return Math.hypot(point.x - projectedX, point.y - projectedY);
+};
+
+const simplifyPolylineRdp = (points: Point[], epsilon: number): Point[] => {
+  if (points.length < 3) {
+    return points.slice();
+  }
+
+  let maxDistance = 0;
+  let splitIndex = 0;
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const distance = perpendicularDistanceToSegment(
+      points[index],
+      points[0],
+      points[points.length - 1],
+    );
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      splitIndex = index;
+    }
+  }
+
+  if (maxDistance <= epsilon) {
+    return [points[0], points[points.length - 1]];
+  }
+
+  const left = simplifyPolylineRdp(points.slice(0, splitIndex + 1), epsilon);
+  const right = simplifyPolylineRdp(points.slice(splitIndex), epsilon);
+  return [...left.slice(0, -1), ...right];
+};
+
 const smoothPolyline = (points: Point[], passes: number) => {
   let current = points.slice();
 
@@ -248,6 +295,124 @@ const smoothPolyline = (points: Point[], passes: number) => {
   }
 
   return current;
+};
+
+const buildPchipSlopes = (xs: number[], ys: number[]) => {
+  const count = xs.length;
+  const h = new Array<number>(count - 1);
+  const delta = new Array<number>(count - 1);
+
+  for (let index = 0; index < count - 1; index += 1) {
+    h[index] = xs[index + 1] - xs[index];
+    delta[index] = h[index] === 0 ? 0 : (ys[index + 1] - ys[index]) / h[index];
+  }
+
+  const slopes = new Array<number>(count).fill(0);
+
+  if (count === 2) {
+    slopes[0] = delta[0];
+    slopes[1] = delta[0];
+    return slopes;
+  }
+
+  for (let index = 1; index < count - 1; index += 1) {
+    if (
+      delta[index - 1] === 0 ||
+      delta[index] === 0 ||
+      Math.sign(delta[index - 1]) !== Math.sign(delta[index])
+    ) {
+      slopes[index] = 0;
+      continue;
+    }
+
+    const w1 = 2 * h[index] + h[index - 1];
+    const w2 = h[index] + 2 * h[index - 1];
+    slopes[index] = (w1 + w2) / (w1 / delta[index - 1] + w2 / delta[index]);
+  }
+
+  const startSlope =
+    ((2 * h[0] + h[1]) * delta[0] - h[0] * delta[1]) / Math.max(1e-8, h[0] + h[1]);
+  slopes[0] =
+    Math.sign(startSlope) !== Math.sign(delta[0])
+      ? 0
+      : Math.sign(delta[0]) !== Math.sign(delta[1]) && Math.abs(startSlope) > Math.abs(delta[0] * 3)
+        ? delta[0] * 3
+        : startSlope;
+
+  const endSlope =
+    ((2 * h[count - 2] + h[count - 3]) * delta[count - 2] - h[count - 2] * delta[count - 3]) /
+    Math.max(1e-8, h[count - 2] + h[count - 3]);
+  slopes[count - 1] =
+    Math.sign(endSlope) !== Math.sign(delta[count - 2])
+      ? 0
+      : Math.sign(delta[count - 2]) !== Math.sign(delta[count - 3]) &&
+          Math.abs(endSlope) > Math.abs(delta[count - 2] * 3)
+        ? delta[count - 2] * 3
+        : endSlope;
+
+  return slopes;
+};
+
+const evaluatePchip = (xs: number[], ys: number[], slopes: number[], x: number) => {
+  const lastIndex = xs.length - 1;
+
+  if (x <= xs[0]) {
+    return ys[0];
+  }
+
+  if (x >= xs[lastIndex]) {
+    return ys[lastIndex];
+  }
+
+  let interval = 0;
+  while (interval < lastIndex - 1 && xs[interval + 1] < x) {
+    interval += 1;
+  }
+
+  const h = xs[interval + 1] - xs[interval];
+  const t = h === 0 ? 0 : (x - xs[interval]) / h;
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const h00 = 2 * t3 - 3 * t2 + 1;
+  const h10 = t3 - 2 * t2 + t;
+  const h01 = -2 * t3 + 3 * t2;
+  const h11 = t3 - t2;
+
+  return (
+    h00 * ys[interval] +
+    h10 * h * slopes[interval] +
+    h01 * ys[interval + 1] +
+    h11 * h * slopes[interval + 1]
+  );
+};
+
+const refitProfileWithPchip = (points: Point[], targetCount: number) => {
+  if (points.length < 3) {
+    return points.slice();
+  }
+
+  const ordered = points
+    .slice()
+    .sort((left, right) => left.y - right.y)
+    .filter((point, index, source) => index === 0 || Math.abs(point.y - source[index - 1].y) > 1e-6);
+
+  if (ordered.length < 3) {
+    return ordered;
+  }
+
+  const ys = ordered.map((point) => point.y);
+  const xs = ordered.map((point) => point.x);
+  const slopes = buildPchipSlopes(ys, xs);
+  const count = Math.max(ordered.length, targetCount);
+
+  return Array.from({ length: count }, (_, index) => {
+    const t = index / Math.max(1, count - 1);
+    const y = lerp(ys[0], ys[ys.length - 1], t);
+    return {
+      x: evaluatePchip(ys, xs, slopes, y),
+      y,
+    };
+  });
 };
 
 const suppressProfileSpikes = (points: Point[]) => {
@@ -1303,6 +1468,7 @@ export const buildRibToolOutline = (
   toolHeightMm: number,
   side: WorkProfileSide = "right",
   referenceBounds?: { minY: number; maxY: number },
+  printFriendliness = 58,
 ): ToolOutlineResult => {
   if (workProfile.length < 2) {
     return {
@@ -1349,11 +1515,28 @@ export const buildRibToolOutline = (
     };
   });
   const stabilizedProfile = suppressProfileSpikes(profile);
+  const friendlinessFactor = clamp(printFriendliness / 100, 0, 1);
+  const simplifyToleranceMm = clamp(
+    (0.18 + cavityDepthMm * 0.014) * lerp(0.72, 1.85, friendlinessFactor),
+    0.24,
+    1.35,
+  );
+  const simplifiedProfile = simplifyPolylineRdp(stabilizedProfile, simplifyToleranceMm);
+  const targetProfileCount = clamp(
+    Math.max(
+      Math.round(totalHeight / lerp(1.25, 2.35, friendlinessFactor)),
+      Math.round(simplifiedProfile.length * lerp(3.4, 2.1, friendlinessFactor)),
+    ),
+    42,
+    132,
+  );
   const topY = 0;
   const bottomY = totalHeight;
   const outerRightX = totalWidthMm;
   const outerLeftX = 0;
-  const denseProfile = removeMicroKinks(smoothPolyline(densifyPolyline(stabilizedProfile, 3), 1));
+  const denseProfile = removeMicroKinks(
+    suppressProfileSpikes(refitProfileWithPchip(simplifiedProfile, Math.round(targetProfileCount))),
+  );
   const detailedProfile = removeMicroKinks(
     buildTemplateCappedProfile(denseProfile, totalWidthMm, cavityDepthMm, topY, bottomY),
   );
@@ -1396,6 +1579,7 @@ export function createExtrudedStl(
   thicknessMm: number,
   side: WorkProfileSide = "right",
   referenceBounds?: { minY: number; maxY: number },
+  printFriendliness = 58,
 ) {
   if (workProfile.length < 6) {
     throw new Error("Nicht genug Konturpunkte fuer den STL-Export.");
@@ -1409,6 +1593,7 @@ export function createExtrudedStl(
     toolHeightMm,
     side,
     referenceBounds,
+    printFriendliness,
   );
   const toolOutline = ensureOrientation(toolGeometry.outline, false);
   const holePolygons = toolGeometry.holes.map((hole) =>
