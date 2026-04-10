@@ -6,13 +6,15 @@
 /* ── Layout ── */
 
 .page {
-  height: 100vh;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-rows: auto auto 1fr;
   gap: 12px;
   padding: 16px;
   background: var(--bg);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* ── Toolbar ── */
@@ -21,6 +23,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-wrap: wrap;
 }
 
 .uploadBtn {
@@ -82,6 +85,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 220px;
 }
 
 /* ── Work area ── */
@@ -91,7 +95,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   min-height: 0;
-  overflow: hidden;
+  align-items: start;
 }
 
 .panel {
@@ -148,6 +152,7 @@
   border: 1px solid rgba(122, 142, 110, 0.06);
   min-height: 0;
   padding: 10px;
+  aspect-ratio: 4 / 5;
 }
 
 .canvasWrapDragActive {
@@ -187,6 +192,7 @@
   background: linear-gradient(180deg, var(--linen), var(--cream));
   border: 1px solid rgba(122, 142, 110, 0.06);
   min-height: 0;
+  aspect-ratio: 4 / 5;
 }
 
 .previewEmpty {
@@ -233,6 +239,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .advancedDetails {
@@ -413,22 +420,143 @@
 /* ── Responsive ── */
 
 @media (max-width: 860px) {
-  .workArea {
-    grid-template-columns: 1fr;
+  .page {
+    grid-template-rows: auto auto auto;
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .toolbar {
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .uploadBtn {
+    width: 100%;
+    justify-content: center;
+    padding: 0.8rem 1rem;
+  }
+
+  .segBadge {
+    order: 2;
+  }
+
+  .statusText {
+    order: 3;
+    flex: 1 1 100%;
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.45;
   }
 
   .settingsBar {
-    gap: 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .settingGroup {
+    width: 100%;
+  }
+
+  .sideToggle {
+    width: 100%;
+  }
+
+  .toggleBtn {
+    flex: 1;
+    min-height: 40px;
+  }
+
+  .slider {
+    width: 100%;
+  }
+
+  .dimRow {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .dimField {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .numInput {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .advancedDetails {
+    min-width: 0;
+  }
+
+  .workArea {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .panel {
+    padding: 14px;
   }
 
   .settingActions {
+    grid-column: 1 / -1;
     margin-left: 0;
     width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
   }
 
   .primaryBtn,
   .ghostBtn {
-    flex: 1;
+    min-height: 42px;
     text-align: center;
+  }
+
+  .canvasWrap,
+  .previewWrap {
+    aspect-ratio: auto;
+    min-height: 260px;
+  }
+}
+
+@media (max-width: 560px) {
+  .page {
+    padding: 10px;
+  }
+
+  .panelLabel {
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+  }
+
+  .panelLabel::before,
+  .panelLabel::after {
+    width: 12px;
+  }
+
+  .settingsBar {
+    grid-template-columns: 1fr;
+  }
+
+  .dimRow {
+    grid-template-columns: 1fr;
+  }
+
+  .settingActions {
+    grid-template-columns: 1fr;
+  }
+
+  .canvasWrap,
+  .previewWrap {
+    min-height: 220px;
+  }
+
+  .advancedHint {
+    max-width: none;
   }
 }
