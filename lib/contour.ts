@@ -1880,11 +1880,11 @@ const buildHolePath = (hole: ToolHole, segments = 40) => {
 
 const getRibBevelSettings = (thicknessMm: number, bevelStrength = 68) => {
   const strength = clamp(bevelStrength / 100, 0, 1);
-  // Sharper chamfer like the physical rib reference:
-  // more lateral inset, less vertical rounding, fewer segments.
-  const bevelSize = clamp(thicknessMm * lerp(0.18, 0.48, strength), 0.55, 2.4);
-  const bevelThickness = clamp(thicknessMm * lerp(0.16, 0.06, strength), 0.18, 0.7);
-  const bevelSegments = 1;
+  // Smooth rounded bevel like the physical rib reference —
+  // generous radius, multiple segments for organic feel, also around holes.
+  const bevelSize = clamp(thicknessMm * lerp(0.12, 0.42, strength), 0.4, 2.0);
+  const bevelThickness = clamp(thicknessMm * lerp(0.08, 0.38, strength), 0.3, 1.6);
+  const bevelSegments = Math.round(lerp(1, 4, strength));
 
   return {
     bevelEnabled: true,
@@ -1949,6 +1949,19 @@ export function createExtrudedStl(
     ensureOrientation(buildCircularHolePolygon(hole), true),
   );
   const geometry = createRibExtrudeGeometry(toolOutline, toolGeometry.holes, thicknessMm, bevelStrength);
+
+  // Rotate to standing orientation: top of rib (narrow end) at bottom for printing.
+  // 1) Stand upright: -90° X
+  // 2) Flip right-side-up: 180° Z
+  // 3) Flip vertically so narrow end is at bottom: 180° Y
+  // 4) Shift so all coordinates start at 0 (sits on build plate).
+  geometry.rotateX(-Math.PI / 2);
+  geometry.rotateZ(Math.PI);
+  geometry.rotateY(Math.PI);
+  geometry.computeBoundingBox();
+  const bb = geometry.boundingBox!;
+  geometry.translate(-bb.min.x, -bb.min.y, -bb.min.z);
+
   geometry.computeVertexNormals();
 
   const mesh = new THREE.Mesh(geometry, new THREE.MeshNormalMaterial());
