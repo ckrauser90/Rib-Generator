@@ -176,27 +176,76 @@ const snapBoundaryToImageEdge = (
   width: number,
   direction: "left" | "right",
 ) => {
-  return values.map((boundaryX, index) => {
-    const y = rows[index];
-    const start = Math.max(1, Math.round(boundaryX) - 6);
-    const end = Math.min(width - 2, Math.round(boundaryX) + 6);
-    let bestX = Math.round(boundaryX);
-    let bestScore = Number.NEGATIVE_INFINITY;
+  if (values.length < 2 || values.length !== rows.length) {
+    return values.map((value) => Math.round(value));
+  }
 
-    for (let x = start; x <= end; x += 1) {
-      const left = luminance[pixelIndex(x - 1, y, width)];
-      const right = luminance[pixelIndex(x + 1, y, width)];
-      const gradient = Math.abs(right - left);
-      const directionalScore = direction === "right" ? right - left : left - right;
-      const score = gradient + Math.max(0, directionalScore) * 0.4;
+  const runDirectionalSnap = (reverse: boolean) => {
+    const snapped = new Array<number>(values.length);
+    const indices = reverse
+      ? Array.from({ length: values.length }, (_, offset) => values.length - 1 - offset)
+      : Array.from({ length: values.length }, (_, offset) => offset);
 
-      if (score > bestScore) {
-        bestScore = score;
-        bestX = x;
+    let previousX: number | null = null;
+    let previousPreviousX: number | null = null;
+    let previousRow: number | null = null;
+
+    for (const index of indices) {
+      const boundaryX = values[index];
+      const y = rows[index];
+      const start = Math.max(1, Math.round(boundaryX) - 6);
+      const end = Math.min(width - 2, Math.round(boundaryX) + 6);
+      const rowGap = previousRow === null ? 1 : Math.max(1, Math.abs(y - previousRow));
+      const expectedX =
+        previousX === null
+          ? boundaryX
+          : previousPreviousX === null
+            ? previousX
+            : previousX + clamp((previousX - previousPreviousX) / rowGap, -1.4, 1.4);
+      const continuityWeight = previousX === null ? 0 : rowGap > 2 ? 0.22 : 0.52;
+      const rawWeight = 0.14;
+      let bestX = Math.round(boundaryX);
+      let bestScore = Number.NEGATIVE_INFINITY;
+
+      for (let x = start; x <= end; x += 1) {
+        const left = luminance[pixelIndex(x - 1, y, width)];
+        const right = luminance[pixelIndex(x + 1, y, width)];
+        const gradient = Math.abs(right - left);
+        const directionalScore = direction === "right" ? right - left : left - right;
+        const rawPenalty = Math.abs(x - boundaryX) * rawWeight;
+        const continuityPenalty = Math.abs(x - expectedX) * continuityWeight;
+        const score = gradient + Math.max(0, directionalScore) * 0.45 - rawPenalty - continuityPenalty;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestX = x;
+        }
       }
+
+      snapped[index] = bestX;
+      previousPreviousX = previousX;
+      previousX = bestX;
+      previousRow = y;
     }
 
-    return bestX;
+    return snapped;
+  };
+
+  const forward = runDirectionalSnap(false);
+  const backward = runDirectionalSnap(true);
+
+  return values.map((boundaryX, index) => {
+    const localWindow = [
+      forward[Math.max(0, index - 1)],
+      forward[index],
+      forward[Math.min(values.length - 1, index + 1)],
+      backward[Math.max(0, index - 1)],
+      backward[index],
+      backward[Math.min(values.length - 1, index + 1)],
+    ];
+    const localMedian = median(localWindow);
+    const blended = average([forward[index], backward[index]]) * 0.62 + localMedian * 0.28 + boundaryX * 0.1;
+    return clamp(Math.round(blended * 2) / 2, boundaryX - 2, boundaryX + 2);
   });
 };
 
@@ -522,6 +571,52 @@ const removeMicroKinks = (points: Point[]) => {
   }
 
   return current;
+};
+
+const rollingMedian = (values: number[], radius: number) =>
+  values.map((_, index) => {
+    const start = Math.max(0, index - radius);
+    const end = Math.min(values.length, index + radius + 1);
+    return median(values.slice(start, end));
+  });
+
+const RAW_BOUNDARY_MAX_DRIFT_PX = 1;
+
+const stabilizeDetectedBoundary = (values: number[], rows: number[]) => {
+  if (values.length < 9 || values.length !== rows.length) {
+    return values.slice();
+  }
+
+  const medianFiltered = rollingMedian(values, 2);
+  let current = values.map((value, index) => {
+    const localMedian = medianFiltered[index];
+    const previous = values[Math.max(0, index - 1)];
+    const next = values[Math.min(values.length - 1, index + 1)];
+    const interpolated = (previous + next) / 2;
+    const window = values.slice(Math.max(0, index - 2), Math.min(values.length, index + 3));
+    const localRange = Math.max(...window) - Math.min(...window);
+    const localDeviation = Math.abs(value - localMedian);
+    const lineDeviation = Math.abs(value - interpolated);
+    const threshold = Math.max(0.72, Math.min(1.2, localRange * 0.34));
+
+    if (localDeviation > threshold && lineDeviation > threshold * 0.8) {
+      return interpolated * 0.62 + localMedian * 0.38;
+    }
+
+    return value;
+  });
+
+  current = smoothSeries(current, 2);
+
+  return current.map((value, index) => {
+    const reference = values[index];
+    const clampedToRaw = clamp(
+      value,
+      reference - RAW_BOUNDARY_MAX_DRIFT_PX,
+      reference + RAW_BOUNDARY_MAX_DRIFT_PX,
+    );
+    return Math.round(clampedToRaw * 2) / 2;
+  });
 };
 
 const buildTemplateCappedProfile = (
@@ -1518,8 +1613,14 @@ export function detectContourFromImageData(
     "right",
   );
 
-  const smoothedLeft = smoothSeriesPreservingLandmarks(snappedLeft, options.smoothPasses);
-  const smoothedRight = smoothSeriesPreservingLandmarks(snappedRight, options.smoothPasses);
+  const smoothedLeft = stabilizeDetectedBoundary(
+    smoothSeriesPreservingLandmarks(snappedLeft, options.smoothPasses),
+    rows,
+  );
+  const smoothedRight = stabilizeDetectedBoundary(
+    smoothSeriesPreservingLandmarks(snappedRight, options.smoothPasses),
+    rows,
+  );
 
   const leftSide: Point[] = validRows.map((entry, index) => ({
     x: clamp(smoothedLeft[index], 0, width),
@@ -1678,8 +1779,14 @@ export function detectContourFromMask(
     ? snapBoundaryToImageEdge(confidenceAdjustedRight, rows, luminance, width, "right")
     : confidenceAdjustedRight;
 
-  const smoothedLeft = smoothSeriesPreservingLandmarks(refinedLeft, options.smoothPasses);
-  const smoothedRight = smoothSeriesPreservingLandmarks(refinedRight, options.smoothPasses);
+  const smoothedLeft = stabilizeDetectedBoundary(
+    smoothSeriesPreservingLandmarks(refinedLeft, options.smoothPasses),
+    rows,
+  );
+  const smoothedRight = stabilizeDetectedBoundary(
+    smoothSeriesPreservingLandmarks(refinedRight, options.smoothPasses),
+    rows,
+  );
 
   const leftSide: Point[] = validRows.map((entry, index) => ({
     x: clamp(smoothedLeft[index], 0, width),
@@ -1880,20 +1987,108 @@ const buildHolePath = (hole: ToolHole, segments = 40) => {
 
 const getRibBevelSettings = (thicknessMm: number, bevelStrength = 68) => {
   const strength = clamp(bevelStrength / 100, 0, 1);
-  // Smooth rounded bevel like the physical rib reference —
-  // generous radius, multiple segments for organic feel, also around holes.
-  const bevelSize = clamp(thicknessMm * lerp(0.12, 0.42, strength), 0.4, 2.0);
-  const bevelThickness = clamp(thicknessMm * lerp(0.08, 0.38, strength), 0.3, 1.6);
-  const bevelSegments = Math.round(lerp(1, 4, strength));
+  const referenceStrength = 0.68;
+  const blendToReference = clamp(strength / referenceStrength, 0, 1);
+  const blendPastReference = clamp(
+    (strength - referenceStrength) / Math.max(1e-6, 1 - referenceStrength),
+    0,
+    1,
+  );
+
+  // Calibrated against the user's "bubble" OBJ reference:
+  // a smaller flat center section, much more lateral roll-off and
+  // noticeably finer segment density than the old technical chamfer.
+  const flatProfile = {
+    coreDepthFactor: 0.98,
+    bevelSizeFactor: 0.16,
+    bevelThicknessFactor: 0.08,
+    bevelSegments: 4,
+    curveSegments: 28,
+  };
+  const bubbleReferenceProfile = {
+    coreDepthFactor: 0.7142857,
+    bevelSizeFactor: 0.8564524,
+    bevelThicknessFactor: 0.518369,
+    bevelSegments: 12,
+    curveSegments: 48,
+  };
+  const extraRoundProfile = {
+    coreDepthFactor: 0.58,
+    bevelSizeFactor: 1.02,
+    bevelThicknessFactor: 0.62,
+    bevelSegments: 16,
+    curveSegments: 64,
+  };
+
+  const profile =
+    strength <= referenceStrength
+      ? {
+          coreDepthFactor: lerp(
+            flatProfile.coreDepthFactor,
+            bubbleReferenceProfile.coreDepthFactor,
+            blendToReference,
+          ),
+          bevelSizeFactor: lerp(
+            flatProfile.bevelSizeFactor,
+            bubbleReferenceProfile.bevelSizeFactor,
+            blendToReference,
+          ),
+          bevelThicknessFactor: lerp(
+            flatProfile.bevelThicknessFactor,
+            bubbleReferenceProfile.bevelThicknessFactor,
+            blendToReference,
+          ),
+          bevelSegments: Math.round(
+            lerp(flatProfile.bevelSegments, bubbleReferenceProfile.bevelSegments, blendToReference),
+          ),
+          curveSegments: Math.round(
+            lerp(flatProfile.curveSegments, bubbleReferenceProfile.curveSegments, blendToReference),
+          ),
+        }
+      : {
+          coreDepthFactor: lerp(
+            bubbleReferenceProfile.coreDepthFactor,
+            extraRoundProfile.coreDepthFactor,
+            blendPastReference,
+          ),
+          bevelSizeFactor: lerp(
+            bubbleReferenceProfile.bevelSizeFactor,
+            extraRoundProfile.bevelSizeFactor,
+            blendPastReference,
+          ),
+          bevelThicknessFactor: lerp(
+            bubbleReferenceProfile.bevelThicknessFactor,
+            extraRoundProfile.bevelThicknessFactor,
+            blendPastReference,
+          ),
+          bevelSegments: Math.round(
+            lerp(
+              bubbleReferenceProfile.bevelSegments,
+              extraRoundProfile.bevelSegments,
+              blendPastReference,
+            ),
+          ),
+          curveSegments: Math.round(
+            lerp(
+              bubbleReferenceProfile.curveSegments,
+              extraRoundProfile.curveSegments,
+              blendPastReference,
+            ),
+          ),
+        };
+
+  const bevelSize = clamp(thicknessMm * profile.bevelSizeFactor, 0.35, 5.2);
+  const bevelThickness = clamp(thicknessMm * profile.bevelThicknessFactor, 0.2, 3.4);
+  const depth = clamp(thicknessMm * profile.coreDepthFactor, 1.2, thicknessMm);
 
   return {
     bevelEnabled: true,
     bevelSize,
     bevelThickness,
-    bevelSegments,
-    curveSegments: 32,
+    bevelSegments: profile.bevelSegments,
+    curveSegments: profile.curveSegments,
     steps: 1,
-    depth: thicknessMm,
+    depth,
   } satisfies THREE.ExtrudeGeometryOptions;
 };
 

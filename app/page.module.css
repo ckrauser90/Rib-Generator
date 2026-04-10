@@ -146,21 +146,34 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 1.5px solid var(--cream-dark);
-  background: transparent;
-  color: var(--muted);
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(122, 142, 110, 0.14);
+  background: linear-gradient(180deg, rgba(250, 248, 245, 0.98), rgba(237, 231, 221, 0.92));
+  color: var(--bark-light);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
   flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 4px 14px rgba(62, 56, 50, 0.08);
+}
+
+.resetBtn svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
 }
 
 .resetBtn:hover {
-  border-color: var(--terracotta);
+  border-color: rgba(184, 122, 90, 0.35);
   color: var(--terracotta);
-  background: rgba(184, 122, 90, 0.06);
+  background: linear-gradient(180deg, rgba(250, 244, 240, 1), rgba(245, 230, 220, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 8px 18px rgba(184, 122, 90, 0.16);
+  transform: translateY(-1px);
+}
+
+.resetBtn:hover svg {
+  transform: rotate(-22deg);
 }
 
 /* kept for legacy */
@@ -574,8 +587,9 @@
 
 .canvas {
   display: block;
-  width: 100%;
+  width: auto;
   height: auto;
+  max-width: 100%;
   max-height: 100%;
   cursor: crosshair;
 }

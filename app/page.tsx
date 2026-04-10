@@ -13,7 +13,11 @@ import {
   validateToolGeometry,
   type WorkProfileSide,
 } from "../lib/contour";
-import { loadInteractiveSegmenter, segmentRasterFromPoint } from "../lib/interactive-segmenter";
+import {
+  loadInteractiveSegmenter,
+  resetInteractiveSegmenter,
+  segmentRasterFromPoint,
+} from "../lib/interactive-segmenter";
 import {
   deriveNormalizedProfileFromMask,
   smoothWorkProfileCurve,
@@ -25,8 +29,12 @@ const DEFAULT_MASK_SMOOTH_PASSES = 1;
 const DEFAULT_CROP_BOTTOM_RATIO = 0.04;
 const EXTREME_ASPECT_RATIO = 3.2;
 const ANCHOR_COLOR = "#C9704A";
+const DISPLAY_PROFILE_MAX_DRIFT_PX = 0.9;
 
 const initialStatus = "Foto laden und danach direkt in das Gefaess klicken.";
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
 
 const loadImageFromUrl = (url: string) =>
   new Promise<HTMLImageElement>((resolve, reject) => {
@@ -47,6 +55,40 @@ const mapCanvasToImage = (
     x: ((event.clientX - rect.left) / rect.width) * width,
     y: ((event.clientY - rect.top) / rect.height) * height,
   };
+};
+
+const buildDisplayWorkProfile = (profile: Point[], smoothingStrength: number) => {
+  if (profile.length < 2) {
+    return profile.slice();
+  }
+
+  if (profile.length < 7) {
+    return profile.map((point) => ({ ...point }));
+  }
+
+  const windowRadius = 3 + Math.round(smoothingStrength / 28);
+  const blend = Math.min(0.18 + (smoothingStrength / 100) * 0.36, 0.54);
+  const smoothed = smoothWorkProfileCurve(profile, {
+    windowRadius,
+    blend,
+  });
+
+  return smoothed.map((point, index) => ({
+    x: clamp(
+      point.x,
+      profile[index].x - DISPLAY_PROFILE_MAX_DRIFT_PX,
+      profile[index].x + DISPLAY_PROFILE_MAX_DRIFT_PX,
+    ),
+    y: profile[index].y,
+  }));
+};
+
+const buildDisplayContour = (leftProfile: Point[], rightProfile: Point[]) => {
+  if (leftProfile.length === 0 || rightProfile.length === 0) {
+    return [];
+  }
+
+  return [...leftProfile, ...rightProfile.slice().reverse()];
 };
 
 const drawAnchor = (
@@ -477,6 +519,8 @@ export default function Home() {
   const [contour, setContour] = useState<Point[]>([]);
   const [leftWorkProfile, setLeftWorkProfile] = useState<Point[]>([]);
   const [rightWorkProfile, setRightWorkProfile] = useState<Point[]>([]);
+  const [leftGeometryProfile, setLeftGeometryProfile] = useState<Point[]>([]);
+  const [rightGeometryProfile, setRightGeometryProfile] = useState<Point[]>([]);
   const [referenceBounds, setReferenceBounds] = useState<{ minY: number; maxY: number } | null>(null);
   const [toolProfile, setToolProfile] = useState<Point[]>([]);
   const [toolOutline, setToolOutline] = useState<Point[]>([]);
@@ -520,6 +564,26 @@ export default function Home() {
     () => (workProfileSide === "left" ? leftWorkProfile : rightWorkProfile),
     [leftWorkProfile, rightWorkProfile, workProfileSide],
   );
+  const geometryWorkProfile = useMemo(
+    () => (workProfileSide === "left" ? leftGeometryProfile : rightGeometryProfile),
+    [leftGeometryProfile, rightGeometryProfile, workProfileSide],
+  );
+  const displayLeftWorkProfile = useMemo(
+    () => buildDisplayWorkProfile(leftWorkProfile, curveSmoothing),
+    [curveSmoothing, leftWorkProfile],
+  );
+  const displayRightWorkProfile = useMemo(
+    () => buildDisplayWorkProfile(rightWorkProfile, curveSmoothing),
+    [curveSmoothing, rightWorkProfile],
+  );
+  const displayWorkProfile = useMemo(
+    () => (workProfileSide === "left" ? displayLeftWorkProfile : displayRightWorkProfile),
+    [displayLeftWorkProfile, displayRightWorkProfile, workProfileSide],
+  );
+  const displayContour = useMemo(
+    () => buildDisplayContour(displayLeftWorkProfile, displayRightWorkProfile),
+    [displayLeftWorkProfile, displayRightWorkProfile],
+  );
   const currentAnchorOverride = manualAnchorOverrides[workProfileSide];
   const currentDraftAnchorOverride = draftAnchorOverrides[workProfileSide];
   const currentAnchorsConfirmed = anchorsConfirmed[workProfileSide];
@@ -527,8 +591,8 @@ export default function Home() {
     ? currentDraftAnchorOverride ?? currentAnchorOverride
     : currentAnchorOverride;
   const imageAnchors = useMemo(
-    () => resolveAnchorsForProfile(workProfile, displayedAnchorOverride),
-    [displayedAnchorOverride, workProfile],
+    () => resolveAnchorsForProfile(displayWorkProfile, displayedAnchorOverride),
+    [displayWorkProfile, displayedAnchorOverride],
   );
   const outlinePath = useMemo(() => buildSvgPath(toolOutline), [toolOutline]);
   const outlineBounds = useMemo(() => getOutlineBounds(toolOutline), [toolOutline]);
@@ -547,7 +611,7 @@ export default function Home() {
   const canChooseSide = markerConfirmed && workProfile.length > 0;
   const canEditAnchors = markerConfirmed && workProfile.length > 1;
   const canDownload =
-    workProfile.length > 0 &&
+    geometryWorkProfile.length > 0 &&
     markerConfirmed &&
     currentAnchorsConfirmed &&
     !anchorEditMode &&
@@ -600,8 +664,8 @@ export default function Home() {
     drawPreview(
       canvasRef.current,
       sourceRaster,
-      contour,
-      workProfile,
+      displayContour,
+      displayWorkProfile,
       promptPoint,
       true,
       imageAnchors,
@@ -609,7 +673,7 @@ export default function Home() {
       lensPoint,
       !draggingAnchor,
     );
-  }, [contour, draggingAnchor, imageAnchors, lensPoint, markerConfirmed, promptPoint, sourceRaster, workProfile]);
+  }, [displayContour, displayWorkProfile, draggingAnchor, imageAnchors, lensPoint, markerConfirmed, promptPoint, sourceRaster]);
 
   useEffect(() => {
     if (!sourceRaster || !promptPoint || segmenterState !== "ready") {
@@ -617,6 +681,8 @@ export default function Home() {
         setContour([]);
         setLeftWorkProfile([]);
         setRightWorkProfile([]);
+        setLeftGeometryProfile([]);
+        setRightGeometryProfile([]);
         setToolProfile([]);
         setToolOutline([]);
         setToolHoles([]);
@@ -649,39 +715,63 @@ export default function Home() {
 
         if (cancelled) return;
 
+        const contourSeedPoint = {
+          x: (promptPoint.x / width) * result.width,
+          y: (promptPoint.y / height) * result.height,
+        };
+        let contourImageData = sourceImageData;
+        if (result.width !== width || result.height !== height) {
+          const contourCanvas = document.createElement("canvas");
+          contourCanvas.width = result.width;
+          contourCanvas.height = result.height;
+          const contourContext = contourCanvas.getContext("2d");
+          if (!contourContext) {
+            throw new Error("Kontur-Canvas konnte nicht erstellt werden.");
+          }
+          contourContext.drawImage(sourceRaster, 0, 0, result.width, result.height);
+          contourImageData = contourContext.getImageData(0, 0, result.width, result.height);
+        }
+
         const contourResult = deriveNormalizedProfileFromMask(
           result.binaryMask,
           result.width,
           result.height,
-          { smoothPasses: DEFAULT_MASK_SMOOTH_PASSES, cropBottomRatio: DEFAULT_CROP_BOTTOM_RATIO, seedPoint: promptPoint },
-          sourceImageData,
+          {
+            smoothPasses: DEFAULT_MASK_SMOOTH_PASSES,
+            cropBottomRatio: DEFAULT_CROP_BOTTOM_RATIO,
+            seedPoint: contourSeedPoint,
+          },
+          contourImageData,
           result.confidence,
         );
 
         if (cancelled) return;
 
-        const profileWindowRadius = 3 + Math.round(curveSmoothing / 12);
-        const profileBlend = Math.min(0.18 + (curveSmoothing / 100) * 0.82, 0.96);
-        const smoothedLeftWorkProfile = smoothWorkProfileCurve(contourResult.leftWorkProfile, {
-          windowRadius: profileWindowRadius,
-          blend: profileBlend,
+        const geometryWindowRadius = 2 + Math.round(curveSmoothing / 25);
+        const geometryBlend = Math.min(0.05 + (curveSmoothing / 100) * 0.35, 0.4);
+        const smoothedLeftGeometryProfile = smoothWorkProfileCurve(contourResult.leftWorkProfile, {
+          windowRadius: geometryWindowRadius,
+          blend: geometryBlend,
         });
-        const smoothedRightWorkProfile = smoothWorkProfileCurve(contourResult.rightWorkProfile, {
-          windowRadius: profileWindowRadius,
-          blend: profileBlend,
+        const smoothedRightGeometryProfile = smoothWorkProfileCurve(contourResult.rightWorkProfile, {
+          windowRadius: geometryWindowRadius,
+          blend: geometryBlend,
         });
 
         setContour(contourResult.contour);
-        setLeftWorkProfile(smoothedLeftWorkProfile);
-        setRightWorkProfile(smoothedRightWorkProfile);
+        setLeftWorkProfile(contourResult.leftWorkProfile);
+        setRightWorkProfile(contourResult.rightWorkProfile);
+        setLeftGeometryProfile(smoothedLeftGeometryProfile);
+        setRightGeometryProfile(smoothedRightGeometryProfile);
         setReferenceBounds(contourResult.referenceBounds);
 
-        const selectedProfile = workProfileSide === "left" ? smoothedLeftWorkProfile : smoothedRightWorkProfile;
-        const displayedAnchors = resolveAnchorsForProfile(selectedProfile, displayedAnchorOverride);
-        const confirmedAnchors = resolveAnchorsForProfile(selectedProfile, currentAnchorOverride);
+        const selectedGeometryProfile =
+          workProfileSide === "left" ? smoothedLeftGeometryProfile : smoothedRightGeometryProfile;
+        const displayedAnchors = resolveAnchorsForProfile(selectedGeometryProfile, displayedAnchorOverride);
+        const confirmedAnchors = resolveAnchorsForProfile(selectedGeometryProfile, currentAnchorOverride);
         const activeAnchors = anchorsConfirmed[workProfileSide] ? confirmedAnchors : displayedAnchors;
 
-        if (selectedProfile.length === 0) {
+        if (selectedGeometryProfile.length === 0) {
           setToolProfile([]);
           setToolOutline([]);
           setToolHoles([]);
@@ -692,8 +782,8 @@ export default function Home() {
           return;
         }
         const profileForGeometry = activeAnchors
-          ? trimProfileBetweenAnchors(selectedProfile, activeAnchors)
-          : selectedProfile;
+          ? trimProfileBetweenAnchors(selectedGeometryProfile, activeAnchors)
+          : selectedGeometryProfile;
         const geometryReferenceBounds =
           getProfileReferenceBounds(profileForGeometry) ?? contourResult.referenceBounds;
 
@@ -725,6 +815,8 @@ export default function Home() {
         setContour([]);
         setLeftWorkProfile([]);
         setRightWorkProfile([]);
+        setLeftGeometryProfile([]);
+        setRightGeometryProfile([]);
         setReferenceBounds(null);
         setToolProfile([]);
         setToolOutline([]);
@@ -746,6 +838,9 @@ export default function Home() {
 
   const handleImageUpload = async (file: File) => {
     if (imageUrl?.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
+    // Reset MediaPipe between images so no long-lived task state survives
+    // repeated uploads and marker runs.
+    resetInteractiveSegmenter();
     const url = URL.createObjectURL(file);
     const image = await loadImageFromUrl(url);
     const ratio = image.naturalWidth / Math.max(1, image.naturalHeight);
@@ -758,7 +853,10 @@ export default function Home() {
     setContour([]);
     setLeftWorkProfile([]);
     setRightWorkProfile([]);
+    setLeftGeometryProfile([]);
+    setRightGeometryProfile([]);
     setReferenceBounds(null);
+    setToolProfile([]);
     setResolvedToolWidthMm(toolWidthMm);
     setToolAutoWidened(false);
     setToolOutline([]);
@@ -984,7 +1082,7 @@ export default function Home() {
   };
 
   const handleDownload = () => {
-    if (!sourceRaster || workProfile.length === 0) {
+    if (!sourceRaster || geometryWorkProfile.length === 0) {
       setStatus("Zuerst eine Kontur erkennen, dann STL exportieren.");
       return;
     }
@@ -993,10 +1091,10 @@ export default function Home() {
       return;
     }
     const { width, height } = getRasterSize(sourceRaster);
-    const confirmedAnchors = resolveAnchorsForProfile(workProfile, currentAnchorOverride);
+    const confirmedAnchors = resolveAnchorsForProfile(geometryWorkProfile, currentAnchorOverride);
     const profileForExport = currentAnchorsConfirmed
-      ? trimProfileBetweenAnchors(workProfile, confirmedAnchors)
-      : workProfile;
+      ? trimProfileBetweenAnchors(geometryWorkProfile, confirmedAnchors)
+      : geometryWorkProfile;
     const exportReferenceBounds =
       currentAnchorsConfirmed && confirmedAnchors
         ? getProfileReferenceBounds(profileForExport) ?? referenceBounds ?? undefined
@@ -1079,6 +1177,7 @@ export default function Home() {
       geometry: {
         contourPoints: contour.length,
         activeProfilePoints: workProfile.length,
+        geometryProfilePoints: geometryWorkProfile.length,
         toolProfilePoints: toolProfile.length,
         outlinePoints: toolOutline.length,
         holes: toolHoles.length,
@@ -1127,6 +1226,8 @@ export default function Home() {
     setContour([]);
     setLeftWorkProfile([]);
     setRightWorkProfile([]);
+    setLeftGeometryProfile([]);
+    setRightGeometryProfile([]);
     setReferenceBounds(null);
     setToolProfile([]);
     setToolOutline([]);

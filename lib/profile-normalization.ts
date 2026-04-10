@@ -16,6 +16,9 @@ export type ProfileQuality = {
 export type NormalizedProfileResult = ContourResult & {
   axisX: number;
   quality: ProfileQuality;
+  normalizedWorkProfile: Point[];
+  normalizedLeftWorkProfile: Point[];
+  normalizedRightWorkProfile: Point[];
 };
 
 export type WorkProfileSmoothingOptions = {
@@ -531,6 +534,9 @@ export function deriveNormalizedProfileFromMask(
         symmetry: 0,
         notes: ["Keine belastbare Profilnormalisierung moeglich."],
       },
+      normalizedWorkProfile: raw.workProfile,
+      normalizedLeftWorkProfile: raw.leftWorkProfile,
+      normalizedRightWorkProfile: raw.rightWorkProfile,
     };
   }
 
@@ -562,10 +568,17 @@ export function deriveNormalizedProfileFromMask(
 
   return {
     ...raw,
-    workProfile: raw.rightWorkProfile,
+    // The public work profiles stay conservative and should hug the detected
+    // silhouette closely. Stronger normalization is preserved separately so we
+    // can offer it later as an explicit assistive mode instead of silently
+    // pulling the active edge away from the raw contour.
+    workProfile: raw.workProfile,
     leftWorkProfile: raw.leftWorkProfile,
     rightWorkProfile: raw.rightWorkProfile,
     axisX,
     quality,
+    normalizedWorkProfile: rightWorkProfile,
+    normalizedLeftWorkProfile: leftWorkProfile,
+    normalizedRightWorkProfile: rightWorkProfile,
   };
 }

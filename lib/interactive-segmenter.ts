@@ -7,6 +7,7 @@ const MODEL_URL =
 type SegmenterModule = typeof import("@mediapipe/tasks-vision");
 
 let segmenterPromise: Promise<import("@mediapipe/tasks-vision").InteractiveSegmenter> | null = null;
+let segmenterInstance: import("@mediapipe/tasks-vision").InteractiveSegmenter | null = null;
 
 const isE2eMockEnabled = () => {
   if (typeof window === "undefined") {
@@ -86,7 +87,9 @@ export async function loadInteractiveSegmenter() {
     segmenterPromise = suppressBenignMediapipeLogs(async () => {
       const { FilesetResolver, InteractiveSegmenter } = await loadModule();
       const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
-      return InteractiveSegmenter.createFromModelPath(vision, MODEL_URL);
+      const segmenter = await InteractiveSegmenter.createFromModelPath(vision, MODEL_URL);
+      segmenterInstance = segmenter;
+      return segmenter;
     });
   }
 
@@ -94,6 +97,10 @@ export async function loadInteractiveSegmenter() {
 }
 
 export function resetInteractiveSegmenter() {
+  if (segmenterInstance) {
+    segmenterInstance.close();
+    segmenterInstance = null;
+  }
   segmenterPromise = null;
 }
 
