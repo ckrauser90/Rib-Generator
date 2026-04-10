@@ -195,6 +195,18 @@
   aspect-ratio: 4 / 5;
 }
 
+.previewWrap3d {
+  min-height: 320px;
+}
+
+.preview3dMount {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
 .previewEmpty {
   font-size: 0.82rem;
   color: var(--muted);
@@ -522,6 +534,11 @@
     aspect-ratio: auto;
     min-height: 260px;
   }
+
+  .previewWrap3d,
+  .preview3dMount {
+    min-height: 300px;
+  }
 }
 
 @media (max-width: 560px) {
@@ -554,6 +571,11 @@
   .canvasWrap,
   .previewWrap {
     min-height: 220px;
+  }
+
+  .previewWrap3d,
+  .preview3dMount {
+    min-height: 280px;
   }
 
   .advancedHint {

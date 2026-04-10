@@ -588,9 +588,14 @@ export default function Home() {
         {/* 3D preview */}
         <div className={styles.panel}>
           <span className={styles.panelLabel}>3D Vorschau</span>
-          <div className={styles.previewWrap}>
+          <div className={`${styles.previewWrap} ${styles.previewWrap3d}`}>
             {toolOutline.length > 1 ? (
-              <Rib3DPreview outline={toolOutline} holes={toolHoles} thicknessMm={thicknessMm} />
+              <Rib3DPreview
+                outline={toolOutline}
+                holes={toolHoles}
+                thicknessMm={thicknessMm}
+                className={styles.preview3dMount}
+              />
             ) : (
               <div className={styles.previewEmpty}>Noch keine Kontur</div>
             )}
