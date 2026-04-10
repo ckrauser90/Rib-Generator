@@ -12,6 +12,11 @@ export type ToolHole = {
   radius: number;
 };
 
+export type ProfileAnchors = {
+  top: Point;
+  bottom: Point;
+};
+
 export type ContourResult = {
   contour: Point[];
   workProfile: Point[];
@@ -44,6 +49,7 @@ export type ToolOutlineResult = {
   outline: Point[];
   profile: Point[];
   holes: ToolHole[];
+  anchors: ProfileAnchors | null;
 };
 
 export type WorkProfileSide = "left" | "right";
@@ -500,14 +506,13 @@ const buildTemplateCappedProfile = (
   cavityDepthMm: number,
   topY: number,
   bottomY: number,
+  anchorHints?: ProfileAnchors | null,
 ) => {
   if (points.length < 8) {
     return points.slice();
   }
 
-  const trimCount = Math.min(Math.max(4, Math.round(points.length * 0.05)), Math.floor(points.length / 5));
-  const bodyStartIndex = Math.min(trimCount, points.length - 3);
-  const bodyEndIndex = Math.max(bodyStartIndex + 1, points.length - trimCount - 1);
+  const { bodyStartIndex, bodyEndIndex } = getProfileAnchorIndices(points, anchorHints);
   const body = points.slice(bodyStartIndex, bodyEndIndex + 1);
 
   if (body.length < 3) {
@@ -551,6 +556,63 @@ const buildTemplateCappedProfile = (
     },
     { x: bottomCapX, y: bottomY },
   ];
+};
+
+const getNearestPointIndexByY = (points: Point[], targetY: number) => {
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < points.length; index += 1) {
+    const distance = Math.abs(points[index].y - targetY);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  }
+
+  return bestIndex;
+};
+
+const getProfileAnchorIndices = (points: Point[], anchorHints?: ProfileAnchors | null) => {
+  if (points.length < 3) {
+    return {
+      bodyStartIndex: 0,
+      bodyEndIndex: Math.max(0, points.length - 1),
+    };
+  }
+
+  if (anchorHints) {
+    const hintedStart = getNearestPointIndexByY(points, anchorHints.top.y);
+    const hintedEnd = getNearestPointIndexByY(points, anchorHints.bottom.y);
+    const clampedStart = clamp(hintedStart, 0, Math.max(0, points.length - 2));
+    const clampedEnd = clamp(hintedEnd, clampedStart + 1, points.length - 1);
+
+    return {
+      bodyStartIndex: clampedStart,
+      bodyEndIndex: clampedEnd,
+    };
+  }
+
+  const trimCount = Math.min(Math.max(4, Math.round(points.length * 0.05)), Math.floor(points.length / 5));
+  const bodyStartIndex = Math.min(trimCount, points.length - 2);
+  const bodyEndIndex = Math.max(bodyStartIndex + 1, points.length - trimCount - 1);
+
+  return {
+    bodyStartIndex,
+    bodyEndIndex,
+  };
+};
+
+export const detectProfileAnchors = (points: Point[], anchorHints?: ProfileAnchors | null) => {
+  if (points.length < 2) {
+    return null;
+  }
+
+  const { bodyStartIndex, bodyEndIndex } = getProfileAnchorIndices(points, anchorHints);
+  return {
+    top: points[bodyStartIndex],
+    bottom: points[bodyEndIndex],
+  };
 };
 
 const sampleProfileXAtY = (profile: Point[], y: number) => {
@@ -1471,12 +1533,14 @@ export const buildRibToolOutline = (
   side: WorkProfileSide = "right",
   referenceBounds?: { minY: number; maxY: number },
   printFriendliness = 58,
+  manualAnchors?: ProfileAnchors | null,
 ): ToolOutlineResult => {
   if (workProfile.length < 2) {
     return {
       outline: [],
       profile: [],
       holes: [],
+      anchors: null,
     };
   }
 
@@ -1516,6 +1580,18 @@ export const buildRibToolOutline = (
       y: topPad + (point.y - sourceMinY) * scaleY,
     };
   });
+  const mappedAnchorHints = manualAnchors
+    ? {
+        top: {
+          x: profileAnchorX,
+          y: topPad + (manualAnchors.top.y - sourceMinY) * scaleY,
+        },
+        bottom: {
+          x: profileAnchorX,
+          y: topPad + (manualAnchors.bottom.y - sourceMinY) * scaleY,
+        },
+      }
+    : null;
   const stabilizedProfile = suppressProfileSpikes(profile);
   const friendlinessFactor = clamp(printFriendliness / 100, 0, 1);
   const simplifyToleranceMm = clamp(
@@ -1539,8 +1615,9 @@ export const buildRibToolOutline = (
   const denseProfile = removeMicroKinks(
     suppressProfileSpikes(refitProfileWithPchip(simplifiedProfile, Math.round(targetProfileCount))),
   );
+  const denseAnchors = detectProfileAnchors(denseProfile, mappedAnchorHints);
   const detailedProfile = removeMicroKinks(
-    buildTemplateCappedProfile(denseProfile, totalWidthMm, cavityDepthMm, topY, bottomY),
+    buildTemplateCappedProfile(denseProfile, totalWidthMm, cavityDepthMm, topY, bottomY, mappedAnchorHints),
   );
   const holes = buildGripHoles(totalWidthMm, totalHeight, detailedProfile);
 
@@ -1553,6 +1630,7 @@ export const buildRibToolOutline = (
     ],
     profile: detailedProfile,
     holes,
+    anchors: denseAnchors,
   };
 };
 
@@ -1637,6 +1715,7 @@ export function createExtrudedStl(
   side: WorkProfileSide = "right",
   referenceBounds?: { minY: number; maxY: number },
   printFriendliness = 58,
+  manualAnchors?: ProfileAnchors | null,
 ) {
   if (workProfile.length < 6) {
     throw new Error("Nicht genug Konturpunkte fuer den STL-Export.");
@@ -1651,6 +1730,7 @@ export function createExtrudedStl(
     side,
     referenceBounds,
     printFriendliness,
+    manualAnchors,
   );
   const toolOutline = ensureOrientation(toolGeometry.outline, false);
   const holePolygons = toolGeometry.holes.map((hole) =>
