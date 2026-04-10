@@ -9,6 +9,7 @@ type Rib3DPreviewProps = {
   outline: Point[];
   holes: ToolHole[];
   thicknessMm: number;
+  bevelStrength?: number;
   className?: string;
 };
 
@@ -28,7 +29,7 @@ const createRenderer = () => {
   }
 };
 
-export function Rib3DPreview({ outline, holes, thicknessMm, className }: Rib3DPreviewProps) {
+export function Rib3DPreview({ outline, holes, thicknessMm, bevelStrength = 68, className }: Rib3DPreviewProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [isUnavailable, setIsUnavailable] = useState(false);
 
@@ -84,7 +85,7 @@ export function Rib3DPreview({ outline, holes, thicknessMm, className }: Rib3DPr
       rimLight.position.set(-80, 60, 110);
       scene.add(rimLight);
 
-      geometry = createRibExtrudeGeometry(outline, holes, thicknessMm);
+      geometry = createRibExtrudeGeometry(outline, holes, thicknessMm, bevelStrength);
       geometry.center();
 
       material = new THREE.MeshStandardMaterial({
@@ -149,7 +150,7 @@ export function Rib3DPreview({ outline, holes, thicknessMm, className }: Rib3DPr
         mountNode.removeChild(renderer.domElement);
       }
     };
-  }, [holes, outline, thicknessMm]);
+  }, [bevelStrength, holes, outline, thicknessMm]);
 
   if (isUnavailable) {
     return <div className={className}>3D-Vorschau auf diesem Geraet gerade nicht verfuegbar.</div>;

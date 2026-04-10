@@ -16,14 +16,21 @@ Der Fokus liegt nicht auf fotorealistischer 3D-Rekonstruktion, sondern auf einer
 
 - Browserseitige Segmentierung mit MediaPipe Interactive Segmenter
 - Konturerkennung aus einem einzelnen Bild
+- gefuehrter 5-Schritt-Workflow fuer Marker, Seite, Start/Ende, 3D-Druck und Download
 - Umschalter fuer linke oder rechte Arbeitskante
+- automatische Erkennung von `Start` und `Ende` des relevanten Profilbereichs
+- manuelle Korrektur von `Start` und `Ende` direkt entlang der aktiven Kontur
 - 2D-Vorschau fuer die eigentliche Konturbewertung
 - 3D-Vorschau als Ergaenzung fuer Dicke, Loecher und Material
 - STL-Export fuer 3D-Druck
 - Druckfreundlicher Exportpfad mit zusaetzlicher Kurvenvereinfachung und Refit
 - Echte 3D-Fase im Vorschau- und STL-Koerper
+- zwei verpflichtende Griffloecher mit automatischer Breitenanhebung, falls das Material sonst zu schmal waere
+- Geometrie-Guards vor dem Download, damit kaputte oder unplausible STL-Zustaende blockiert werden
+- Diagnose-Export fuer Troubleshooting
 - Drag-and-Drop fuer Bild-Upload
 - Robusterer Segmentierungs-Reset bei degenerierten MediaPipe-Masken
+- Playwright-Smoke-Tests fuer den produktiven Kernflow
 
 ## Fuer wen das gebaut ist
 
@@ -71,6 +78,15 @@ npm run start
 
 ## Der aktuelle Workflow
 
+Die App ist inzwischen bewusst als produktiver Step-Flow gebaut:
+
+1. Bild hochladen
+2. Marker setzen
+3. Seite waehlen
+4. Start / Ende pruefen und bestaetigen
+5. 3D-Druck fein einstellen
+6. STL herunterladen
+
 ### 1. Bild laden
 
 - Ein Foto oder Webbild hochladen
@@ -79,9 +95,9 @@ npm run start
 - Ruhiger Hintergrund hilft deutlich
 - Ein einzelnes Gefaess funktioniert am besten
 
-### 2. In das Gefaess klicken
+### 2. Marker setzen
 
-Der Klickpunkt dient als Prompt fuer den MediaPipe Interactive Segmenter.
+Der Marker dient als Prompt fuer den MediaPipe Interactive Segmenter.
 
 Die App versucht daraus:
 
@@ -91,13 +107,35 @@ Die App versucht daraus:
 
 abzuleiten.
 
+Wichtig:
+
+- Marker zuerst setzen
+- danach explizit bestaetigen
+- erst dann werden Seite, Start/Ende und Download freigeschaltet
+
 Falls MediaPipe eine unbrauchbare oder degenerierte Maske liefert, versucht die App den Segmenter automatisch neu aufzusetzen, statt erst nach einem kompletten Seiten-Reload wieder zu funktionieren.
 
 ### 3. Seite waehlen
 
 Mit `Links` oder `Rechts` waehlst du, welche Gefaessseite spaeter als Rib-Profil verwendet wird.
 
-### 4. Glaettung einstellen
+### 4. Start / Ende pruefen
+
+`Start` und `Ende` werden automatisch auf der aktiven Arbeitskante gesetzt.
+
+Du kannst sie:
+
+- direkt bestaetigen
+- oder manuell bearbeiten
+
+Die Marker lassen sich dabei nur entlang der aktiven Kontur verschieben.
+
+Erst nach `Start/Ende bestaetigen` gilt:
+
+- nur der Abschnitt zwischen diesen beiden Punkten ist das relevante Profil
+- 2D, 3D und STL werden auf genau diesem Profilbereich aufgebaut
+
+### 5. 3D-Druck einstellen
 
 Der sichtbare Glaettungsregler beeinflusst die Arbeitskante vor dem Export.
 
@@ -112,9 +150,15 @@ Die orange Bildkontur bleibt dabei die erkannte Rohkontur und soll nicht "schoen
 
 ### 5. Druckfreundlichkeit optional anpassen
 
-Im Bereich `Erweitert` gibt es einen zusaetzlichen Regler `Druckfreundlichkeit`.
+Im Bereich `3D-Druck` gibt es zusaetzlich:
 
-Dieser Regler wirkt nur auf den Exportpfad:
+- `Hoehe`
+- `Breite`
+- `Dicke`
+- `Druckfreundlichkeit`
+- `3D-Fase`
+
+`Druckfreundlichkeit` wirkt auf den Exportpfad:
 
 - kleine Mikrozacken werden staerker entfernt
 - die Kurve wird fuer den Druck ruhiger
@@ -129,6 +173,14 @@ Das ist besonders hilfreich, wenn:
 ### 6. STL exportieren
 
 Die STL wird direkt aus der aktiven Arbeitskante erzeugt.
+
+Vor dem Download prueft die App automatisch:
+
+- ob ueberhaupt eine gueltige Werkzeugkontur vorliegt
+- ob genau zwei Griffloecher existieren
+- ob die Loecher innerhalb des Materials liegen
+- ob genug Randabstand vorhanden ist
+- ob die Geometrie in einem exportierbaren Zustand ist
 
 ## Wie die App intern arbeitet
 
@@ -175,6 +227,7 @@ Hier siehst du:
 - die exportierte Rib-Silhouette
 - die Position der Griffloecher
 - die Relation der Arbeitskante zum Werkzeugkoerper
+- vor der Bestaetigung auch `Start` und `Ende`
 
 ### 3D Vorschau
 
@@ -189,6 +242,31 @@ Sie hilft vor allem bei:
 - groben Fehlproportionen
 
 Wenn 2D und 3D voneinander abweichen, ist die 2D-Vorschau fuer die Konturbewertung die wichtigere Ansicht.
+
+## Troubleshooting und Diagnose
+
+Unter `Erweitert` gibt es zwei Hilfen fuer Troubleshooting:
+
+- `Diagnose kopieren`
+- `Diagnose JSON`
+
+Die Diagnose enthaelt unter anderem:
+
+- Bildgroesse und Seitenverhaeltnis
+- Marker-Zustand
+- aktive Seite
+- erkannte und bestaetigte Start-/Ende-Daten
+- Maße und Fase
+- automatisch erhoehte Breite
+- Anzahl der Profil-/Outline-Punkte
+- Geometrie-Warnungen und Fehler
+
+Das ist besonders nuetzlich, wenn:
+
+- die Kontur ploetzlich nicht mehr sauber reagiert
+- die Lochpositionen unplausibel wirken
+- Download blockiert wird
+- 2D, 3D und STL sich unterschiedlich anfuehlen
 
 ## Empfohlene Bildtypen
 
@@ -252,9 +330,9 @@ Wenn 2D und 3D voneinander abweichen, ist die 2D-Vorschau fuer die Konturbewertu
 - [research](C:\Users\chris\Documents\New project\research)
   Sammlung von Recherchematerialien
 
-## Legacy-Teile im Repo
+## Produktpfade im Repo
 
-Im Repo liegen noch alte oder aktuell ungenutzte Bereiche, die fuer den aktuellen Rib-MVP nicht wichtig sind:
+Im Repo liegen zusaetzliche Bereiche, die fuer den aktuellen Rib-MVP nicht noetig sind, aber fuer spaetere Produktstufen relevant sein koennen:
 
 - [app/(auth)](C:\Users\chris\Documents\New project\app\(auth))
 - [app/(dashboard)](C:\Users\chris\Documents\New project\app\(dashboard))
@@ -265,7 +343,8 @@ Im Repo liegen noch alte oder aktuell ungenutzte Bereiche, die fuer den aktuelle
 Wichtig:
 
 - Der aktuelle Rib-MVP braucht fuer den Kernworkflow keine Supabase- oder Auth-Einrichtung.
-- `.env.example` ist aus einem frueheren Projektstand und beschreibt nicht den minimalen Start fuer den heutigen Rib-Workflow.
+- Auth und Supabase koennen spaeter fuer Userverwaltung, gespeicherte Projekte oder Nutzungsdaten sinnvoll werden.
+- `.env.example` beschreibt aktuell nicht den minimalen Start fuer den heutigen Rib-Workflow.
 
 ## Technische Abhaengigkeiten
 
@@ -318,6 +397,23 @@ Das Projekt ist eine normale Next.js-App und laesst sich direkt auf Vercel deplo
 
 - MediaPipe muss im Browser geladen werden koennen
 - die App benoetigt fuer den aktuellen KI-Workflow Client-Side-JavaScript
+
+## Tests
+
+Der produktive Kernflow ist mit Playwright-Smoke-Tests abgesichert.
+
+### E2E ausfuehren
+
+```bash
+npm run test:e2e
+```
+
+Aktuell sind mindestens diese Flows abgedeckt:
+
+- Upload -> Marker -> Seite -> Start/Ende bestaetigen -> Download
+- Reset nach erfolgreichem Durchlauf
+
+Fuer die Tests wird ein deterministischer Mock-Segmenter verwendet, damit der Flow nicht an MediaPipe-Zufall oder CDN-Latenz haengt.
 
 ## Naechste sinnvolle Ausbaustufen
 

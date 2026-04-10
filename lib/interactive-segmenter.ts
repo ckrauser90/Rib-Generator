@@ -8,12 +8,22 @@ type SegmenterModule = typeof import("@mediapipe/tasks-vision");
 
 let segmenterPromise: Promise<import("@mediapipe/tasks-vision").InteractiveSegmenter> | null = null;
 
+const isE2eMockEnabled = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return new URLSearchParams(window.location.search).get("e2eMockSegmenter") === "1";
+};
+
 const BENIGN_MEDIAPIPE_LOGS = [
   "INFO: Created TensorFlow Lite XNNPACK delegate for CPU.",
   "Created TensorFlow Lite XNNPACK delegate for CPU.",
   "OpenGL error checking is disabled",
   "Feedback manager requires a model with a single signature inference",
 ];
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const stringifyConsoleArgs = (args: unknown[]) =>
   args
@@ -68,6 +78,10 @@ async function loadModule(): Promise<SegmenterModule> {
 }
 
 export async function loadInteractiveSegmenter() {
+  if (isE2eMockEnabled()) {
+    return null;
+  }
+
   if (!segmenterPromise) {
     segmenterPromise = suppressBenignMediapipeLogs(async () => {
       const { FilesetResolver, InteractiveSegmenter } = await loadModule();
@@ -81,6 +95,63 @@ export async function loadInteractiveSegmenter() {
 
 export function resetInteractiveSegmenter() {
   segmenterPromise = null;
+}
+
+function buildMockSegmentation(
+  raster: RasterSource,
+  normalizedPoint: { x: number; y: number },
+  confidenceCutoff: number,
+) {
+  const width = Math.max(64, Math.round((raster as { width?: number }).width ?? 640));
+  const height = Math.max(64, Math.round((raster as { height?: number }).height ?? 640));
+  const confidence = new Float32Array(width * height);
+  const binaryMask = new Uint8Array(width * height);
+
+  const centerX = clamp(normalizedPoint.x * width, width * 0.22, width * 0.78);
+  const topY = height * 0.16;
+  const bottomY = height * 0.9;
+
+  for (let y = 0; y < height; y += 1) {
+    const yNorm = (y - topY) / Math.max(1, bottomY - topY);
+    const clampedY = Math.min(1, Math.max(0, yNorm));
+    const leftX = centerX - width * 0.16;
+
+    let rightInset = width * 0.18;
+    if (clampedY > 0.58) {
+      const t = (clampedY - 0.58) / 0.42;
+      rightInset += width * 0.075 * Math.sin(t * Math.PI * 0.9);
+    }
+    if (clampedY < 0.12) {
+      rightInset -= width * 0.025 * (1 - clampedY / 0.12);
+    }
+
+    const rightX = centerX + rightInset;
+
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      const insideY = y >= topY && y <= bottomY;
+      const insideX = x >= leftX && x <= rightX;
+
+      if (insideY && insideX) {
+        const distToEdge = Math.min(x - leftX, rightX - x, y - topY, bottomY - y);
+        const normalized = Math.min(1, Math.max(0, distToEdge / 4));
+        const score = 0.62 + normalized * 0.35;
+        confidence[index] = score;
+        binaryMask[index] = score >= confidenceCutoff ? 1 : 0;
+      } else {
+        confidence[index] = 0.04;
+        binaryMask[index] = 0;
+      }
+    }
+  }
+
+  return {
+    width,
+    height,
+    confidence,
+    binaryMask,
+    ...summariseMask(confidence, binaryMask),
+  };
 }
 
 const summariseMask = (confidence: Float32Array, binaryMask: Uint8Array) => {
@@ -113,6 +184,9 @@ async function runSegmentation(
   confidenceCutoff: number,
 ) {
   const segmenter = await loadInteractiveSegmenter();
+  if (!segmenter) {
+    throw new Error("Mock-Segmenter ist aktiv. Direkte MediaPipe-Segmentierung ist deaktiviert.");
+  }
   const result = await suppressBenignMediapipeLogs(() =>
     Promise.resolve(
       segmenter.segment(raster, {
@@ -150,6 +224,10 @@ export async function segmentRasterFromPoint(
   normalizedPoint: { x: number; y: number },
   confidenceCutoff: number,
 ) {
+  if (isE2eMockEnabled()) {
+    return buildMockSegmentation(raster, normalizedPoint, confidenceCutoff);
+  }
+
   let segmentation = await runSegmentation(raster, normalizedPoint, confidenceCutoff);
 
   if (isDegenerateMask(segmentation)) {

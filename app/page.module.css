@@ -56,15 +56,73 @@
 }
 
 .settingsBar {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 12px 20px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  align-items: start;
+  gap: 14px;
+  padding: 14px 18px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
   box-shadow: var(--shadow);
-  flex-wrap: wrap;
+}
+
+.stepCard {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  align-self: stretch;
+  padding: 12px;
+  border: 1px solid rgba(122, 142, 110, 0.12);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(250, 248, 245, 0.92), rgba(246, 242, 236, 0.85));
+}
+
+.stepHeader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.stepIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(122, 142, 110, 0.14);
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stepTitle {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.stepHint {
+  margin: 4px 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.stepActionsInline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stepActionsStack {
+  display: grid;
+  gap: 8px;
 }
 
 .settingGroup {
@@ -241,9 +299,11 @@
 }
 
 .settingActions {
-  display: flex;
-  gap: 12px;
-  margin-left: auto;
+  display: grid;
+  gap: 10px;
+  align-self: stretch;
+  align-content: start;
+  min-width: 140px;
   align-items: center;
 }
 
@@ -430,10 +490,28 @@
   height: 100%;
 }
 
+.profilePath {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
 .outlinePath {
   fill: rgba(122, 142, 110, 0.1);
   stroke: var(--accent);
   stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.activeProfilePath {
+  fill: none;
+  stroke: rgba(201, 112, 74, 0.95);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
 
@@ -512,10 +590,17 @@
   }
 
   .settingsBar {
-    display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
     padding: 14px;
+  }
+
+  .stepCard {
+    padding: 12px 10px;
+  }
+
+  .stepActionsInline {
+    grid-template-columns: 1fr;
   }
 
   .settingGroup {
@@ -557,7 +642,6 @@
 
   .settingActions {
     grid-column: 1 / -1;
-    margin-left: 0;
     width: 100%;
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -588,6 +672,10 @@
 
   .settingsBar {
     grid-template-columns: 1fr;
+  }
+
+  .stepHeader {
+    gap: 8px;
   }
 
   .dimRow {

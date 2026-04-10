@@ -10,6 +10,7 @@ import {
   type Point,
   type ProfileAnchors,
   type ToolHole,
+  validateToolGeometry,
   type WorkProfileSide,
 } from "../lib/contour";
 import { loadInteractiveSegmenter, segmentRasterFromPoint } from "../lib/interactive-segmenter";
@@ -176,6 +177,7 @@ const drawPreview = (
   contour: Point[],
   workProfile: Point[],
   promptPoint: Point | null,
+  showPromptPoint: boolean,
   anchors: { top: Point; bottom: Point } | null,
   activeHandle: AnchorHandle | null,
   lensPoint: Point | null,
@@ -242,7 +244,7 @@ const drawPreview = (
     );
   }
 
-  if (promptPoint) {
+  if (promptPoint && showPromptPoint) {
     const x = (promptPoint.x / imageWidth) * width;
     const y = (promptPoint.y / imageHeight) * height;
     context.beginPath();
@@ -261,6 +263,13 @@ const buildSvgPath = (points: Point[]) => {
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
     .join(" ")
     .concat(" Z");
+};
+
+const buildSvgPolylinePath = (points: Point[]) => {
+  if (points.length === 0) return "";
+  return points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(" ");
 };
 
 const getOutlineBounds = (outline: Point[]) => {
@@ -392,6 +401,17 @@ const trimProfileBetweenAnchors = (
   return profile.slice(start, end + 1);
 };
 
+const getProfileReferenceBounds = (profile: Point[]) => {
+  if (profile.length === 0) {
+    return null;
+  }
+
+  return {
+    minY: profile[0].y,
+    maxY: profile[profile.length - 1].y,
+  };
+};
+
 const pickAnchorHandle = (
   event: MouseEvent<HTMLCanvasElement>,
   canvas: HTMLCanvasElement,
@@ -424,16 +444,22 @@ export default function Home() {
   const [sourceRaster, setSourceRaster] = useState<RasterSource | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [promptPoint, setPromptPoint] = useState<Point | null>(null);
+  const [markerPlacementMode, setMarkerPlacementMode] = useState(false);
+  const [markerConfirmed, setMarkerConfirmed] = useState(false);
   const [contour, setContour] = useState<Point[]>([]);
   const [leftWorkProfile, setLeftWorkProfile] = useState<Point[]>([]);
   const [rightWorkProfile, setRightWorkProfile] = useState<Point[]>([]);
   const [referenceBounds, setReferenceBounds] = useState<{ minY: number; maxY: number } | null>(null);
+  const [toolProfile, setToolProfile] = useState<Point[]>([]);
   const [toolOutline, setToolOutline] = useState<Point[]>([]);
   const [toolHoles, setToolHoles] = useState<ToolHole[]>([]);
   const [toolAnchors, setToolAnchors] = useState<{ top: Point; bottom: Point } | null>(null);
+  const [resolvedToolWidthMm, setResolvedToolWidthMm] = useState(70);
+  const [toolAutoWidened, setToolAutoWidened] = useState(false);
   const [workProfileSide, setWorkProfileSide] = useState<WorkProfileSide>("right");
   const [curveSmoothing, setCurveSmoothing] = useState(34);
   const [printFriendliness, setPrintFriendliness] = useState(58);
+  const [bevelStrength, setBevelStrength] = useState(68);
   const [toolHeightMm, setToolHeightMm] = useState(120);
   const [toolWidthMm, setToolWidthMm] = useState(70);
   const [thicknessMm, setThicknessMm] = useState(4.2);
@@ -477,8 +503,35 @@ export default function Home() {
   const outlineViewBox = outlineBounds
     ? `${outlineBounds.minX} ${outlineBounds.minY} ${outlineBounds.width} ${outlineBounds.height}`
     : "0 0 100 140";
+  const profilePreviewPath = useMemo(() => buildSvgPolylinePath(toolProfile), [toolProfile]);
   const feedbackTone = getFeedbackTone(status);
+  const geometryValidation = useMemo(
+    () => validateToolGeometry(toolOutline, toolProfile, toolHoles),
+    [toolHoles, toolOutline, toolProfile],
+  );
+  const shouldShowGeometryValidation = markerConfirmed && toolOutline.length > 1;
   const canFineTune = currentAnchorsConfirmed && !anchorEditMode && workProfile.length > 0;
+  const canChooseSide = markerConfirmed && workProfile.length > 0;
+  const canEditAnchors = markerConfirmed && workProfile.length > 1;
+  const canDownload =
+    workProfile.length > 0 &&
+    markerConfirmed &&
+    currentAnchorsConfirmed &&
+    !anchorEditMode &&
+    !segmenting &&
+    geometryValidation.valid;
+  const currentStepLabel = !sourceRaster
+    ? "Schritt 1: Bild hochladen"
+    : !markerConfirmed
+      ? "Schritt 1: Marker setzen und bestaetigen"
+      : !currentAnchorsConfirmed || anchorEditMode
+        ? "Schritt 3: Start und Ende pruefen"
+        : "Schritt 4-5: Feintuning und Download";
+  const footerTone = shouldShowGeometryValidation && geometryValidation.errors[0]
+    ? "error"
+    : shouldShowGeometryValidation && geometryValidation.warnings[0]
+      ? "warning"
+      : feedbackTone;
 
   useEffect(() => {
     let cancelled = false;
@@ -512,11 +565,12 @@ export default function Home() {
       contour,
       workProfile,
       promptPoint,
+      !markerConfirmed,
       imageAnchors,
       draggingAnchor,
       lensPoint,
     );
-  }, [contour, draggingAnchor, imageAnchors, lensPoint, promptPoint, sourceRaster, workProfile]);
+  }, [contour, draggingAnchor, imageAnchors, lensPoint, markerConfirmed, promptPoint, sourceRaster, workProfile]);
 
   useEffect(() => {
     if (!sourceRaster || !promptPoint || segmenterState !== "ready") {
@@ -524,9 +578,12 @@ export default function Home() {
         setContour([]);
         setLeftWorkProfile([]);
         setRightWorkProfile([]);
+        setToolProfile([]);
         setToolOutline([]);
         setToolHoles([]);
         setToolAnchors(null);
+        setResolvedToolWidthMm(toolWidthMm);
+        setToolAutoWidened(false);
       }
       return;
     }
@@ -583,17 +640,23 @@ export default function Home() {
         const selectedProfile = workProfileSide === "left" ? smoothedLeftWorkProfile : smoothedRightWorkProfile;
         const displayedAnchors = resolveAnchorsForProfile(selectedProfile, displayedAnchorOverride);
         const confirmedAnchors = resolveAnchorsForProfile(selectedProfile, currentAnchorOverride);
+        const activeAnchors = anchorsConfirmed[workProfileSide] ? confirmedAnchors : displayedAnchors;
 
         if (selectedProfile.length === 0) {
+          setToolProfile([]);
           setToolOutline([]);
           setToolHoles([]);
           setToolAnchors(null);
+          setResolvedToolWidthMm(toolWidthMm);
+          setToolAutoWidened(false);
           setStatus("Maske erkannt, aber keine stabile Kontur ableitbar.");
           return;
         }
-        const profileForGeometry = anchorsConfirmed[workProfileSide]
-          ? trimProfileBetweenAnchors(selectedProfile, confirmedAnchors)
+        const profileForGeometry = activeAnchors
+          ? trimProfileBetweenAnchors(selectedProfile, activeAnchors)
           : selectedProfile;
+        const geometryReferenceBounds =
+          getProfileReferenceBounds(profileForGeometry) ?? contourResult.referenceBounds;
 
         const ribGeometry = buildRibToolOutline(
           profileForGeometry,
@@ -602,14 +665,17 @@ export default function Home() {
           toolWidthMm,
           toolHeightMm,
           workProfileSide,
-          contourResult.referenceBounds,
+          geometryReferenceBounds,
           printFriendliness,
-          anchorsConfirmed[workProfileSide] ? null : displayedAnchors,
+          activeAnchors,
         );
 
+        setToolProfile(ribGeometry.workEdge);
         setToolOutline(ribGeometry.outline);
         setToolHoles(ribGeometry.holes);
         setToolAnchors(anchorsConfirmed[workProfileSide] ? null : ribGeometry.anchors);
+        setResolvedToolWidthMm(ribGeometry.resolvedWidthMm);
+        setToolAutoWidened(ribGeometry.autoWidened);
         setStatus(
           anchorsConfirmed[workProfileSide]
             ? `Profilbereich bestaetigt - ${contourResult.usableColumns} Zeilen, Seite: ${workProfileSide === "left" ? "links" : "rechts"}, Confidence: ${(contourResult.quality.confidence * 100).toFixed(0)}%.`
@@ -621,9 +687,12 @@ export default function Home() {
         setLeftWorkProfile([]);
         setRightWorkProfile([]);
         setReferenceBounds(null);
+        setToolProfile([]);
         setToolOutline([]);
         setToolHoles([]);
         setToolAnchors(null);
+        setResolvedToolWidthMm(toolWidthMm);
+        setToolAutoWidened(false);
         setStatus(error instanceof Error ? error.message : "Segmentierung fehlgeschlagen.");
       } finally {
         if (!cancelled) setSegmenting(false);
@@ -645,13 +714,16 @@ export default function Home() {
     setImageUrl(url);
     setSourceRaster(image);
     setPromptPoint(null);
+    setMarkerPlacementMode(false);
+    setMarkerConfirmed(false);
     setContour([]);
     setLeftWorkProfile([]);
     setRightWorkProfile([]);
     setReferenceBounds(null);
+    setResolvedToolWidthMm(toolWidthMm);
+    setToolAutoWidened(false);
     setToolOutline([]);
     setToolHoles([]);
-    setToolAnchors(null);
     setAnchorsConfirmed({ left: false, right: false });
     setManualAnchorOverrides({ left: null, right: null });
     setDraftAnchorOverrides({ left: null, right: null });
@@ -661,12 +733,12 @@ export default function Home() {
 
     if (extremeRatio) {
       setStatus(
-        `"${file.name}" geladen. Sehr breites oder hohes Bild erkannt - Vorschau bleibt unverzerrt, Segmentierung kann aber unzuverlaessiger sein.`,
+        `"${file.name}" geladen. Format ist speziell. Aktiviere Schritt 1 und setze dann den Marker.`,
       );
       return;
     }
 
-    setStatus(`"${file.name}" geladen. Klicke ins Gefaess.`);
+    setStatus(`"${file.name}" geladen. Starte jetzt mit Schritt 1 und setze den Marker im Gefaess.`);
   };
 
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -685,15 +757,38 @@ export default function Home() {
     if (anchorEditMode) {
       return;
     }
-    if (!canvasRef.current || !sourceRaster || segmenterState !== "ready") return;
+    if (!markerPlacementMode || !canvasRef.current || !sourceRaster || segmenterState !== "ready") return;
     setAnchorsConfirmed({ left: false, right: false });
     setManualAnchorOverrides({ left: null, right: null });
     setDraftAnchorOverrides({ left: null, right: null });
+    setMarkerConfirmed(false);
+    setToolProfile([]);
     setToolOutline([]);
     setToolHoles([]);
     setToolAnchors(null);
     setPromptPoint(mapCanvasToImage(event, canvasRef.current, sourceRaster));
-    setStatus("Punkt gesetzt - MediaPipe segmentiert.");
+    setStatus("Marker gesetzt. Wenn er passt, bestaetige ihn. Die Vorschau ist schon sichtbar.");
+  };
+
+  const activateMarkerPlacement = () => {
+    if (!sourceRaster) {
+      setStatus("Lade zuerst ein Bild hoch.");
+      return;
+    }
+    setMarkerPlacementMode(true);
+    setMarkerConfirmed(false);
+    setStatus("Schritt 1 aktiv. Klicke jetzt in den Gefaesskoerper, um den Marker zu setzen.");
+  };
+
+  const confirmMarker = () => {
+    if (!promptPoint) {
+      setStatus("Setze zuerst einen Marker im Gefaess.");
+      return;
+    }
+
+    setMarkerConfirmed(true);
+    setMarkerPlacementMode(false);
+    setStatus("Marker bestaetigt. Jetzt Schritt 2: Seite waehlen.");
   };
 
   const handleCanvasMouseDown = (event: MouseEvent<HTMLCanvasElement>) => {
@@ -858,11 +953,19 @@ export default function Home() {
       setStatus("Zuerst eine Kontur erkennen, dann STL exportieren.");
       return;
     }
+    if (!geometryValidation.valid) {
+      setStatus(geometryValidation.errors[0]?.message ?? "Die Rib-Geometrie ist noch nicht exportierbar.");
+      return;
+    }
     const { width, height } = getRasterSize(sourceRaster);
     const confirmedAnchors = resolveAnchorsForProfile(workProfile, currentAnchorOverride);
     const profileForExport = currentAnchorsConfirmed
       ? trimProfileBetweenAnchors(workProfile, confirmedAnchors)
       : workProfile;
+    const exportReferenceBounds =
+      currentAnchorsConfirmed && confirmedAnchors
+        ? getProfileReferenceBounds(profileForExport) ?? referenceBounds ?? undefined
+        : referenceBounds ?? undefined;
     const stl = createExtrudedStl(
       profileForExport,
       width,
@@ -871,9 +974,10 @@ export default function Home() {
       toolHeightMm,
       thicknessMm,
       workProfileSide,
-      referenceBounds ?? undefined,
+      exportReferenceBounds,
       printFriendliness,
-      null,
+      currentAnchorsConfirmed ? confirmedAnchors : null,
+      bevelStrength,
     );
     const blob = new Blob([stl], { type: "model/stl" });
     const url = URL.createObjectURL(blob);
@@ -885,15 +989,116 @@ export default function Home() {
     setStatus("STL exportiert.");
   };
 
+  const buildDiagnosticsSnapshot = () => {
+    const imageSize = sourceRaster ? getRasterSize(sourceRaster) : null;
+    return {
+      timestamp: new Date().toISOString(),
+      currentStep: currentStepLabel,
+      status,
+      segmenterState,
+      segmenting,
+      sourceImage: imageSize
+        ? {
+            width: imageSize.width,
+            height: imageSize.height,
+            aspectRatio: Number((imageSize.width / Math.max(1, imageSize.height)).toFixed(4)),
+          }
+        : null,
+      marker: promptPoint
+        ? {
+            confirmed: markerConfirmed,
+            placementMode: markerPlacementMode,
+            x: Number(promptPoint.x.toFixed(2)),
+            y: Number(promptPoint.y.toFixed(2)),
+          }
+        : null,
+      side: workProfileSide,
+      anchors: {
+        confirmed: currentAnchorsConfirmed,
+        editing: anchorEditMode,
+        detected: imageAnchors
+          ? {
+              top: {
+                x: Number(imageAnchors.top.x.toFixed(2)),
+                y: Number(imageAnchors.top.y.toFixed(2)),
+              },
+              bottom: {
+                x: Number(imageAnchors.bottom.x.toFixed(2)),
+                y: Number(imageAnchors.bottom.y.toFixed(2)),
+              },
+            }
+          : null,
+        manualOverride: currentAnchorOverride,
+        draftOverride: currentDraftAnchorOverride,
+      },
+      measures: {
+        requestedHeightMm: toolHeightMm,
+        requestedWidthMm: toolWidthMm,
+        resolvedWidthMm: Number(resolvedToolWidthMm.toFixed(2)),
+        thicknessMm,
+        curveSmoothing,
+        printFriendliness,
+        bevelStrength,
+        autoWidened: toolAutoWidened,
+      },
+      geometry: {
+        contourPoints: contour.length,
+        activeProfilePoints: workProfile.length,
+        toolProfilePoints: toolProfile.length,
+        outlinePoints: toolOutline.length,
+        holes: toolHoles.length,
+        referenceBounds,
+      },
+      validation: {
+        valid: geometryValidation.valid,
+        minHoleClearanceMm:
+          geometryValidation.minHoleClearanceMm === null
+            ? null
+            : Number(geometryValidation.minHoleClearanceMm.toFixed(3)),
+        errors: geometryValidation.errors,
+        warnings: geometryValidation.warnings,
+      },
+    };
+  };
+
+  const copyDiagnostics = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(buildDiagnosticsSnapshot(), null, 2));
+      setStatus("Diagnose in die Zwischenablage kopiert.");
+    } catch {
+      setStatus("Diagnose konnte nicht kopiert werden.");
+    }
+  };
+
+  const downloadDiagnostics = () => {
+    const blob = new Blob([JSON.stringify(buildDiagnosticsSnapshot(), null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "rib-diagnose.json";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setStatus("Diagnose als JSON exportiert.");
+  };
+
   const resetSelection = () => {
     setPromptPoint(null);
+    setMarkerPlacementMode(false);
+    setMarkerConfirmed(false);
     setContour([]);
     setLeftWorkProfile([]);
     setRightWorkProfile([]);
     setReferenceBounds(null);
+    setToolProfile([]);
     setToolOutline([]);
     setToolHoles([]);
     setToolAnchors(null);
+    setResolvedToolWidthMm(toolWidthMm);
+    setToolAutoWidened(false);
     setAnchorsConfirmed({ left: false, right: false });
     setManualAnchorOverrides({ left: null, right: null });
     setDraftAnchorOverrides({ left: null, right: null });
@@ -914,6 +1119,7 @@ export default function Home() {
           <input
             type="file"
             accept="image/*"
+            data-testid="upload-input"
             onChange={(event) => {
               void handleFile(event);
             }}
@@ -925,13 +1131,51 @@ export default function Home() {
       </div>
 
       <div className={styles.settingsBar}>
-        <div className={styles.settingGroup}>
-          <span className={styles.settingLabel}>Seite</span>
+        <div className={styles.stepCard}>
+          <div className={styles.stepHeader}>
+            <span className={styles.stepIndex}>1</span>
+            <div>
+              <p className={styles.stepTitle}>Marker setzen</p>
+              <p className={styles.stepHint}>Marker im Gefaesskoerper setzen und bestaetigen.</p>
+            </div>
+          </div>
+          <div className={styles.stepActionsInline}>
+            <button
+              type="button"
+              className={`${styles.miniBtn} ${markerPlacementMode ? styles.miniBtnActive : ""}`}
+              onClick={activateMarkerPlacement}
+              disabled={!sourceRaster}
+              data-testid="marker-set-button"
+            >
+              {promptPoint ? "Marker neu setzen" : "Marker setzen"}
+            </button>
+            <button
+              type="button"
+              className={`${styles.miniBtn} ${markerConfirmed ? styles.miniBtnConfirmed : ""}`}
+              onClick={confirmMarker}
+              disabled={!promptPoint || markerConfirmed}
+              data-testid="marker-confirm-button"
+            >
+              {markerConfirmed ? "Marker bestaetigt" : "Marker bestaetigen"}
+            </button>
+          </div>
+        </div>
+
+        <div className={styles.stepCard}>
+          <div className={styles.stepHeader}>
+            <span className={styles.stepIndex}>2</span>
+            <div>
+              <p className={styles.stepTitle}>Seite waehlen</p>
+              <p className={styles.stepHint}>Links oder rechts als aktive Arbeitskante.</p>
+            </div>
+          </div>
           <div className={styles.sideToggle}>
             <button
               type="button"
               className={`${styles.toggleBtn} ${workProfileSide === "left" ? styles.toggleBtnActive : ""}`}
               onClick={() => setWorkProfileSide("left")}
+              disabled={!canChooseSide}
+              data-testid="side-left-button"
             >
               Links
             </button>
@@ -939,31 +1183,96 @@ export default function Home() {
               type="button"
               className={`${styles.toggleBtn} ${workProfileSide === "right" ? styles.toggleBtnActive : ""}`}
               onClick={() => setWorkProfileSide("right")}
+              disabled={!canChooseSide}
+              data-testid="side-right-button"
             >
               Rechts
             </button>
           </div>
         </div>
 
-        <div className={styles.settingGroup}>
-          <label htmlFor="smoothing" className={styles.settingLabel}>
-            Glaettung <strong>{curveSmoothing}%</strong>
-          </label>
-          <input
-            id="smoothing"
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={curveSmoothing}
-            onChange={(event) => setCurveSmoothing(Number(event.target.value))}
-            className={styles.slider}
-            disabled={!canFineTune}
-          />
+        <div className={styles.stepCard}>
+          <div className={styles.stepHeader}>
+            <span className={styles.stepIndex}>3</span>
+            <div>
+              <p className={styles.stepTitle}>Start / Ende</p>
+              <p className={styles.stepHint}>Automatisch setzen, manuell korrigieren und uebernehmen.</p>
+            </div>
+          </div>
+          <div className={styles.stepActionsStack}>
+            {anchorEditMode ? (
+              <>
+                <button
+                  type="button"
+                  className={`${styles.miniBtn} ${styles.miniBtnActive}`}
+                  onClick={applyAnchorEditing}
+                  data-testid="anchor-apply-button"
+                >
+                  Start/Ende uebernehmen
+                </button>
+                <button type="button" className={styles.miniBtn} onClick={cancelAnchorEditing} data-testid="anchor-cancel-button">
+                  Bearbeitung abbrechen
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className={`${styles.miniBtn} ${currentAnchorsConfirmed ? styles.miniBtnConfirmed : ""}`}
+                  onClick={confirmAutomaticAnchors}
+                  disabled={!canEditAnchors || currentAnchorsConfirmed}
+                  data-testid="anchor-confirm-button"
+                >
+                  {currentAnchorsConfirmed ? "Start/Ende bestaetigt" : "Start/Ende bestaetigen"}
+                </button>
+                <button
+                  type="button"
+                  className={styles.miniBtn}
+                  onClick={beginAnchorEditing}
+                  disabled={!canEditAnchors}
+                  data-testid="anchor-edit-button"
+                >
+                  Start/Ende bearbeiten
+                </button>
+                <button
+                  type="button"
+                  className={styles.miniBtn}
+                  onClick={resetCurrentAnchors}
+                  disabled={!canEditAnchors || (!manualAnchorOverrides[workProfileSide] && !draftAnchorOverrides[workProfileSide])}
+                  data-testid="anchor-auto-button"
+                >
+                  Automatisch setzen
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
-        <div className={styles.settingGroup}>
-          <span className={styles.settingLabel}>Masse (mm)</span>
+        <div className={styles.stepCard}>
+          <div className={styles.stepHeader}>
+            <span className={styles.stepIndex}>4</span>
+            <div>
+              <p className={styles.stepTitle}>3D-Druck</p>
+              <p className={styles.stepHint}>Maße, Druckfreundlichkeit und Fase einstellen.</p>
+            </div>
+          </div>
+          <div className={styles.settingGroup}>
+            <label htmlFor="smoothing" className={styles.settingLabel}>
+              Glaettung <strong>{curveSmoothing}%</strong>
+            </label>
+            <input
+              id="smoothing"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={curveSmoothing}
+              onChange={(event) => setCurveSmoothing(Number(event.target.value))}
+              className={styles.slider}
+              disabled={!canFineTune}
+              data-testid="curve-smoothing-slider"
+            />
+          </div>
           <div className={styles.dimRow}>
             <label className={styles.dimField}>
               <span>H</span>
@@ -976,6 +1285,7 @@ export default function Home() {
                 value={toolHeightMm}
                 onChange={(event) => updateNumericValue(event.target.value, setToolHeightMm, 60, 180)}
                 disabled={!canFineTune}
+                data-testid="height-input"
               />
             </label>
             <label className={styles.dimField}>
@@ -989,6 +1299,7 @@ export default function Home() {
                 value={toolWidthMm}
                 onChange={(event) => updateNumericValue(event.target.value, setToolWidthMm, 35, 120)}
                 disabled={!canFineTune}
+                data-testid="width-input"
               />
             </label>
             <label className={styles.dimField}>
@@ -1002,57 +1313,11 @@ export default function Home() {
                 value={thicknessMm}
                 onChange={(event) => updateNumericValue(event.target.value, setThicknessMm, 2, 10)}
                 disabled={!canFineTune}
+                data-testid="thickness-input"
               />
             </label>
           </div>
-        </div>
-
-        <details className={styles.advancedDetails}>
-          <summary className={styles.advancedSummary}>Erweitert</summary>
-          <div className={styles.advancedBody}>
-            <div className={styles.advancedActions}>
-              {anchorEditMode ? (
-                <>
-                  <button
-                    type="button"
-                    className={`${styles.miniBtn} ${styles.miniBtnActive}`}
-                    onClick={applyAnchorEditing}
-                  >
-                    Start/Ende uebernehmen
-                  </button>
-                  <button type="button" className={styles.miniBtn} onClick={cancelAnchorEditing}>
-                    Bearbeitung abbrechen
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className={styles.miniBtn}
-                    onClick={beginAnchorEditing}
-                    disabled={workProfile.length < 2}
-                  >
-                    Start/Ende bearbeiten
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.miniBtn} ${currentAnchorsConfirmed ? styles.miniBtnConfirmed : ""}`}
-                    onClick={confirmAutomaticAnchors}
-                    disabled={workProfile.length < 2 || currentAnchorsConfirmed}
-                  >
-                    {currentAnchorsConfirmed ? "Start/Ende bestaetigt" : "Start/Ende bestaetigen"}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.miniBtn}
-                    onClick={resetCurrentAnchors}
-                    disabled={!manualAnchorOverrides[workProfileSide] && !draftAnchorOverrides[workProfileSide]}
-                  >
-                    Automatisch setzen
-                  </button>
-                </>
-              )}
-            </div>
+          <div className={styles.settingGroup}>
             <label htmlFor="print-friendliness" className={styles.settingLabel}>
               Druckfreundlichkeit <strong>{printFriendliness}%</strong>
             </label>
@@ -1066,29 +1331,83 @@ export default function Home() {
               onChange={(event) => setPrintFriendliness(Number(event.target.value))}
               className={styles.slider}
               disabled={!canFineTune}
+              data-testid="print-friendliness-slider"
             />
-            <p className={styles.advancedHint}>
-              Hoeher = ruhigere STL-Kante mit weniger Mikrozacken. Die sichtbare Bildkontur bleibt unveraendert.
-            </p>
-            {anchorEditMode && (
-              <p className={styles.advancedHint}>
-                Ziehe Start und Ende direkt entlang der hellen Kontur im Originalbild. Erst Uebernehmen aktualisiert Rib-Profil, 3D und STL.
-              </p>
-            )}
           </div>
-        </details>
+          <div className={styles.settingGroup}>
+            <label htmlFor="bevel-strength" className={styles.settingLabel}>
+              3D-Fase <strong>{bevelStrength}%</strong>
+            </label>
+            <input
+              id="bevel-strength"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={bevelStrength}
+              onChange={(event) => setBevelStrength(Number(event.target.value))}
+              className={styles.slider}
+              disabled={!canFineTune}
+              data-testid="bevel-strength-slider"
+            />
+          </div>
+          {toolAutoWidened && (
+            <p className={styles.advancedHint}>
+              Breite automatisch auf {resolvedToolWidthMm.toFixed(1)} mm erhoeht, damit beide Griffloecher ins Material passen.
+            </p>
+          )}
+          {shouldShowGeometryValidation && geometryValidation.errors[0] && (
+            <p className={styles.footerNote} data-tone="error">
+              {geometryValidation.errors[0].message}
+            </p>
+          )}
+          {shouldShowGeometryValidation && !geometryValidation.errors[0] && geometryValidation.warnings[0] && (
+            <p className={styles.footerNote} data-tone="warning">
+              {geometryValidation.warnings[0].message}
+            </p>
+          )}
+        </div>
 
-        <div className={styles.settingActions}>
-          <button type="button" className={styles.ghostBtn} onClick={resetSelection}>
-            Zuruecksetzen
-          </button>
+        <div className={styles.stepCard}>
+          <div className={styles.stepHeader}>
+            <span className={styles.stepIndex}>5</span>
+            <div>
+              <p className={styles.stepTitle}>Download</p>
+              <p className={styles.stepHint}>Finale STL herunterladen.</p>
+            </div>
+          </div>
           <button
             type="button"
             className={styles.primaryBtn}
             onClick={handleDownload}
-            disabled={workProfile.length === 0 || segmenting || anchorEditMode || !currentAnchorsConfirmed}
+            disabled={!canDownload}
+            data-testid="download-button"
           >
             STL herunterladen
+          </button>
+        </div>
+
+        <details className={styles.advancedDetails}>
+          <summary className={styles.advancedSummary}>Erweitert</summary>
+          <div className={styles.advancedBody}>
+            <p className={styles.advancedHint}>
+              Diagnose hilft beim Troubleshooting von Marker, Kontur, Ankern und finaler Rib-Geometrie.
+            </p>
+            <p className={styles.advancedHint}>Aktuell: {currentStepLabel}</p>
+            <div className={styles.advancedActions}>
+              <button type="button" className={styles.miniBtn} onClick={() => void copyDiagnostics()} data-testid="copy-diagnostics-button">
+                Diagnose kopieren
+              </button>
+              <button type="button" className={styles.miniBtn} onClick={downloadDiagnostics} data-testid="download-diagnostics-button">
+                Diagnose JSON
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <div className={styles.settingActions}>
+          <button type="button" className={styles.ghostBtn} onClick={resetSelection} data-testid="reset-button">
+            Zuruecksetzen
           </button>
         </div>
       </div>
@@ -1109,6 +1428,7 @@ export default function Home() {
           >
             <canvas
               ref={canvasRef}
+              data-testid="original-canvas"
               className={`${styles.canvas} ${anchorEditMode ? styles.canvasAnchorEdit : ""}`}
               onClick={handleCanvasClick}
               onMouseDown={handleCanvasMouseDown}
@@ -1142,6 +1462,7 @@ export default function Home() {
             {toolOutline.length > 1 ? (
               <svg
                 className={styles.outlineSvg}
+                data-testid="rib-profile-svg"
                 viewBox={outlineViewBox}
                 preserveAspectRatio="xMidYMid meet"
                 aria-label="2D Rib-Vorschau"
@@ -1163,14 +1484,33 @@ export default function Home() {
                     r={hole.radius}
                   />
                 ))}
+                {toolProfile.length > 1 && <path className={styles.activeProfilePath} d={profilePreviewPath} />}
                 {!currentAnchorsConfirmed && toolAnchors && (
                   <>
-                    <circle className={styles.anchorDot} cx={toolAnchors.top.x} cy={toolAnchors.top.y} r={5.5} />
-                    <text className={styles.anchorLabel} x={toolAnchors.top.x + 9} y={toolAnchors.top.y}>
+                    <circle
+                      className={styles.anchorDot}
+                      cx={toolAnchors.top.x}
+                      cy={toolAnchors.top.y}
+                      r={5.5}
+                    />
+                    <text
+                      className={styles.anchorLabel}
+                      x={toolAnchors.top.x + 9}
+                      y={toolAnchors.top.y}
+                    >
                       Start
                     </text>
-                    <circle className={styles.anchorDot} cx={toolAnchors.bottom.x} cy={toolAnchors.bottom.y} r={5.5} />
-                    <text className={styles.anchorLabel} x={toolAnchors.bottom.x + 9} y={toolAnchors.bottom.y}>
+                    <circle
+                      className={styles.anchorDot}
+                      cx={toolAnchors.bottom.x}
+                      cy={toolAnchors.bottom.y}
+                      r={5.5}
+                    />
+                    <text
+                      className={styles.anchorLabel}
+                      x={toolAnchors.bottom.x + 9}
+                      y={toolAnchors.bottom.y}
+                    >
                       Ende
                     </text>
                   </>
@@ -1185,12 +1525,13 @@ export default function Home() {
         <section className={styles.panel}>
           <span className={styles.panelLabel}>3D-Kontrolle</span>
           <p className={styles.panelNote}>Die 3D-Vorschau bleibt die Ergaenzung fuer Dicke, Fasen und Lochposition.</p>
-          <div className={`${styles.previewWrap} ${styles.previewWrap3d}`}>
+          <div className={`${styles.previewWrap} ${styles.previewWrap3d}`} data-testid="rib-3d-shell">
             {toolOutline.length > 1 ? (
               <Rib3DPreview
                 outline={toolOutline}
                 holes={toolHoles}
                 thicknessMm={thicknessMm}
+                bevelStrength={bevelStrength}
                 className={styles.preview3dMount}
               />
             ) : (
@@ -1200,8 +1541,10 @@ export default function Home() {
         </section>
       </div>
 
-      <p className={styles.footerNote} data-tone={feedbackTone}>
-        {anchorEditMode
+      <p className={styles.footerNote} data-tone={footerTone}>
+        {shouldShowGeometryValidation && geometryValidation.errors[0]
+          ? geometryValidation.errors[0].message
+          : anchorEditMode
           ? "Ankerbearbeitung ist aktiv. Ziehe die Marker entlang der hellen Arbeitskante und bestaetige dann mit Uebernehmen."
           : sourceRaster
           ? "Unter Erweitert kannst du Start und Ende des Profilbereichs jetzt auch manuell korrigieren."

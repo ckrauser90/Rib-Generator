@@ -48,8 +48,32 @@ export type DetectionOptions = {
 export type ToolOutlineResult = {
   outline: Point[];
   profile: Point[];
+  workEdge: Point[];
   holes: ToolHole[];
   anchors: ProfileAnchors | null;
+  resolvedWidthMm: number;
+  autoWidened: boolean;
+};
+
+export type ToolGeometryIssue = {
+  severity: "error" | "warning";
+  code:
+    | "outline-missing"
+    | "profile-missing"
+    | "profile-order"
+    | "hole-count"
+    | "hole-outside"
+    | "hole-clearance"
+    | "hole-overlap";
+  message: string;
+  details?: Record<string, number>;
+};
+
+export type ToolGeometryValidation = {
+  valid: boolean;
+  errors: ToolGeometryIssue[];
+  warnings: ToolGeometryIssue[];
+  minHoleClearanceMm: number | null;
 };
 
 export type WorkProfileSide = "left" | "right";
@@ -640,40 +664,56 @@ const sampleProfileXAtY = (profile: Point[], y: number) => {
 };
 
 const buildGripHoles = (
-  totalWidthMm: number,
+  requestedWidthMm: number,
   totalHeight: number,
   profile: Point[],
-): ToolHole[] => {
-  if (totalWidthMm < 42 || totalHeight < 80 || profile.length < 2) {
-    return [];
+): { holes: ToolHole[]; resolvedWidthMm: number; autoWidened: boolean } => {
+  if (totalHeight < 80 || profile.length < 2) {
+    return {
+      holes: [],
+      resolvedWidthMm: requestedWidthMm,
+      autoWidened: false,
+    };
   }
 
-  const targetRadius = clamp(totalWidthMm * 0.082, 5.2, 7.2);
-  const smoothSideMargin = clamp(totalWidthMm * 0.145, 9.5, 12.5);
-  const materialClearance = clamp(totalWidthMm * 0.038, 2.2, 3.4);
+  const targetRadius = clamp(requestedWidthMm * 0.082, 5.2, 7.2);
+  const smoothSideMargin = clamp(requestedWidthMm * 0.145, 9.5, 12.5);
+  const materialClearance = clamp(requestedWidthMm * 0.038, 2.2, 3.4);
   const verticalMargin = clamp(totalHeight * 0.1, 10, 14);
   const centerYs = [totalHeight * 0.32, totalHeight * 0.74];
+  let requiredWidthMm = requestedWidthMm;
 
-  return centerYs.flatMap((rawCenterY) => {
+  for (const rawCenterY of centerYs) {
     const centerY = clamp(rawCenterY, verticalMargin, totalHeight - verticalMargin);
     const localProfileX = sampleProfileXAtY(profile, centerY);
-    const maxRadiusFromMaterial = (localProfileX - smoothSideMargin - materialClearance) / 2;
-    const radius = Math.min(targetRadius, maxRadiusFromMaterial);
+    requiredWidthMm = Math.max(
+      requiredWidthMm,
+      localProfileX + smoothSideMargin + materialClearance + targetRadius * 2,
+    );
+  }
 
-    if (!Number.isFinite(radius) || radius < 4) {
-      return [];
-    }
+  const resolvedWidthMm = Math.ceil(requiredWidthMm * 2) / 2;
+  const holes = centerYs.map((rawCenterY) => {
+    const centerY = clamp(rawCenterY, verticalMargin, totalHeight - verticalMargin);
+    const localProfileX = sampleProfileXAtY(profile, centerY);
+    const innerLeft = smoothSideMargin;
+    const innerRight = resolvedWidthMm - localProfileX - materialClearance;
+    const centerX = innerLeft + (innerRight - innerLeft) / 2;
 
-    return [
-      {
-        center: {
-          x: smoothSideMargin + radius,
-          y: centerY,
-        },
-        radius,
+    return {
+      center: {
+        x: centerX,
+        y: centerY,
       },
-    ];
+      radius: targetRadius,
+    };
   });
+
+  return {
+    holes,
+    resolvedWidthMm,
+    autoWidened: resolvedWidthMm > requestedWidthMm + 0.001,
+  };
 };
 
 const buildCircularHolePolygon = (hole: ToolHole, segments = 28) => {
@@ -688,6 +728,160 @@ const buildCircularHolePolygon = (hole: ToolHole, segments = 28) => {
   }
 
   return points;
+};
+
+const isPointInsidePolygon = (point: Point, polygon: Point[]) => {
+  let inside = false;
+
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+    const current = polygon[index];
+    const prior = polygon[previous];
+
+    const intersects =
+      current.y > point.y !== prior.y > point.y &&
+      point.x < ((prior.x - current.x) * (point.y - current.y)) / (prior.y - current.y + 1e-9) + current.x;
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+};
+
+const distancePointToSegment = (point: Point, start: Point, end: Point) => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+
+  if (Math.abs(dx) < 1e-8 && Math.abs(dy) < 1e-8) {
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  }
+
+  const t = clamp(
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy),
+    0,
+    1,
+  );
+
+  return Math.hypot(point.x - (start.x + dx * t), point.y - (start.y + dy * t));
+};
+
+export const validateToolGeometry = (
+  outline: Point[],
+  profile: Point[],
+  holes: ToolHole[],
+): ToolGeometryValidation => {
+  const errors: ToolGeometryIssue[] = [];
+  const warnings: ToolGeometryIssue[] = [];
+
+  if (outline.length < 4) {
+    errors.push({
+      severity: "error",
+      code: "outline-missing",
+      message: "Die Werkzeugkontur ist unvollstaendig.",
+    });
+  }
+
+  if (profile.length < 2) {
+    errors.push({
+      severity: "error",
+      code: "profile-missing",
+      message: "Die aktive Arbeitskante ist unvollstaendig.",
+    });
+  }
+
+  for (let index = 1; index < profile.length; index += 1) {
+    if (profile[index].y < profile[index - 1].y) {
+      errors.push({
+        severity: "error",
+        code: "profile-order",
+        message: "Die Profilpunkte sind nicht sauber von oben nach unten sortiert.",
+      });
+      break;
+    }
+  }
+
+  if (holes.length !== 2) {
+    errors.push({
+      severity: "error",
+      code: "hole-count",
+      message: "Es muessen immer genau zwei Griffloecher vorhanden sein.",
+      details: { holes: holes.length },
+    });
+  }
+
+  let minHoleClearanceMm: number | null = null;
+
+  if (outline.length >= 4) {
+    const segments = outline.map((point, index) => ({
+      start: point,
+      end: outline[(index + 1) % outline.length],
+    }));
+
+    holes.forEach((hole, index) => {
+      const centerInside = isPointInsidePolygon(hole.center, outline);
+      if (!centerInside) {
+        errors.push({
+          severity: "error",
+          code: "hole-outside",
+          message: `Griffloch ${index + 1} liegt ausserhalb des Materials.`,
+        });
+        return;
+      }
+
+      const distanceToBoundary = Math.min(
+        ...segments.map((segment) => distancePointToSegment(hole.center, segment.start, segment.end)),
+      );
+      const clearance = distanceToBoundary - hole.radius;
+      minHoleClearanceMm =
+        minHoleClearanceMm === null ? clearance : Math.min(minHoleClearanceMm, clearance);
+
+      if (clearance < 1.2) {
+        errors.push({
+          severity: "error",
+          code: "hole-clearance",
+          message: `Griffloch ${index + 1} hat zu wenig Randabstand im Material.`,
+          details: { clearanceMm: Number(clearance.toFixed(3)) },
+        });
+      } else if (clearance < 2.4) {
+        warnings.push({
+          severity: "warning",
+          code: "hole-clearance",
+          message: `Griffloch ${index + 1} sitzt nah am Materialrand.`,
+          details: { clearanceMm: Number(clearance.toFixed(3)) },
+        });
+      }
+    });
+  }
+
+  if (holes.length >= 2) {
+    for (let left = 0; left < holes.length - 1; left += 1) {
+      for (let right = left + 1; right < holes.length; right += 1) {
+        const distance =
+          Math.hypot(
+            holes[left].center.x - holes[right].center.x,
+            holes[left].center.y - holes[right].center.y,
+          ) -
+          (holes[left].radius + holes[right].radius);
+
+        if (distance < 1.8) {
+          errors.push({
+            severity: "error",
+            code: "hole-overlap",
+            message: "Die beiden Griffloecher liegen zu dicht beieinander.",
+            details: { spacingMm: Number(distance.toFixed(3)) },
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    minHoleClearanceMm,
+  };
 };
 
 type ComponentStats = {
@@ -1539,24 +1733,23 @@ export const buildRibToolOutline = (
     return {
       outline: [],
       profile: [],
+      workEdge: [],
       holes: [],
       anchors: null,
+      resolvedWidthMm: toolWidthMm,
+      autoWidened: false,
     };
   }
 
   const bounds = getBounds(workProfile);
   const profileMinX = Math.min(...workProfile.map((point) => point.x));
   const profileMaxX = Math.max(...workProfile.map((point) => point.x));
-  const silhouetteWidth = Math.max(1, profileMaxX - profileMinX);
   const sourceMinY = referenceBounds?.minY ?? bounds.minY;
   const sourceMaxY = referenceBounds?.maxY ?? bounds.maxY;
   const silhouetteHeight = Math.max(1, sourceMaxY - sourceMinY);
   const scaleY = toolHeightMm / silhouetteHeight;
   const totalWidthMm = toolWidthMm;
-  const profileAnchorX = totalWidthMm;
-  const topPad = toolHeightMm * 0.06;
-  const bottomPad = toolHeightMm * 0.06;
-  const totalHeight = toolHeightMm + topPad + bottomPad;
+  const totalHeight = toolHeightMm;
 
   const rawDepthsPx = workProfile.map((point) =>
     side === "left" ? profileMaxX - point.x : point.x - profileMinX,
@@ -1576,19 +1769,19 @@ export const buildRibToolOutline = (
 
   const profile = workProfile.map((point, index) => {
     return {
-      x: profileAnchorX - mappedDepthsMm[index],
-      y: topPad + (point.y - sourceMinY) * scaleY,
+      x: totalWidthMm - mappedDepthsMm[index],
+      y: (point.y - sourceMinY) * scaleY,
     };
   });
   const mappedAnchorHints = manualAnchors
     ? {
         top: {
-          x: profileAnchorX,
-          y: topPad + (manualAnchors.top.y - sourceMinY) * scaleY,
+          x: totalWidthMm,
+          y: (manualAnchors.top.y - sourceMinY) * scaleY,
         },
         bottom: {
-          x: profileAnchorX,
-          y: topPad + (manualAnchors.bottom.y - sourceMinY) * scaleY,
+          x: totalWidthMm,
+          y: (manualAnchors.bottom.y - sourceMinY) * scaleY,
         },
       }
     : null;
@@ -1610,27 +1803,43 @@ export const buildRibToolOutline = (
   );
   const topY = 0;
   const bottomY = totalHeight;
-  const outerRightX = totalWidthMm;
   const outerLeftX = 0;
   const denseProfile = removeMicroKinks(
     suppressProfileSpikes(refitProfileWithPchip(simplifiedProfile, Math.round(targetProfileCount))),
   );
-  const denseAnchors = detectProfileAnchors(denseProfile, mappedAnchorHints);
-  const detailedProfile = removeMicroKinks(
-    buildTemplateCappedProfile(denseProfile, totalWidthMm, cavityDepthMm, topY, bottomY, mappedAnchorHints),
-  );
-  const holes = buildGripHoles(totalWidthMm, totalHeight, detailedProfile);
+  const holePlan = buildGripHoles(totalWidthMm, totalHeight, denseProfile);
+  const finalProfile = denseProfile.map((point) => ({
+    x: point.x + (holePlan.resolvedWidthMm - totalWidthMm),
+    y: point.y,
+  }));
+  const finalAnchorHints = mappedAnchorHints
+    ? {
+        top: {
+          x: mappedAnchorHints.top.x + (holePlan.resolvedWidthMm - totalWidthMm),
+          y: mappedAnchorHints.top.y,
+        },
+        bottom: {
+          x: mappedAnchorHints.bottom.x + (holePlan.resolvedWidthMm - totalWidthMm),
+          y: mappedAnchorHints.bottom.y,
+        },
+      }
+    : null;
+  const denseAnchors = detectProfileAnchors(finalProfile, finalAnchorHints);
+  const holes = holePlan.holes;
 
   return {
     outline: [
       { x: outerLeftX, y: topY },
-      { x: detailedProfile[0]?.x ?? outerRightX, y: topY },
-      ...detailedProfile,
+      ...(finalProfile.length > 0 ? [finalProfile[0]] : []),
+      ...finalProfile.slice(1),
       { x: outerLeftX, y: bottomY },
     ],
-    profile: detailedProfile,
+    profile: finalProfile,
+    workEdge: finalProfile,
     holes,
     anchors: denseAnchors,
+    resolvedWidthMm: holePlan.resolvedWidthMm,
+    autoWidened: holePlan.autoWidened,
   };
 };
 
@@ -1669,11 +1878,12 @@ const buildHolePath = (hole: ToolHole, segments = 40) => {
   return path;
 };
 
-const getRibBevelSettings = (thicknessMm: number) => {
+const getRibBevelSettings = (thicknessMm: number, bevelStrength = 68) => {
+  const strength = clamp(bevelStrength / 100, 0, 1);
   // Sharper chamfer like the physical rib reference:
   // more lateral inset, less vertical rounding, fewer segments.
-  const bevelSize = clamp(thicknessMm * 0.34, 0.95, 1.9);
-  const bevelThickness = clamp(thicknessMm * 0.09, 0.24, 0.52);
+  const bevelSize = clamp(thicknessMm * lerp(0.18, 0.48, strength), 0.55, 2.4);
+  const bevelThickness = clamp(thicknessMm * lerp(0.16, 0.06, strength), 0.18, 0.7);
   const bevelSegments = 1;
 
   return {
@@ -1691,6 +1901,7 @@ export function createRibExtrudeGeometry(
   outline: Point[],
   holes: ToolHole[],
   thicknessMm: number,
+  bevelStrength = 68,
 ) {
   const shapePoints = outline.map((point) => new THREE.Vector2(point.x, -point.y));
   const shape = new THREE.Shape(shapePoints);
@@ -1702,7 +1913,7 @@ export function createRibExtrudeGeometry(
     }),
   );
 
-  return new THREE.ExtrudeGeometry(shape, getRibBevelSettings(thicknessMm));
+  return new THREE.ExtrudeGeometry(shape, getRibBevelSettings(thicknessMm, bevelStrength));
 }
 
 export function createExtrudedStl(
@@ -1716,6 +1927,7 @@ export function createExtrudedStl(
   referenceBounds?: { minY: number; maxY: number },
   printFriendliness = 58,
   manualAnchors?: ProfileAnchors | null,
+  bevelStrength = 68,
 ) {
   if (workProfile.length < 6) {
     throw new Error("Nicht genug Konturpunkte fuer den STL-Export.");
@@ -1736,7 +1948,7 @@ export function createExtrudedStl(
   const holePolygons = toolGeometry.holes.map((hole) =>
     ensureOrientation(buildCircularHolePolygon(hole), true),
   );
-  const geometry = createRibExtrudeGeometry(toolOutline, toolGeometry.holes, thicknessMm);
+  const geometry = createRibExtrudeGeometry(toolOutline, toolGeometry.holes, thicknessMm, bevelStrength);
   geometry.computeVertexNormals();
 
   const mesh = new THREE.Mesh(geometry, new THREE.MeshNormalMaterial());
