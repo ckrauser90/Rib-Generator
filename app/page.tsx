@@ -157,44 +157,48 @@ const drawAnchor = (
   const x = (point.x / imageWidth) * canvasWidth;
   const y = (point.y / imageHeight) * canvasHeight;
 
+  const isMobile = canvasWidth < 500;
+  const dotRadius = isMobile ? 10 : 6.5;
+
   // Pulsing outer ring to invite dragging
   if (pulse) {
     context.beginPath();
     context.strokeStyle = "rgba(201, 112, 74, 0.35)";
-    context.lineWidth = 2;
-    context.arc(x, y, 14, 0, Math.PI * 2);
+    context.lineWidth = isMobile ? 3 : 2;
+    context.arc(x, y, dotRadius + (isMobile ? 12 : 7.5), 0, Math.PI * 2);
     context.stroke();
 
     context.beginPath();
     context.strokeStyle = "rgba(201, 112, 74, 0.15)";
-    context.lineWidth = 1.5;
-    context.arc(x, y, 20, 0, Math.PI * 2);
+    context.lineWidth = isMobile ? 2.5 : 1.5;
+    context.arc(x, y, dotRadius + (isMobile ? 20 : 13.5), 0, Math.PI * 2);
     context.stroke();
   }
 
   context.beginPath();
   context.fillStyle = "#FAF8F5";
   context.strokeStyle = ANCHOR_COLOR;
-  context.lineWidth = 2.2;
-  context.arc(x, y, 6.5, 0, Math.PI * 2);
+  context.lineWidth = isMobile ? 3 : 2.2;
+  context.arc(x, y, dotRadius, 0, Math.PI * 2);
   context.fill();
   context.stroke();
 
   // Small grab icon (4 arrows) inside the dot when pulsing
   if (pulse) {
     context.strokeStyle = ANCHOR_COLOR;
-    context.lineWidth = 1.2;
-    const s = 3;
+    context.lineWidth = isMobile ? 1.8 : 1.2;
+    const s = isMobile ? 5 : 3;
     // vertical
     context.beginPath(); context.moveTo(x, y - s); context.lineTo(x, y + s); context.stroke();
     // horizontal
     context.beginPath(); context.moveTo(x - s, y); context.lineTo(x + s, y); context.stroke();
   }
 
-  context.font = "600 12px Karla, sans-serif";
+  const fontSize = isMobile ? 14 : 12;
+  context.font = `600 ${fontSize}px Karla, sans-serif`;
   context.fillStyle = ANCHOR_COLOR;
   context.textBaseline = "middle";
-  context.fillText(label, x + 10, y);
+  context.fillText(label, x + dotRadius + 4, y);
 };
 
 const drawMagnifier = (
@@ -586,7 +590,7 @@ const pickAnchorHandle = (
     { handle: "bottom" as const, point: anchors.bottom },
   ];
 
-  const hitRadius = event.pointerType === "touch" ? 30 : event.pointerType === "pen" ? 24 : 18;
+  const hitRadius = event.pointerType === "touch" ? 48 : event.pointerType === "pen" ? 30 : 18;
 
   for (const candidate of candidatePoints) {
     const x = (candidate.point.x / width) * rect.width;
@@ -1570,12 +1574,13 @@ export default function Home() {
               ref={canvasRef}
               data-testid="original-canvas"
               className={`${styles.canvas} ${anchorEditMode ? styles.canvasAnchorEdit : ""}`}
-              style={{ touchAction: canEditAnchors || anchorEditMode ? "none" : "manipulation" }}
+              style={{ touchAction: (canEditAnchors || anchorEditMode || imageAnchors) ? "none" : "manipulation" }}
               onClick={handleCanvasClick}
               onPointerDown={handleCanvasPointerDown}
               onPointerMove={handleCanvasPointerMove}
               onPointerUp={finishAnchorDrag}
               onPointerCancel={finishAnchorDrag}
+              onTouchMove={(e) => { if (draggingAnchor) e.preventDefault(); }}
             />
 
             {/* Empty state */}
