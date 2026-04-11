@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, MouseEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./page.module.css";
 import { Rib3DPreview } from "./rib-3d-preview";
 import {
@@ -30,8 +30,15 @@ const DEFAULT_CROP_BOTTOM_RATIO = 0.04;
 const EXTREME_ASPECT_RATIO = 3.2;
 const ANCHOR_COLOR = "#C9704A";
 const DISPLAY_PROFILE_MAX_DRIFT_PX = 0.9;
+const DEFAULT_TOOL_WIDTH_MM = 65;
 
 const initialStatus = "Foto laden und danach direkt in das Gefaess klicken.";
+
+type CanvasGestureEvent = {
+  clientX: number;
+  clientY: number;
+  pointerType?: string;
+};
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -45,7 +52,7 @@ const loadImageFromUrl = (url: string) =>
   });
 
 const mapCanvasToImage = (
-  event: MouseEvent<HTMLCanvasElement>,
+  event: CanvasGestureEvent,
   canvas: HTMLCanvasElement,
   image: RasterSource,
 ) => {
@@ -89,6 +96,52 @@ const buildDisplayContour = (leftProfile: Point[], rightProfile: Point[]) => {
   }
 
   return [...leftProfile, ...rightProfile.slice().reverse()];
+};
+
+const getProfileBounds = (profile: Point[]) => {
+  if (profile.length === 0) {
+    return null;
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const point of profile) {
+    minX = Math.min(minX, point.x);
+    maxX = Math.max(maxX, point.x);
+    minY = Math.min(minY, point.y);
+    maxY = Math.max(maxY, point.y);
+  }
+
+  return { minX, maxX, minY, maxY };
+};
+
+const applyHorizontalCorrection = (profile: Point[], angleDeg: number) => {
+  if (profile.length < 2 || Math.abs(angleDeg) < 0.01) {
+    return profile.slice();
+  }
+
+  const bounds = getProfileBounds(profile);
+  if (!bounds) {
+    return profile.slice();
+  }
+
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+  const angleRad = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+
+  return profile.map((point) => {
+    const dx = point.x - centerX;
+    const dy = point.y - centerY;
+    return {
+      x: centerX + dx * cos - dy * sin,
+      y: centerY + dx * sin + dy * cos,
+    };
+  });
 };
 
 const drawAnchor = (
@@ -437,6 +490,39 @@ const resolveAnchorsForProfile = (
     : { top: bottomPoint, bottom: topPoint };
 };
 
+const anchorsToOverride = (anchors: ProfileAnchors | null): ManualAnchorOverride | null =>
+  anchors
+    ? {
+        topY: anchors.top.y,
+        bottomY: anchors.bottom.y,
+      }
+    : null;
+
+const applyLiveAnchorPreview = (
+  profile: Point[],
+  anchors: ProfileAnchors | null,
+  activeHandle: AnchorHandle | null,
+  livePoint: Point | null,
+): ProfileAnchors | null => {
+  if (!anchors || !activeHandle || !livePoint || profile.length < 2) {
+    return anchors;
+  }
+
+  const snappedPoint = getClosestProfilePointToPoint(profile, livePoint);
+  if (!snappedPoint) {
+    return anchors;
+  }
+
+  const updated =
+    activeHandle === "top"
+      ? { top: snappedPoint, bottom: anchors.bottom }
+      : { top: anchors.top, bottom: snappedPoint };
+
+  return updated.top.y <= updated.bottom.y
+    ? updated
+    : { top: updated.bottom, bottom: updated.top };
+};
+
 const trimProfileBetweenAnchors = (
   profile: Point[],
   anchors: ProfileAnchors | null,
@@ -483,7 +569,7 @@ const getProfileReferenceBounds = (profile: Point[]) => {
 };
 
 const pickAnchorHandle = (
-  event: MouseEvent<HTMLCanvasElement>,
+  event: CanvasGestureEvent,
   canvas: HTMLCanvasElement,
   image: RasterSource,
   anchors: ProfileAnchors | null,
@@ -497,12 +583,14 @@ const pickAnchorHandle = (
     { handle: "bottom" as const, point: anchors.bottom },
   ];
 
+  const hitRadius = event.pointerType === "touch" ? 30 : event.pointerType === "pen" ? 24 : 18;
+
   for (const candidate of candidatePoints) {
     const x = (candidate.point.x / width) * rect.width;
     const y = (candidate.point.y / height) * rect.height;
     const dx = event.clientX - rect.left - x;
     const dy = event.clientY - rect.top - y;
-    if (Math.hypot(dx, dy) <= 18) {
+    if (Math.hypot(dx, dy) <= hitRadius) {
       return candidate.handle;
     }
   }
@@ -519,25 +607,26 @@ export default function Home() {
   const [contour, setContour] = useState<Point[]>([]);
   const [leftWorkProfile, setLeftWorkProfile] = useState<Point[]>([]);
   const [rightWorkProfile, setRightWorkProfile] = useState<Point[]>([]);
-  const [leftGeometryProfile, setLeftGeometryProfile] = useState<Point[]>([]);
-  const [rightGeometryProfile, setRightGeometryProfile] = useState<Point[]>([]);
   const [referenceBounds, setReferenceBounds] = useState<{ minY: number; maxY: number } | null>(null);
+  const [profileImageSize, setProfileImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [usableColumns, setUsableColumns] = useState(0);
   const [toolProfile, setToolProfile] = useState<Point[]>([]);
   const [toolOutline, setToolOutline] = useState<Point[]>([]);
   const [toolHoles, setToolHoles] = useState<ToolHole[]>([]);
   const [toolAnchors, setToolAnchors] = useState<{ top: Point; bottom: Point } | null>(null);
-  const [resolvedToolWidthMm, setResolvedToolWidthMm] = useState(70);
+  const [resolvedToolWidthMm, setResolvedToolWidthMm] = useState(DEFAULT_TOOL_WIDTH_MM);
   const [toolAutoWidened, setToolAutoWidened] = useState(false);
   const [workProfileSide, setWorkProfileSide] = useState<WorkProfileSide>("right");
   const [curveSmoothing, setCurveSmoothing] = useState(34);
   const [printFriendliness, setPrintFriendliness] = useState(58);
   const [bevelStrength, setBevelStrength] = useState(68);
+  const [horizontalCorrectionDeg, setHorizontalCorrectionDeg] = useState(0);
   const [toolHeightMm, setToolHeightMm] = useState(120);
-  const [toolWidthMm, setToolWidthMm] = useState(70);
+  const [toolWidthMm, setToolWidthMm] = useState(DEFAULT_TOOL_WIDTH_MM);
   const [thicknessMm, setThicknessMm] = useState(4.2);
   // Local display states for dimension inputs — allow free typing, commit on blur/Enter
   const [heightInput, setHeightInput] = useState("120");
-  const [widthInput, setWidthInput] = useState("70");
+  const [widthInput, setWidthInput] = useState(String(DEFAULT_TOOL_WIDTH_MM));
   const [thicknessInput, setThicknessInput] = useState("4.2");
   const [status, setStatus] = useState(initialStatus);
   const [segmenterState, setSegmenterState] = useState<"loading" | "ready" | "error">("loading");
@@ -564,9 +653,25 @@ export default function Home() {
     () => (workProfileSide === "left" ? leftWorkProfile : rightWorkProfile),
     [leftWorkProfile, rightWorkProfile, workProfileSide],
   );
+  const geometryWindowRadius = 2 + Math.round(curveSmoothing / 25);
+  const geometryBlend = Math.min(0.05 + (curveSmoothing / 100) * 0.35, 0.4);
+  const geometryLeftWorkProfile = useMemo(
+    () => smoothWorkProfileCurve(leftWorkProfile, {
+      windowRadius: geometryWindowRadius,
+      blend: geometryBlend,
+    }),
+    [geometryBlend, geometryWindowRadius, leftWorkProfile],
+  );
+  const geometryRightWorkProfile = useMemo(
+    () => smoothWorkProfileCurve(rightWorkProfile, {
+      windowRadius: geometryWindowRadius,
+      blend: geometryBlend,
+    }),
+    [geometryBlend, geometryWindowRadius, rightWorkProfile],
+  );
   const geometryWorkProfile = useMemo(
-    () => (workProfileSide === "left" ? leftGeometryProfile : rightGeometryProfile),
-    [leftGeometryProfile, rightGeometryProfile, workProfileSide],
+    () => (workProfileSide === "left" ? geometryLeftWorkProfile : geometryRightWorkProfile),
+    [geometryLeftWorkProfile, geometryRightWorkProfile, workProfileSide],
   );
   const displayLeftWorkProfile = useMemo(
     () => buildDisplayWorkProfile(leftWorkProfile, curveSmoothing),
@@ -590,15 +695,22 @@ export default function Home() {
   const displayedAnchorOverride = anchorEditMode
     ? currentDraftAnchorOverride ?? currentAnchorOverride
     : currentAnchorOverride;
-  const imageAnchors = useMemo(
+  const resolvedImageAnchors = useMemo(
     () => resolveAnchorsForProfile(displayWorkProfile, displayedAnchorOverride),
     [displayWorkProfile, displayedAnchorOverride],
   );
+  const imageAnchors = useMemo(
+    () => applyLiveAnchorPreview(displayWorkProfile, resolvedImageAnchors, draggingAnchor, lensPoint),
+    [displayWorkProfile, draggingAnchor, lensPoint, resolvedImageAnchors],
+  );
   const outlinePath = useMemo(() => buildSvgPath(toolOutline), [toolOutline]);
   const outlineBounds = useMemo(() => getOutlineBounds(toolOutline), [toolOutline]);
-  const rulerGap = 14;
+  const rulerLeftGap = 18;
+  const rulerRightGap = 6;
+  const rulerTopGap = 6;
+  const rulerBottomGap = 22;
   const outlineViewBox = outlineBounds
-    ? `${outlineBounds.minX - rulerGap} ${outlineBounds.minY} ${outlineBounds.width + rulerGap} ${outlineBounds.height + rulerGap}`
+    ? `${outlineBounds.minX - rulerLeftGap} ${outlineBounds.minY - rulerTopGap} ${outlineBounds.width + rulerLeftGap + rulerRightGap} ${outlineBounds.height + rulerTopGap + rulerBottomGap}`
     : "0 0 100 140";
   const profilePreviewPath = useMemo(() => buildSvgPolylinePath(toolProfile), [toolProfile]);
   const feedbackTone = getFeedbackTone(status);
@@ -681,8 +793,9 @@ export default function Home() {
         setContour([]);
         setLeftWorkProfile([]);
         setRightWorkProfile([]);
-        setLeftGeometryProfile([]);
-        setRightGeometryProfile([]);
+        setReferenceBounds(null);
+        setProfileImageSize(null);
+        setUsableColumns(0);
         setToolProfile([]);
         setToolOutline([]);
         setToolHoles([]);
@@ -747,40 +860,34 @@ export default function Home() {
 
         if (cancelled) return;
 
-        const geometryWindowRadius = 2 + Math.round(curveSmoothing / 25);
-        const geometryBlend = Math.min(0.05 + (curveSmoothing / 100) * 0.35, 0.4);
+        const localGeometryWindowRadius = 2 + Math.round(curveSmoothing / 25);
+        const localGeometryBlend = Math.min(0.05 + (curveSmoothing / 100) * 0.35, 0.4);
         const smoothedLeftGeometryProfile = smoothWorkProfileCurve(contourResult.leftWorkProfile, {
-          windowRadius: geometryWindowRadius,
-          blend: geometryBlend,
+          windowRadius: localGeometryWindowRadius,
+          blend: localGeometryBlend,
         });
         const smoothedRightGeometryProfile = smoothWorkProfileCurve(contourResult.rightWorkProfile, {
-          windowRadius: geometryWindowRadius,
-          blend: geometryBlend,
+          windowRadius: localGeometryWindowRadius,
+          blend: localGeometryBlend,
         });
-
-        setContour(contourResult.contour);
-        setLeftWorkProfile(contourResult.leftWorkProfile);
-        setRightWorkProfile(contourResult.rightWorkProfile);
-        setLeftGeometryProfile(smoothedLeftGeometryProfile);
-        setRightGeometryProfile(smoothedRightGeometryProfile);
-        setReferenceBounds(contourResult.referenceBounds);
-
         const selectedGeometryProfile =
           workProfileSide === "left" ? smoothedLeftGeometryProfile : smoothedRightGeometryProfile;
         const displayedAnchors = resolveAnchorsForProfile(selectedGeometryProfile, displayedAnchorOverride);
         const confirmedAnchors = resolveAnchorsForProfile(selectedGeometryProfile, currentAnchorOverride);
         const activeAnchors = anchorsConfirmed[workProfileSide] ? confirmedAnchors : displayedAnchors;
 
-        if (selectedGeometryProfile.length === 0) {
-          setToolProfile([]);
-          setToolOutline([]);
-          setToolHoles([]);
-          setToolAnchors(null);
-          setResolvedToolWidthMm(toolWidthMm);
-          setToolAutoWidened(false);
-          setStatus("Maske erkannt, aber keine stabile Kontur ableitbar.");
-          return;
-        }
+        setContour(contourResult.contour);
+        setLeftWorkProfile(contourResult.leftWorkProfile);
+        setRightWorkProfile(contourResult.rightWorkProfile);
+        setReferenceBounds(contourResult.referenceBounds);
+
+        setProfileImageSize({ width: result.width, height: result.height });
+        setUsableColumns(contourResult.usableColumns);
+
+        setStatus(`Kontur erkannt â€” ${contourResult.usableColumns} Messpunkte. Jetzt links oder rechts im Bild wÃ¤hlen.`);
+        setStatus(
+          `Kontur erkannt - ${contourResult.usableColumns} Messpunkte. Seite bei Bedarf wechseln oder Start/Ende direkt ziehen.`,
+        );
         const profileForGeometry = activeAnchors
           ? trimProfileBetweenAnchors(selectedGeometryProfile, activeAnchors)
           : selectedGeometryProfile;
@@ -802,7 +909,7 @@ export default function Home() {
         setToolProfile(ribGeometry.workEdge);
         setToolOutline(ribGeometry.outline);
         setToolHoles(ribGeometry.holes);
-        setToolAnchors(anchorsConfirmed[workProfileSide] ? null : ribGeometry.anchors);
+        setToolAnchors(anchorEditMode || !anchorsConfirmed[workProfileSide] ? ribGeometry.anchors : null);
         setResolvedToolWidthMm(ribGeometry.resolvedWidthMm);
         setToolAutoWidened(ribGeometry.autoWidened);
         setStatus(
@@ -810,14 +917,17 @@ export default function Home() {
             ? `Bereit — ${contourResult.usableColumns} Messpunkte, ${workProfileSide === "left" ? "links" : "rechts"}.`
             : `Kontur erkannt — jetzt links oder rechts im Bild wählen.`,
         );
+        if (!anchorsConfirmed[workProfileSide]) {
+          setStatus("Kontur erkannt - aktuelle Seite ist aktiv. Bei Bedarf wechseln oder Start/Ende direkt ziehen.");
+        }
       } catch (error) {
         if (cancelled) return;
         setContour([]);
         setLeftWorkProfile([]);
         setRightWorkProfile([]);
-        setLeftGeometryProfile([]);
-        setRightGeometryProfile([]);
         setReferenceBounds(null);
+        setProfileImageSize(null);
+        setUsableColumns(0);
         setToolProfile([]);
         setToolOutline([]);
         setToolHoles([]);
@@ -834,7 +944,70 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [anchorsConfirmed, curveSmoothing, currentAnchorOverride, displayedAnchorOverride, printFriendliness, promptPoint, segmenterState, sourceRaster, toolHeightMm, toolWidthMm, workProfileSide]);
+  }, [promptPoint, segmenterState, sourceRaster]);
+
+  useEffect(() => {
+    if (!profileImageSize || geometryWorkProfile.length === 0) {
+      setToolProfile([]);
+      setToolOutline([]);
+      setToolHoles([]);
+      setToolAnchors(null);
+      setResolvedToolWidthMm(toolWidthMm);
+      setToolAutoWidened(false);
+      return;
+    }
+
+    const displayedAnchors = applyLiveAnchorPreview(
+      geometryWorkProfile,
+      resolveAnchorsForProfile(geometryWorkProfile, displayedAnchorOverride),
+      draggingAnchor,
+      lensPoint,
+    );
+    const confirmedAnchors = resolveAnchorsForProfile(geometryWorkProfile, currentAnchorOverride);
+    const activeAnchors = anchorEditMode
+      ? displayedAnchors
+      : currentAnchorsConfirmed
+        ? confirmedAnchors
+        : displayedAnchors;
+    const profileForGeometry = activeAnchors
+      ? trimProfileBetweenAnchors(geometryWorkProfile, activeAnchors)
+      : geometryWorkProfile;
+    const correctedProfileForGeometry = applyHorizontalCorrection(
+      profileForGeometry,
+      horizontalCorrectionDeg,
+    );
+    const geometryReferenceBounds =
+      getProfileReferenceBounds(correctedProfileForGeometry) ?? referenceBounds ?? undefined;
+
+    if (correctedProfileForGeometry.length === 0) {
+      setToolProfile([]);
+      setToolOutline([]);
+      setToolHoles([]);
+      setToolAnchors(null);
+      setResolvedToolWidthMm(toolWidthMm);
+      setToolAutoWidened(false);
+      return;
+    }
+
+    const ribGeometry = buildRibToolOutline(
+      correctedProfileForGeometry,
+      profileImageSize.width,
+      profileImageSize.height,
+      toolWidthMm,
+      toolHeightMm,
+      workProfileSide,
+      geometryReferenceBounds,
+      printFriendliness,
+      activeAnchors,
+    );
+
+    setToolProfile(ribGeometry.workEdge);
+    setToolOutline(ribGeometry.outline);
+    setToolHoles(ribGeometry.holes);
+    setToolAnchors(anchorEditMode || !currentAnchorsConfirmed ? ribGeometry.anchors : null);
+    setResolvedToolWidthMm(ribGeometry.resolvedWidthMm);
+    setToolAutoWidened(ribGeometry.autoWidened);
+  }, [anchorEditMode, currentAnchorOverride, currentAnchorsConfirmed, displayedAnchorOverride, draggingAnchor, geometryWorkProfile, horizontalCorrectionDeg, lensPoint, printFriendliness, profileImageSize, referenceBounds, toolHeightMm, toolWidthMm, workProfileSide]);
 
   const handleImageUpload = async (file: File) => {
     if (imageUrl?.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
@@ -850,12 +1023,13 @@ export default function Home() {
     setPromptPoint(null);
     setMarkerPlacementMode(false);
     setMarkerConfirmed(false);
+    setHorizontalCorrectionDeg(0);
     setContour([]);
     setLeftWorkProfile([]);
     setRightWorkProfile([]);
-    setLeftGeometryProfile([]);
-    setRightGeometryProfile([]);
     setReferenceBounds(null);
+    setProfileImageSize(null);
+    setUsableColumns(0);
     setToolProfile([]);
     setResolvedToolWidthMm(toolWidthMm);
     setToolAutoWidened(false);
@@ -915,12 +1089,12 @@ export default function Home() {
     setStatus(`Seite ${side === "left" ? "links" : "rechts"} gewählt — Start/Ende-Punkte ziehen zum Anpassen, oder direkt STL herunterladen.`);
   };
 
-  const handleCanvasMouseDown = (event: MouseEvent<HTMLCanvasElement>) => {
+  const handleCanvasPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current || !sourceRaster) return;
 
     // Option B: auto-enter anchor edit only when anchors are already confirmed
     // — prevents blocking marker placement clicks in the early flow
-    if (!anchorEditMode && !currentAnchorsConfirmed) return;
+    if (!anchorEditMode && workProfile.length < 2) return;
 
     const handle = pickAnchorHandle(event, canvasRef.current, sourceRaster, imageAnchors);
     if (!handle) return;
@@ -936,16 +1110,18 @@ export default function Home() {
     }
 
     event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
     setDraggingAnchor(handle);
     setLensPoint(handle === "top" ? imageAnchors?.top ?? null : imageAnchors?.bottom ?? null);
     setStatus(`${handle === "top" ? "Start" : "Ende"} verschieben…`);
   };
 
-  const handleCanvasMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
+  const handleCanvasPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!draggingAnchor || !canvasRef.current || !sourceRaster || workProfile.length < 2) {
       return;
     }
 
+    event.preventDefault();
     const point = mapCanvasToImage(event, canvasRef.current, sourceRaster);
     const snappedPoint = getClosestProfilePointToPoint(workProfile, point);
     if (!snappedPoint) {
@@ -981,9 +1157,19 @@ export default function Home() {
     setLensPoint(snappedPoint);
   };
 
-  const finishAnchorDrag = () => {
+  const finishAnchorDrag = (event?: PointerEvent<HTMLCanvasElement>) => {
+    if (event && event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
     if (!draggingAnchor) {
       return;
+    }
+    const liveOverride = anchorsToOverride(imageAnchors);
+    if (liveOverride) {
+      setDraftAnchorOverrides((previous) => ({
+        ...previous,
+        [workProfileSide]: liveOverride,
+      }));
     }
     setDraggingAnchor(null);
     setLensPoint(null);
@@ -1011,12 +1197,13 @@ export default function Home() {
     setDraftAnchorOverrides((previous) => ({
       ...previous,
       [workProfileSide]: previous[workProfileSide] ??
-        (defaults
+        (currentAnchorOverride ??
+          (defaults
           ? {
               topY: defaults.top.y,
               bottomY: defaults.bottom.y,
             }
-          : currentAnchorOverride),
+          : null)),
     }));
     setAnchorEditMode(true);
     setDraggingAnchor(null);
@@ -1036,7 +1223,7 @@ export default function Home() {
   };
 
   const applyAnchorEditing = () => {
-    const draft = draftAnchorOverrides[workProfileSide];
+    const draft = draftAnchorOverrides[workProfileSide] ?? anchorsToOverride(imageAnchors);
     setManualAnchorOverrides((previous) => ({
       ...previous,
       [workProfileSide]: draft ?? previous[workProfileSide],
@@ -1082,7 +1269,7 @@ export default function Home() {
   };
 
   const handleDownload = () => {
-    if (!sourceRaster || geometryWorkProfile.length === 0) {
+    if (!sourceRaster || !profileImageSize || geometryWorkProfile.length === 0) {
       setStatus("Zuerst eine Kontur erkennen, dann STL exportieren.");
       return;
     }
@@ -1090,19 +1277,20 @@ export default function Home() {
       setStatus(geometryValidation.errors[0]?.message ?? "Die Rib-Geometrie ist noch nicht exportierbar.");
       return;
     }
-    const { width, height } = getRasterSize(sourceRaster);
     const confirmedAnchors = resolveAnchorsForProfile(geometryWorkProfile, currentAnchorOverride);
     const profileForExport = currentAnchorsConfirmed
       ? trimProfileBetweenAnchors(geometryWorkProfile, confirmedAnchors)
       : geometryWorkProfile;
-    const exportReferenceBounds =
-      currentAnchorsConfirmed && confirmedAnchors
-        ? getProfileReferenceBounds(profileForExport) ?? referenceBounds ?? undefined
-        : referenceBounds ?? undefined;
-    const stl = createExtrudedStl(
+    const correctedProfileForExport = applyHorizontalCorrection(
       profileForExport,
-      width,
-      height,
+      horizontalCorrectionDeg,
+    );
+    const exportReferenceBounds =
+      getProfileReferenceBounds(correctedProfileForExport) ?? referenceBounds ?? undefined;
+    const stl = createExtrudedStl(
+      correctedProfileForExport,
+      profileImageSize.width,
+      profileImageSize.height,
       toolWidthMm,
       toolHeightMm,
       thicknessMm,
@@ -1169,6 +1357,7 @@ export default function Home() {
         requestedWidthMm: toolWidthMm,
         resolvedWidthMm: Number(resolvedToolWidthMm.toFixed(2)),
         thicknessMm,
+        horizontalCorrectionDeg,
         curveSmoothing,
         printFriendliness,
         bevelStrength,
@@ -1176,6 +1365,7 @@ export default function Home() {
       },
       geometry: {
         contourPoints: contour.length,
+        usableColumns,
         activeProfilePoints: workProfile.length,
         geometryProfilePoints: geometryWorkProfile.length,
         toolProfilePoints: toolProfile.length,
@@ -1223,12 +1413,13 @@ export default function Home() {
     setPromptPoint(null);
     setMarkerPlacementMode(false);
     setMarkerConfirmed(false);
+    setHorizontalCorrectionDeg(0);
     setContour([]);
     setLeftWorkProfile([]);
     setRightWorkProfile([]);
-    setLeftGeometryProfile([]);
-    setRightGeometryProfile([]);
     setReferenceBounds(null);
+    setProfileImageSize(null);
+    setUsableColumns(0);
     setToolProfile([]);
     setToolOutline([]);
     setToolHoles([]);
@@ -1302,6 +1493,12 @@ export default function Home() {
               onChange={(e) => setCurveSmoothing(Number(e.target.value))}
               className={styles.ribbonSlider} disabled={!canFineTune} data-testid="curve-smoothing-slider" />
           </div>
+          <div className={styles.sliderCell} data-tip="Korrigiert leicht gekippte Aufnahmen fuer die Rib-Geometrie.">
+            <span className={styles.ribbonLabel}>Horizont <strong>{horizontalCorrectionDeg.toFixed(1)} deg</strong></span>
+            <input id="horizontal-correction" type="range" min="-8" max="8" step="0.25" value={horizontalCorrectionDeg}
+              onChange={(e) => setHorizontalCorrectionDeg(Number(e.target.value))}
+              className={styles.ribbonSlider} disabled={!canFineTune} data-testid="horizontal-correction-slider" />
+          </div>
           <div className={styles.sliderCell} data-tip="Optimiert das Profil für den 3D-Druck. Höhere Werte vermeiden Überhänge und dünne Stellen.">
             <span className={styles.ribbonLabel}>Druckoptimierung <strong>{printFriendliness}%</strong></span>
             <input id="print-friendliness" type="range" min="0" max="100" step="1" value={printFriendliness}
@@ -1368,11 +1565,12 @@ export default function Home() {
               ref={canvasRef}
               data-testid="original-canvas"
               className={`${styles.canvas} ${anchorEditMode ? styles.canvasAnchorEdit : ""}`}
+              style={{ touchAction: canEditAnchors || anchorEditMode ? "none" : "manipulation" }}
               onClick={handleCanvasClick}
-              onMouseDown={handleCanvasMouseDown}
-              onMouseMove={handleCanvasMouseMove}
-              onMouseUp={finishAnchorDrag}
-              onMouseLeave={finishAnchorDrag}
+              onPointerDown={handleCanvasPointerDown}
+              onPointerMove={handleCanvasPointerMove}
+              onPointerUp={finishAnchorDrag}
+              onPointerCancel={finishAnchorDrag}
             />
 
             {/* Empty state */}
@@ -1403,7 +1601,7 @@ export default function Home() {
               <>
                 <button
                   type="button"
-                  className={`${styles.sideBtn} ${styles.sideBtnLeft} ${workProfileSide === "left" && currentAnchorsConfirmed ? styles.sideBtnActive : ""}`}
+                  className={`${styles.sideBtn} ${styles.sideBtnLeft} ${workProfileSide === "left" ? styles.sideBtnActive : ""}`}
                   onClick={() => selectSide("left")}
                   data-testid="side-left-button"
                 >
@@ -1414,7 +1612,7 @@ export default function Home() {
                 </button>
                 <button
                   type="button"
-                  className={`${styles.sideBtn} ${styles.sideBtnRight} ${workProfileSide === "right" && currentAnchorsConfirmed ? styles.sideBtnActive : ""}`}
+                  className={`${styles.sideBtn} ${styles.sideBtnRight} ${workProfileSide === "right" ? styles.sideBtnActive : ""}`}
                   onClick={() => selectSide("right")}
                   data-testid="side-right-button"
                 >
@@ -1501,18 +1699,18 @@ export default function Home() {
           </span>
           <div className={styles.previewWrap}>
             {toolOutline.length > 1 && outlineBounds ? (() => {
-              const rx = outlineBounds.minX - 5;
+              const rx = outlineBounds.minX - 6.5;
               const ry1 = outlineBounds.minY;
               const ry2 = outlineBounds.minY + outlineBounds.height;
               const rym = (ry1 + ry2) / 2;
               const bx1 = outlineBounds.minX;
               const bx2 = outlineBounds.minX + outlineBounds.width;
               const bxm = (bx1 + bx2) / 2;
-              const by = outlineBounds.minY + outlineBounds.height + 5;
+              const by = outlineBounds.minY + outlineBounds.height + 7;
               const fs = Math.max(3.5, outlineBounds.height * 0.04);
               const sw = "0.7";
               const col = "rgba(122,142,110,0.55)";
-              const arr = 2.5;
+              const cap = 2.8;
               return (
                 <svg className={styles.outlineSvg} data-testid="rib-profile-svg" viewBox={outlineViewBox} preserveAspectRatio="xMidYMid meet" aria-label="2D Rib-Vorschau">
                   <rect x={outlineBounds.minX} y={outlineBounds.minY} width={outlineBounds.width} height={outlineBounds.height} fill="rgba(255,255,255,0.001)" />
@@ -1521,7 +1719,7 @@ export default function Home() {
                     <circle key={`${hole.center.x}-${hole.center.y}-${index}`} className={styles.holePath} cx={hole.center.x} cy={hole.center.y} r={hole.radius} />
                   ))}
                   {toolProfile.length > 1 && <path className={styles.activeProfilePath} d={profilePreviewPath} />}
-                  {!currentAnchorsConfirmed && toolAnchors && (
+                  {toolAnchors && (anchorEditMode || !currentAnchorsConfirmed) && (
                     <>
                       <circle className={styles.anchorDot} cx={toolAnchors.top.x} cy={toolAnchors.top.y} r={5.5} />
                       <text className={styles.anchorLabel} x={toolAnchors.top.x + 9} y={toolAnchors.top.y}>Start</text>
@@ -1532,10 +1730,8 @@ export default function Home() {
 
                   {/* ── Ruler: height (left) ── */}
                   <line x1={rx} y1={ry1} x2={rx} y2={ry2} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={rx - arr} y1={ry1 + arr * 1.5} x2={rx} y2={ry1} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={rx + arr} y1={ry1 + arr * 1.5} x2={rx} y2={ry1} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={rx - arr} y1={ry2 - arr * 1.5} x2={rx} y2={ry2} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={rx + arr} y1={ry2 - arr * 1.5} x2={rx} y2={ry2} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
+                  <line x1={rx - cap} y1={ry1} x2={rx + cap} y2={ry1} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
+                  <line x1={rx - cap} y1={ry2} x2={rx + cap} y2={ry2} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
                   <text
                     x={rx - fs * 0.6}
                     y={rym}
@@ -1548,13 +1744,11 @@ export default function Home() {
 
                   {/* ── Ruler: width (bottom) ── */}
                   <line x1={bx1} y1={by} x2={bx2} y2={by} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={bx1 + arr * 1.5} y1={by - arr} x2={bx1} y2={by} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={bx1 + arr * 1.5} y1={by + arr} x2={bx1} y2={by} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={bx2 - arr * 1.5} y1={by - arr} x2={bx2} y2={by} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={bx2 - arr * 1.5} y1={by + arr} x2={bx2} y2={by} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
+                  <line x1={bx1} y1={by - cap} x2={bx1} y2={by + cap} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
+                  <line x1={bx2} y1={by - cap} x2={bx2} y2={by + cap} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
                   <text
                     x={bxm}
-                    y={by + fs * 1.2}
+                    y={by + fs * 1.35}
                     fontSize={fs}
                     fill="rgba(122,142,110,0.8)"
                     textAnchor="middle"

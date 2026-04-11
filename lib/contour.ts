@@ -249,6 +249,159 @@ const snapBoundaryToImageEdge = (
   });
 };
 
+const sampleDirectionalEdgeScore = (
+  luminance: Float32Array,
+  width: number,
+  x: number,
+  y: number,
+  direction: "left" | "right",
+) => {
+  const height = Math.max(1, Math.floor(luminance.length / width));
+  const rowOffsets = [-1, 0, 1];
+  const rowWeights = [0.24, 0.52, 0.24];
+  let weightedScore = 0;
+  let totalWeight = 0;
+
+  for (let index = 0; index < rowOffsets.length; index += 1) {
+    const sampleY = clamp(y + rowOffsets[index], 0, height - 1);
+    const leftInner = luminance[pixelIndex(Math.max(0, x - 1), sampleY, width)];
+    const leftOuter = luminance[pixelIndex(Math.max(0, x - 2), sampleY, width)];
+    const rightInner = luminance[pixelIndex(Math.min(width - 1, x + 1), sampleY, width)];
+    const rightOuter = luminance[pixelIndex(Math.min(width - 1, x + 2), sampleY, width)];
+    const nearGradient = Math.abs(rightInner - leftInner);
+    const wideGradient = Math.abs(rightOuter - leftOuter);
+    const directionalContrast =
+      direction === "right"
+        ? (rightInner + rightOuter) / 2 - (leftInner + leftOuter) / 2
+        : (leftInner + leftOuter) / 2 - (rightInner + rightOuter) / 2;
+    const edgeScore = nearGradient * 0.55 + wideGradient * 0.45 + Math.max(0, directionalContrast) * 0.35;
+    weightedScore += edgeScore * rowWeights[index];
+    totalWeight += rowWeights[index];
+  }
+
+  return totalWeight > 0 ? weightedScore / totalWeight : 0;
+};
+
+const refineBoundaryInBand = (
+  values: number[],
+  rows: number[],
+  luminance: Float32Array,
+  width: number,
+  direction: "left" | "right",
+  anchorValues = values,
+) => {
+  if (values.length < 5 || values.length !== rows.length || anchorValues.length !== values.length) {
+    return values.slice();
+  }
+
+  const bandRadius = 3;
+  const candidatesByRow = values.map((value, index) => {
+    const anchor = anchorValues[index];
+    const center = Math.round(value * 0.68 + anchor * 0.32);
+    const start = Math.max(1, Math.round(Math.min(value, anchor, center) - bandRadius));
+    const end = Math.min(width - 2, Math.round(Math.max(value, anchor, center) + bandRadius));
+    return Array.from({ length: end - start + 1 }, (_, offset) => start + offset);
+  });
+  const candidateScores = candidatesByRow.map((candidates, index) =>
+    candidates.map((candidateX) => {
+      const edgeScore = sampleDirectionalEdgeScore(
+        luminance,
+        width,
+        candidateX,
+        rows[index],
+        direction,
+      );
+      const rawPenalty = Math.abs(candidateX - values[index]) * 0.16;
+      const anchorPenalty = Math.abs(candidateX - anchorValues[index]) * 0.24;
+      return edgeScore - rawPenalty - anchorPenalty;
+    }),
+  );
+  const pathScores = candidatesByRow.map((candidates) =>
+    new Array<number>(candidates.length).fill(Number.NEGATIVE_INFINITY),
+  );
+  const previousCandidateIndex = candidatesByRow.map((candidates) =>
+    new Array<number>(candidates.length).fill(-1),
+  );
+
+  for (let candidateIndex = 0; candidateIndex < candidatesByRow[0].length; candidateIndex += 1) {
+    pathScores[0][candidateIndex] = candidateScores[0][candidateIndex];
+  }
+
+  for (let rowIndex = 1; rowIndex < candidatesByRow.length; rowIndex += 1) {
+    const rowGap = Math.max(1, Math.abs(rows[rowIndex] - rows[rowIndex - 1]));
+    const previousCandidates = candidatesByRow[rowIndex - 1];
+    const currentCandidates = candidatesByRow[rowIndex];
+
+    for (let candidateIndex = 0; candidateIndex < currentCandidates.length; candidateIndex += 1) {
+      const candidateX = currentCandidates[candidateIndex];
+      let bestPriorScore = Number.NEGATIVE_INFINITY;
+      let bestPriorIndex = -1;
+
+      for (let priorIndex = 0; priorIndex < previousCandidates.length; priorIndex += 1) {
+        const priorScore = pathScores[rowIndex - 1][priorIndex];
+        if (!Number.isFinite(priorScore)) {
+          continue;
+        }
+
+        const priorX = previousCandidates[priorIndex];
+        let transitionPenalty = Math.abs(candidateX - priorX) * (rowGap > 2 ? 0.38 : 0.62);
+
+        if (rowIndex > 1) {
+          const priorPriorIndex = previousCandidateIndex[rowIndex - 1][priorIndex];
+          if (priorPriorIndex >= 0) {
+            const priorPriorX = candidatesByRow[rowIndex - 2][priorPriorIndex];
+            const slopeDelta = (candidateX - priorX) - (priorX - priorPriorX);
+            transitionPenalty += Math.abs(slopeDelta) * 0.16;
+          }
+        }
+
+        const totalScore = priorScore - transitionPenalty;
+        if (totalScore > bestPriorScore) {
+          bestPriorScore = totalScore;
+          bestPriorIndex = priorIndex;
+        }
+      }
+
+      if (bestPriorIndex >= 0) {
+        pathScores[rowIndex][candidateIndex] =
+          candidateScores[rowIndex][candidateIndex] + bestPriorScore;
+        previousCandidateIndex[rowIndex][candidateIndex] = bestPriorIndex;
+      }
+    }
+  }
+
+  let bestLastCandidate = 0;
+  let bestLastScore = Number.NEGATIVE_INFINITY;
+  const lastRowIndex = candidatesByRow.length - 1;
+
+  for (let candidateIndex = 0; candidateIndex < candidatesByRow[lastRowIndex].length; candidateIndex += 1) {
+    const score = pathScores[lastRowIndex][candidateIndex];
+    if (score > bestLastScore) {
+      bestLastScore = score;
+      bestLastCandidate = candidateIndex;
+    }
+  }
+
+  const refined = new Array<number>(values.length);
+  let candidateIndex = bestLastCandidate;
+
+  for (let rowIndex = lastRowIndex; rowIndex >= 0; rowIndex -= 1) {
+    const candidateX = candidatesByRow[rowIndex][candidateIndex];
+    const blended = candidateX * 0.74 + values[rowIndex] * 0.16 + anchorValues[rowIndex] * 0.1;
+    refined[rowIndex] = clamp(
+      Math.round(blended * 2) / 2,
+      Math.min(values[rowIndex], anchorValues[rowIndex]) - 2,
+      Math.max(values[rowIndex], anchorValues[rowIndex]) + 2,
+    );
+    candidateIndex =
+      rowIndex > 0
+        ? Math.max(0, previousCandidateIndex[rowIndex][candidateIndex])
+        : candidateIndex;
+  }
+
+  return refined;
+};
+
 const getBounds = (points: Point[]) => {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -619,6 +772,58 @@ const stabilizeDetectedBoundary = (values: number[], rows: number[]) => {
   });
 };
 
+const stabilizeBoundaryEndZones = (values: number[], reference: number[]) => {
+  if (values.length < 14 || reference.length !== values.length) {
+    return values.slice();
+  }
+
+  const adjusted = values.slice();
+  const zoneSize = Math.min(Math.max(5, Math.round(values.length * 0.07)), 14);
+  const edgeWindowSize = Math.min(3, zoneSize);
+  const shoulderWindowSize = Math.min(5, Math.max(3, zoneSize - 1));
+  const topShoulder = median(
+    adjusted.slice(zoneSize, Math.min(adjusted.length, zoneSize + shoulderWindowSize)),
+  );
+  const bottomShoulder = median(
+    adjusted.slice(
+      Math.max(0, adjusted.length - zoneSize - shoulderWindowSize),
+      adjusted.length - zoneSize,
+    ),
+  );
+
+  if (!Number.isFinite(topShoulder) || !Number.isFinite(bottomShoulder)) {
+    return adjusted;
+  }
+
+  const topEdge = median(adjusted.slice(0, edgeWindowSize));
+  const bottomEdge = median(adjusted.slice(adjusted.length - edgeWindowSize));
+  const topTarget = topShoulder + clamp(topEdge - topShoulder, -1.4, 2.6);
+  const bottomTarget = bottomShoulder + clamp(bottomEdge - bottomShoulder, -1.6, 2.8);
+
+  for (let offset = 0; offset < zoneSize; offset += 1) {
+    const t = smoothstep(offset / Math.max(1, zoneSize - 1));
+    const topIndex = offset;
+    const bottomIndex = adjusted.length - 1 - offset;
+    const topGuide = lerp(topTarget, topShoulder, t);
+    const bottomGuide = lerp(bottomTarget, bottomShoulder, t);
+    const topBlend = 0.72 - t * 0.44;
+    const bottomBlend = 0.74 - t * 0.46;
+
+    adjusted[topIndex] = clamp(
+      lerp(adjusted[topIndex], topGuide, topBlend),
+      reference[topIndex] - 0.9,
+      reference[topIndex] + 0.9,
+    );
+    adjusted[bottomIndex] = clamp(
+      lerp(adjusted[bottomIndex], bottomGuide, bottomBlend),
+      reference[bottomIndex] - 0.95,
+      reference[bottomIndex] + 0.95,
+    );
+  }
+
+  return adjusted;
+};
+
 const buildTemplateCappedProfile = (
   points: Point[],
   totalWidthMm: number,
@@ -762,6 +967,7 @@ const buildGripHoles = (
   requestedWidthMm: number,
   totalHeight: number,
   profile: Point[],
+  supportProfile: Point[] = [],
 ): { holes: ToolHole[]; resolvedWidthMm: number; autoWidened: boolean } => {
   if (totalHeight < 80 || profile.length < 2) {
     return {
@@ -772,7 +978,6 @@ const buildGripHoles = (
   }
 
   const targetRadius = clamp(requestedWidthMm * 0.082, 5.2, 7.2);
-  const smoothSideMargin = clamp(requestedWidthMm * 0.145, 9.5, 12.5);
   const materialClearance = clamp(requestedWidthMm * 0.038, 2.2, 3.4);
   const verticalMargin = clamp(totalHeight * 0.1, 10, 14);
   const centerYs = [totalHeight * 0.32, totalHeight * 0.74];
@@ -780,20 +985,28 @@ const buildGripHoles = (
 
   for (const rawCenterY of centerYs) {
     const centerY = clamp(rawCenterY, verticalMargin, totalHeight - verticalMargin);
-    const localProfileX = sampleProfileXAtY(profile, centerY);
+    const localRightX = sampleProfileXAtY(profile, centerY);
+    const localLeftX = supportProfile.length > 1
+      ? sampleProfileXAtY(supportProfile, centerY)
+      : clamp(requestedWidthMm * 0.145, 9.5, 12.5);
+    const safeSpanMm = localRightX - localLeftX - (targetRadius + materialClearance) * 2;
     requiredWidthMm = Math.max(
       requiredWidthMm,
-      localProfileX + smoothSideMargin + materialClearance + targetRadius * 2,
+      requestedWidthMm + Math.max(0, -safeSpanMm),
     );
   }
 
   const resolvedWidthMm = Math.ceil(requiredWidthMm * 2) / 2;
+  const widthShiftMm = resolvedWidthMm - requestedWidthMm;
   const holes = centerYs.map((rawCenterY) => {
     const centerY = clamp(rawCenterY, verticalMargin, totalHeight - verticalMargin);
-    const localProfileX = sampleProfileXAtY(profile, centerY);
-    const innerLeft = smoothSideMargin;
-    const innerRight = resolvedWidthMm - localProfileX - materialClearance;
-    const centerX = innerLeft + (innerRight - innerLeft) / 2;
+    const localLeftX = supportProfile.length > 1
+      ? sampleProfileXAtY(supportProfile, centerY)
+      : clamp(resolvedWidthMm * 0.145, 9.5, 12.5);
+    const localRightX = sampleProfileXAtY(profile, centerY) + widthShiftMm;
+    const safeLeftX = localLeftX + targetRadius + materialClearance;
+    const safeRightX = localRightX - targetRadius - materialClearance;
+    const centerX = safeLeftX + (safeRightX - safeLeftX) / 2;
 
     return {
       center: {
@@ -809,6 +1022,56 @@ const buildGripHoles = (
     resolvedWidthMm,
     autoWidened: resolvedWidthMm > requestedWidthMm + 0.001,
   };
+};
+
+const buildSupportSideProfile = (
+  frontProfile: Point[],
+  totalWidthMm: number,
+  holes: ToolHole[],
+): Point[] => {
+  if (frontProfile.length === 0) {
+    return [];
+  }
+
+  const lastIndex = frontProfile.length - 1;
+  const frontInsetMm = frontProfile.map((point) => Math.max(0, totalWidthMm - point.x));
+  const macroInsetMm = smoothSeries(frontInsetMm, 10);
+  const endZone = Math.max(3, Math.round(frontProfile.length * 0.14));
+  const supportLimitMm = clamp(totalWidthMm * 0.11, 3.8, 7.6);
+  const minimumBandMm = clamp(totalWidthMm * 0.34, 18, 24);
+  const holeClearanceMm = 2.6;
+
+  const maxSafeXs = frontProfile.map((point) => {
+    let maxSafeX = Math.min(supportLimitMm, point.x - minimumBandMm);
+
+    for (const hole of holes) {
+      if (Math.abs(point.y - hole.center.y) > hole.radius + holeClearanceMm) {
+        continue;
+      }
+
+      maxSafeX = Math.min(maxSafeX, hole.center.x - hole.radius - holeClearanceMm);
+    }
+
+    return Math.max(0, maxSafeX);
+  });
+
+  const desiredXs = frontProfile.map((_, index) => {
+    const fromTop = clamp(index / Math.max(1, endZone), 0, 1);
+    const fromBottom = clamp((lastIndex - index) / Math.max(1, endZone), 0, 1);
+    const fade = Math.min(fromTop, fromBottom);
+    const easedFade = fade * fade * (3 - 2 * fade);
+    const mirroredContour = 0.75 + macroInsetMm[index] * 0.34;
+    return clamp(mirroredContour * easedFade, 0, maxSafeXs[index]);
+  });
+
+  const smoothedXs = smoothSeries(desiredXs, 5).map((value, index) =>
+    clamp(value, 0, maxSafeXs[index]),
+  );
+
+  return frontProfile.map((point, index) => ({
+    x: index === 0 || index === lastIndex ? 0 : smoothedXs[index],
+    y: point.y,
+  }));
 };
 
 const buildCircularHolePolygon = (hole: ToolHole, segments = 28) => {
@@ -1598,28 +1861,52 @@ export function detectContourFromImageData(
   }
 
   const rows = validRows.map((entry) => entry.y);
+  const baseLeft = validRows.map((entry) => entry.left);
+  const baseRight = validRows.map((entry) => entry.right);
   const snappedLeft = snapBoundaryToImageEdge(
-    validRows.map((entry) => entry.left),
+    baseLeft,
     rows,
     luminance,
     width,
     "left",
   );
   const snappedRight = snapBoundaryToImageEdge(
-    validRows.map((entry) => entry.right),
+    baseRight,
     rows,
     luminance,
     width,
     "right",
   );
-
-  const smoothedLeft = stabilizeDetectedBoundary(
-    smoothSeriesPreservingLandmarks(snappedLeft, options.smoothPasses),
+  const bandRefinedLeft = refineBoundaryInBand(
+    snappedLeft,
     rows,
+    luminance,
+    width,
+    "left",
+    baseLeft,
   );
-  const smoothedRight = stabilizeDetectedBoundary(
-    smoothSeriesPreservingLandmarks(snappedRight, options.smoothPasses),
+  const bandRefinedRight = refineBoundaryInBand(
+    snappedRight,
     rows,
+    luminance,
+    width,
+    "right",
+    baseRight,
+  );
+
+  const smoothedLeft = stabilizeBoundaryEndZones(
+    stabilizeDetectedBoundary(
+      smoothSeriesPreservingLandmarks(bandRefinedLeft, options.smoothPasses),
+      rows,
+    ),
+    bandRefinedLeft,
+  );
+  const smoothedRight = stabilizeBoundaryEndZones(
+    stabilizeDetectedBoundary(
+      smoothSeriesPreservingLandmarks(bandRefinedRight, options.smoothPasses),
+      rows,
+    ),
+    bandRefinedRight,
   );
 
   const leftSide: Point[] = validRows.map((entry, index) => ({
@@ -1778,14 +2065,26 @@ export function detectContourFromMask(
   const refinedRight = luminance
     ? snapBoundaryToImageEdge(confidenceAdjustedRight, rows, luminance, width, "right")
     : confidenceAdjustedRight;
+  const bandRefinedLeft = luminance
+    ? refineBoundaryInBand(refinedLeft, rows, luminance, width, "left", confidenceAdjustedLeft)
+    : refinedLeft;
+  const bandRefinedRight = luminance
+    ? refineBoundaryInBand(refinedRight, rows, luminance, width, "right", confidenceAdjustedRight)
+    : refinedRight;
 
-  const smoothedLeft = stabilizeDetectedBoundary(
-    smoothSeriesPreservingLandmarks(refinedLeft, options.smoothPasses),
-    rows,
+  const smoothedLeft = stabilizeBoundaryEndZones(
+    stabilizeDetectedBoundary(
+      smoothSeriesPreservingLandmarks(bandRefinedLeft, options.smoothPasses),
+      rows,
+    ),
+    bandRefinedLeft,
   );
-  const smoothedRight = stabilizeDetectedBoundary(
-    smoothSeriesPreservingLandmarks(refinedRight, options.smoothPasses),
-    rows,
+  const smoothedRight = stabilizeBoundaryEndZones(
+    stabilizeDetectedBoundary(
+      smoothSeriesPreservingLandmarks(bandRefinedRight, options.smoothPasses),
+      rows,
+    ),
+    bandRefinedRight,
   );
 
   const leftSide: Point[] = validRows.map((entry, index) => ({
@@ -1914,7 +2213,8 @@ export const buildRibToolOutline = (
   const denseProfile = removeMicroKinks(
     suppressProfileSpikes(refitProfileWithPchip(simplifiedProfile, Math.round(targetProfileCount))),
   );
-  const holePlan = buildGripHoles(totalWidthMm, totalHeight, denseProfile);
+  const provisionalSupportProfile = buildSupportSideProfile(denseProfile, totalWidthMm, []);
+  const holePlan = buildGripHoles(totalWidthMm, totalHeight, denseProfile, provisionalSupportProfile);
   const finalProfile = denseProfile.map((point) => ({
     x: point.x + (holePlan.resolvedWidthMm - totalWidthMm),
     y: point.y,
@@ -1932,15 +2232,37 @@ export const buildRibToolOutline = (
       }
     : null;
   const denseAnchors = detectProfileAnchors(finalProfile, finalAnchorHints);
-  const holes = holePlan.holes;
+  const centeredSupportProfile = buildSupportSideProfile(finalProfile, holePlan.resolvedWidthMm, []);
+  const provisionalHoles = buildGripHoles(
+    holePlan.resolvedWidthMm,
+    totalHeight,
+    finalProfile,
+    centeredSupportProfile,
+  ).holes;
+  const supportProfile = buildSupportSideProfile(finalProfile, holePlan.resolvedWidthMm, provisionalHoles);
+  const holes = buildGripHoles(
+    holePlan.resolvedWidthMm,
+    totalHeight,
+    finalProfile,
+    supportProfile,
+  ).holes;
 
   return {
-    outline: [
-      { x: outerLeftX, y: topY },
-      ...(finalProfile.length > 0 ? [finalProfile[0]] : []),
-      ...finalProfile.slice(1),
-      { x: outerLeftX, y: bottomY },
-    ],
+    outline:
+      finalProfile.length > 0 && supportProfile.length > 0
+        ? [
+            supportProfile[0],
+            finalProfile[0],
+            ...finalProfile.slice(1),
+            supportProfile[supportProfile.length - 1],
+            ...supportProfile.slice(1, -1).reverse(),
+          ]
+        : [
+            { x: outerLeftX, y: topY },
+            ...(finalProfile.length > 0 ? [finalProfile[0]] : []),
+            ...finalProfile.slice(1),
+            { x: outerLeftX, y: bottomY },
+          ],
     profile: finalProfile,
     workEdge: finalProfile,
     holes,
