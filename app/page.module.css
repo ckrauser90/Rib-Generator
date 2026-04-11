@@ -953,7 +953,7 @@
   .page {
     padding: 0;
     gap: 0;
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: 0px 1fr 0px;
     min-height: 100dvh;
     overflow: hidden;
   }
@@ -980,13 +980,15 @@
   }
   .statusText { font-size: 0.72rem; }
 
-  /* Work area fills all available space */
+  /* Work area fills available space above bottom bar */
   .workArea {
     grid-template-columns: 1fr;
     gap: 0;
     padding: 0;
     overflow: hidden;
-    height: 100%;
+    /* subtract bottom bar (~120px) and top status (~44px) */
+    height: calc(100dvh - 120px);
+    margin-top: 44px;
   }
 
   /* Only active tab panel is visible */
@@ -1012,6 +1014,7 @@
     border: none;
     min-height: 0;
     aspect-ratio: auto;
+    position: relative;
   }
   .canvas {
     width: 100%;
@@ -1027,11 +1030,21 @@
   .previewWrap, .previewWrap3d {
     flex: 1;
     min-height: 0;
+    height: 100%;
     border-radius: 0;
     border: none;
     aspect-ratio: auto;
   }
   .preview3dMount { min-height: 0; height: 100%; }
+
+  /* Anchor overlay & drag hint must clear the bottom bar */
+  .anchorOverlay {
+    bottom: auto;
+    top: 12px;
+  }
+  .anchorDragHint {
+    bottom: 12px;
+  }
 
   /* Side buttons bigger for touch */
   .sideBtn {

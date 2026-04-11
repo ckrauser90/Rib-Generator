@@ -307,7 +307,10 @@ const drawPreview = (
 ) => {
   const { width: imageWidth, height: imageHeight } = getRasterSize(image);
   const ratio = imageWidth / imageHeight;
-  const width = Math.max(1, canvas.parentElement?.clientWidth ?? canvas.clientWidth);
+  const parentWidth = canvas.parentElement?.clientWidth ?? canvas.clientWidth;
+  // Skip drawing when parent is hidden (e.g. inactive mobile tab)
+  if (parentWidth < 2) return;
+  const width = Math.max(1, parentWidth);
   const height = Math.max(220, Math.round(width / ratio));
   canvas.width = width;
   canvas.height = height;
@@ -787,7 +790,7 @@ export default function Home() {
       lensPoint,
       !draggingAnchor,
     );
-  }, [displayContour, displayWorkProfile, draggingAnchor, imageAnchors, lensPoint, markerConfirmed, promptPoint, sourceRaster]);
+  }, [displayContour, displayWorkProfile, draggingAnchor, imageAnchors, lensPoint, markerConfirmed, mobileTab, promptPoint, sourceRaster]);
 
   useEffect(() => {
     if (!sourceRaster || !promptPoint || segmenterState !== "ready") {
