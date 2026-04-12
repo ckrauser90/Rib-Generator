@@ -2,7 +2,7 @@
 
 Project guide for Claude Code and future agent sessions.
 
-Last updated: 2026-04-12 (session 2)
+Last updated: 2026-04-12 (session 3)
 
 ## 1. What This Project Is
 
@@ -90,8 +90,12 @@ Testing:
 
 - `tests/release-smoke.spec.ts`
   - main smoke flow
+- `tests/unit/*.spec.ts`
+  - pure helper coverage for anchor and workflow logic
 - `playwright.config.ts`
   - Windows-safe web server startup via `cmd /c`
+- `playwright.unit.config.ts`
+  - lightweight Playwright config for unit-style helper tests
 
 Session notes:
 
@@ -204,13 +208,16 @@ What exists:
   - anchor confirmation
   - STL download path
   - reset flow
+- pure helper tests for:
+  - `app/anchor-utils.ts`
+  - `app/tool-profile-workflow.ts`
+  - `app/tool-geometry.ts`
 
 What is still missing:
 
-- unit tests for pure helpers
 - anchor drag detail coverage
-- mobile interaction coverage
 - contour / geometry regression fixtures
+- more helper coverage deeper in geometry modules
 
 If changing any of these areas, be extra careful:
 
@@ -249,11 +256,7 @@ Do NOT retry these — they were attempted and reverted:
 Maintainability / architecture:
 
 - Extract the remaining `page.tsx` workflow into one or more hooks or a small state module
-- Add unit tests for:
-  - `resolveAnchorsForProfile`
-  - `trimProfileBetweenAnchors`
-  - tool-profile preparation helpers
-  - tool geometry mapping
+- Extend pure tests further into geometry-heavy helpers where practical
 
 Product / geometry:
 
@@ -271,7 +274,7 @@ Mobile UX:
 If you need to decide what to do next, this is the recommended order:
 
 1. Keep maintainability refactor going while tests still pass
-2. Add small pure tests around extracted helpers
+2. Grow coverage around geometry-heavy helpers and regressions
 3. Only then continue with contour-quality / bug work
 4. Preserve conservative mode while improving quality
 

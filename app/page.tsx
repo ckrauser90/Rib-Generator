@@ -6,7 +6,9 @@ import {
   anchorsToOverride,
   getClosestProfilePointToPoint,
   mapGestureToImagePoint,
+  moveDraftAnchorOverride,
   pickAnchorHandle,
+  resolveDraftAnchorOverride,
   type AnchorHandle,
   type ManualAnchorOverride,
 } from "./anchor-utils";
@@ -34,6 +36,15 @@ import { PhotoPanel } from "./components/PhotoPanel";
 import { ProfilePanel } from "./components/ProfilePanel";
 import { Preview3DPanel } from "./components/Preview3DPanel";
 import {
+  buildDiagnosticsSnapshot,
+  clampNumericInputValue,
+} from "./page-helpers";
+import {
+  findFirstImageFile,
+  prepareImageUpload,
+} from "./image-input-workflow";
+import { prepareStlExport } from "./export-workflow";
+import {
   getFooterNote,
   getDraggingAnchorStatus,
   getCurrentStepLabel,
@@ -44,7 +55,6 @@ import {
 } from "./page-copy";
 import {
   createExtrudedStl,
-  detectProfileAnchors,
   type Point,
   type ToolHole,
   validateToolGeometry,
@@ -674,14 +684,19 @@ export default function Home() {
   }, [anchorEditMode, currentAnchorOverride, currentAnchorsConfirmed, displayedAnchorOverride, draggingAnchor, geometryWorkProfile, horizontalCorrectionDeg, lensPoint, printFriendliness, profileImageSize, referenceBounds, toolHeightMm, toolWidthMm, workProfileSide]);
 
   const handleImageUpload = async (file: File) => {
-    if (imageUrl?.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
-    // Reset MediaPipe between images so no long-lived task state survives
-    // repeated uploads and marker runs.
-    resetInteractiveSegmenter();
-    const url = URL.createObjectURL(file);
-    const image = await loadImageFromUrl(url);
-    const ratio = image.naturalWidth / Math.max(1, image.naturalHeight);
-    const extremeRatio = ratio >= EXTREME_ASPECT_RATIO || ratio <= 1 / EXTREME_ASPECT_RATIO;
+    const { image, status: nextStatus, url } = await prepareImageUpload({
+      createObjectUrl: (nextFile) => URL.createObjectURL(nextFile),
+      file,
+      getLoadedImageStatus,
+      loadImageFromUrl,
+      maxAspectRatio: EXTREME_ASPECT_RATIO,
+      previousImageUrl: imageUrl,
+      // Reset MediaPipe between images so no long-lived task state survives
+      // repeated uploads and marker runs.
+      resetSegmenter: resetInteractiveSegmenter,
+      revokeObjectUrl: (previousUrl) => URL.revokeObjectURL(previousUrl),
+    });
+
     setImageUrl(url);
     setSourceRaster(image);
     setPromptPoint(null);
@@ -690,13 +705,7 @@ export default function Home() {
     setHorizontalCorrectionDeg(0);
     resetDetectedGeometry();
     resetAnchorWorkflow();
-
-    if (extremeRatio) {
-      setStatus(getLoadedImageStatus(file.name, true));
-      return;
-    }
-
-    setStatus(getLoadedImageStatus(file.name, false));
+    setStatus(nextStatus);
   };
 
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -705,9 +714,9 @@ export default function Home() {
   };
 
   const updateNumericValue = (value: string, setter: (n: number) => void, min: number, max: number) => {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      setter(Math.min(max, Math.max(min, parsed)));
+    const nextValue = clampNumericInputValue(value, min, max);
+    if (nextValue !== null) {
+      setter(nextValue);
     }
   };
 
@@ -742,11 +751,13 @@ export default function Home() {
     if (!handle) return;
 
     if (!anchorEditMode) {
-      const defaults = detectProfileAnchors(workProfile);
       setDraftAnchorOverrides((prev) => ({
         ...prev,
-        [workProfileSide]: prev[workProfileSide] ??
-          (defaults ? { topY: defaults.top.y, bottomY: defaults.bottom.y } : currentAnchorOverride),
+        [workProfileSide]: resolveDraftAnchorOverride(
+          workProfile,
+          prev[workProfileSide],
+          currentAnchorOverride,
+        ),
       }));
       setAnchorEditMode(true);
     }
@@ -770,30 +781,15 @@ export default function Home() {
       return;
     }
 
-    const defaultAnchors = detectProfileAnchors(workProfile);
-    const fallbackTop =
-      currentDraftAnchorOverride?.topY ??
-      currentAnchorOverride?.topY ??
-      defaultAnchors?.top.y ??
-      workProfile[0].y;
-    const fallbackBottom =
-      currentDraftAnchorOverride?.bottomY ??
-      currentAnchorOverride?.bottomY ??
-      defaultAnchors?.bottom.y ??
-      workProfile[workProfile.length - 1].y;
-    const minimumGap = Math.max(6, (workProfile[workProfile.length - 1].y - workProfile[0].y) * 0.04);
-
     setDraftAnchorOverrides((previous) => {
       const next = { ...previous };
-      const current = next[workProfileSide] ?? { topY: fallbackTop, bottomY: fallbackBottom };
-
-      if (draggingAnchor === "top") {
-        current.topY = Math.min(snappedPoint.y, current.bottomY - minimumGap);
-      } else {
-        current.bottomY = Math.max(snappedPoint.y, current.topY + minimumGap);
-      }
-
-      next[workProfileSide] = current;
+      next[workProfileSide] = moveDraftAnchorOverride({
+        confirmedOverride: currentAnchorOverride,
+        draftOverride: previous[workProfileSide],
+        draggingAnchor,
+        profile: workProfile,
+        snappedPoint,
+      });
       return next;
     });
     setLensPoint(snappedPoint);
@@ -835,17 +831,13 @@ export default function Home() {
   };
 
   const beginAnchorEditing = () => {
-    const defaults = detectProfileAnchors(workProfile);
     setDraftAnchorOverrides((previous) => ({
       ...previous,
-      [workProfileSide]: previous[workProfileSide] ??
-        (currentAnchorOverride ??
-          (defaults
-          ? {
-              topY: defaults.top.y,
-              bottomY: defaults.bottom.y,
-            }
-          : null)),
+      [workProfileSide]: resolveDraftAnchorOverride(
+        workProfile,
+        previous[workProfileSide],
+        currentAnchorOverride,
+      ),
     }));
     setAnchorEditMode(true);
     setDraggingAnchor(null);
@@ -902,7 +894,7 @@ export default function Home() {
   const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragActive(false);
-    const file = Array.from(event.dataTransfer.files).find((candidate) => candidate.type.startsWith("image/"));
+    const file = findFirstImageFile(event.dataTransfer.files);
     if (!file) {
       setStatus(pageText.dropImagePrompt);
       return;
@@ -911,36 +903,35 @@ export default function Home() {
   };
 
   const handleDownload = () => {
-    if (!sourceRaster || !profileImageSize || geometryWorkProfile.length === 0) {
-      setStatus(pageText.downloadNeedsContour);
-      return;
-    }
-    if (!geometryValidation.valid) {
-      setStatus(geometryValidation.errors[0]?.message ?? pageText.geometryNotExportable);
-      return;
-    }
-    const { confirmedAnchors } = resolveToolAnchors({
+    const preparedExport = prepareStlExport({
       currentAnchorOverride,
-      displayedAnchorOverride: currentAnchorOverride,
-      profile: geometryWorkProfile,
-    });
-    const { correctedProfile, correctedReferenceBounds } = buildPreparedToolProfile({
-      activeAnchors: currentAnchorsConfirmed ? confirmedAnchors : null,
+      currentAnchorsConfirmed,
+      downloadNeedsContourMessage: pageText.downloadNeedsContour,
+      geometryNotExportableMessage: pageText.geometryNotExportable,
+      geometryValidation,
+      geometryWorkProfile,
       horizontalCorrectionDeg,
-      profile: geometryWorkProfile,
+      profileImageSize,
       referenceBounds,
+      sourceRasterPresent: Boolean(sourceRaster),
     });
+
+    if (preparedExport.kind === "blocked") {
+      setStatus(preparedExport.status);
+      return;
+    }
+
     const stl = createExtrudedStl(
-      correctedProfile,
-      profileImageSize.width,
-      profileImageSize.height,
+      preparedExport.correctedProfile,
+      preparedExport.imageWidth,
+      preparedExport.imageHeight,
       toolWidthMm,
       toolHeightMm,
       thicknessMm,
       workProfileSide,
-      correctedReferenceBounds,
+      preparedExport.correctedReferenceBounds,
       printFriendliness,
-      currentAnchorsConfirmed ? confirmedAnchors : null,
+      preparedExport.exportAnchors,
       bevelStrength,
     );
     const blob = new Blob([stl], { type: "model/stl" });
@@ -953,84 +944,45 @@ export default function Home() {
     setStatus(pageText.stlExported);
   };
 
-  const buildDiagnosticsSnapshot = () => {
-    const imageSize = sourceRaster ? getRasterSize(sourceRaster) : null;
-    return {
-      timestamp: new Date().toISOString(),
+  const createDiagnosticsSnapshot = () =>
+    buildDiagnosticsSnapshot({
+      anchorEditMode,
+      bevelStrength,
+      contourPoints: contour.length,
+      currentAnchorOverride,
+      currentAnchorsConfirmed,
+      currentDraftAnchorOverride,
       currentStep: currentStepLabel,
-      status,
+      curveSmoothing,
+      geometryProfilePoints: geometryWorkProfile.length,
+      geometryValidation,
+      horizontalCorrectionDeg,
+      imageAnchors,
+      markerConfirmed,
+      markerPlacementMode,
+      outlinePoints: toolOutline.length,
+      printFriendliness,
+      promptPoint,
+      referenceBounds,
+      requestedHeightMm: toolHeightMm,
+      requestedWidthMm: toolWidthMm,
+      resolvedToolWidthMm,
       segmenterState,
       segmenting,
-      sourceImage: imageSize
-        ? {
-            width: imageSize.width,
-            height: imageSize.height,
-            aspectRatio: Number((imageSize.width / Math.max(1, imageSize.height)).toFixed(4)),
-          }
-        : null,
-      marker: promptPoint
-        ? {
-            confirmed: markerConfirmed,
-            placementMode: markerPlacementMode,
-            x: Number(promptPoint.x.toFixed(2)),
-            y: Number(promptPoint.y.toFixed(2)),
-          }
-        : null,
-      side: workProfileSide,
-      anchors: {
-        confirmed: currentAnchorsConfirmed,
-        editing: anchorEditMode,
-        detected: imageAnchors
-          ? {
-              top: {
-                x: Number(imageAnchors.top.x.toFixed(2)),
-                y: Number(imageAnchors.top.y.toFixed(2)),
-              },
-              bottom: {
-                x: Number(imageAnchors.bottom.x.toFixed(2)),
-                y: Number(imageAnchors.bottom.y.toFixed(2)),
-              },
-            }
-          : null,
-        manualOverride: currentAnchorOverride,
-        draftOverride: currentDraftAnchorOverride,
-      },
-      measures: {
-        requestedHeightMm: toolHeightMm,
-        requestedWidthMm: toolWidthMm,
-        resolvedWidthMm: Number(resolvedToolWidthMm.toFixed(2)),
-        thicknessMm,
-        horizontalCorrectionDeg,
-        curveSmoothing,
-        printFriendliness,
-        bevelStrength,
-        autoWidened: toolAutoWidened,
-      },
-      geometry: {
-        contourPoints: contour.length,
-        usableColumns,
-        activeProfilePoints: workProfile.length,
-        geometryProfilePoints: geometryWorkProfile.length,
-        toolProfilePoints: toolProfile.length,
-        outlinePoints: toolOutline.length,
-        holes: toolHoles.length,
-        referenceBounds,
-      },
-      validation: {
-        valid: geometryValidation.valid,
-        minHoleClearanceMm:
-          geometryValidation.minHoleClearanceMm === null
-            ? null
-            : Number(geometryValidation.minHoleClearanceMm.toFixed(3)),
-        errors: geometryValidation.errors,
-        warnings: geometryValidation.warnings,
-      },
-    };
-  };
+      sourceImage: sourceRaster ? getRasterSize(sourceRaster) : null,
+      status,
+      thicknessMm,
+      toolAutoWidened,
+      toolHoles: toolHoles.length,
+      toolProfilePoints: toolProfile.length,
+      usableColumns,
+      activeProfilePoints: workProfile.length,
+      workProfileSide,
+    });
 
   const copyDiagnostics = async () => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(buildDiagnosticsSnapshot(), null, 2));
+      await navigator.clipboard.writeText(JSON.stringify(createDiagnosticsSnapshot(), null, 2));
       setStatus(pageText.diagnosticsCopied);
     } catch {
       setStatus(pageText.diagnosticsCopyFailed);
@@ -1038,7 +990,7 @@ export default function Home() {
   };
 
   const downloadDiagnostics = () => {
-    const blob = new Blob([JSON.stringify(buildDiagnosticsSnapshot(), null, 2)], {
+    const blob = new Blob([JSON.stringify(createDiagnosticsSnapshot(), null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);

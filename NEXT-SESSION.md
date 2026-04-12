@@ -2,9 +2,9 @@
 
 Last updated: 2026-04-12
 
-## Current Stable Baseline (main @ b3cb8cf)
+## Current Stable Baseline (main @ e42013d)
 
-Mobile UX was significantly improved this session:
+Mobile UX and test coverage were improved this session:
 
 - Mobile settings sheet split into Form/Maße tabs (sliders vs. dimension inputs)
 - Dimension inputs are large and touch-friendly (min-height 44px)
@@ -12,26 +12,27 @@ Mobile UX was significantly improved this session:
 - Status bar hidden on mobile, replaced by collapsible i-button (top-right)
 - Ruler no longer disappears when bottom sheet is open (overflow: visible fix)
 - Anchor overlay (Übernehmen/Abbrechen) is fixed at top of canvas on mobile
+- Mobile Start/Ende drag now uses rendered-image coordinates instead of the full letterboxed canvas box
+- Helper-level unit tests now exist for anchor utils, tool-profile workflow, and tool-geometry mapping
+- `npm run test:unit` uses `playwright.unit.config.ts`
 
-## Known Open Problem: Mobile Anchor Drag
+## Mobile Anchor Status
 
-The Start/Ende anchor drag still doesn't work reliably on mobile.
-One attempt was made (tap-anywhere fallback in pointerDown) — reverted, no improvement.
+The main mobile anchor alignment bug is fixed.
 
-Root cause is not fully diagnosed. What to investigate next time:
-- Confirm that `touchAction: "none"` is actually applied to the canvas before the first touch
-- Log `event.pointerType`, `clientX/Y`, `rect`, and computed anchor CSS position to check coordinate mapping
-- Check if the `onClick` fires after a failed pointerDown on touch and causes re-segmentation
-- Consider an alternative UX: dedicated up/down step buttons in the bottom sheet for Start/Ende (no canvas drag required)
+If mobile anchor editing needs more UX polish later, likely directions are:
+- even larger touch targets
+- optional step-button adjustment in the bottom sheet
+- more mobile-specific regression coverage beyond the current drag alignment case
 
 Do NOT retry the tap-anywhere-on-canvas fallback approach — it was tried and reverted.
 
 ## Next Improvements (priority order)
 
-1. Fix mobile anchor drag — either debug the coordinate issue or switch to a step-button UX
+1. Continue maintainability refactor of `page.tsx`
 2. Local boundary-band refinement around the active edge only (conservative, not generative)
-3. Unit tests for pure helpers (resolveAnchorsForProfile, trimProfileBetweenAnchors)
-4. Continue maintainability refactor of page.tsx
+3. Expand unit/regression coverage deeper into geometry-heavy helpers
+4. Consider additional mobile UX polish only if real friction remains
 
 ## Guardrails To Keep
 

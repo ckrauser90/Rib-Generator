@@ -141,6 +141,57 @@ export const anchorsToOverride = (
       }
     : null;
 
+export const resolveDraftAnchorOverride = (
+  profile: Point[],
+  draftOverride: ManualAnchorOverride | null,
+  confirmedOverride: ManualAnchorOverride | null,
+) => {
+  if (draftOverride) {
+    return draftOverride;
+  }
+
+  if (confirmedOverride) {
+    return confirmedOverride;
+  }
+
+  return anchorsToOverride(detectProfileAnchors(profile));
+};
+
+export const moveDraftAnchorOverride = ({
+  confirmedOverride,
+  draftOverride,
+  draggingAnchor,
+  profile,
+  snappedPoint,
+}: {
+  confirmedOverride: ManualAnchorOverride | null;
+  draftOverride: ManualAnchorOverride | null;
+  draggingAnchor: AnchorHandle;
+  profile: Point[];
+  snappedPoint: Point;
+}): ManualAnchorOverride | null => {
+  if (profile.length < 2) {
+    return resolveDraftAnchorOverride(profile, draftOverride, confirmedOverride);
+  }
+
+  const seededOverride = resolveDraftAnchorOverride(profile, draftOverride, confirmedOverride);
+  const next = seededOverride
+    ? { ...seededOverride }
+    : {
+        topY: profile[0].y,
+        bottomY: profile[profile.length - 1].y,
+      };
+  const minimumGap = Math.max(6, (profile[profile.length - 1].y - profile[0].y) * 0.04);
+
+  if (draggingAnchor === "top") {
+    next.topY = Math.min(snappedPoint.y, next.bottomY - minimumGap);
+  } else {
+    next.bottomY = Math.max(snappedPoint.y, next.topY + minimumGap);
+  }
+
+  return next;
+};
+
 export const applyLiveAnchorPreview = (
   profile: Point[],
   anchors: ProfileAnchors | null,
