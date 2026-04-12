@@ -2,13 +2,50 @@
 
 import { ChangeEvent, DragEvent, MouseEvent, PointerEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import styles from "./page.module.css";
-import { Rib3DPreview } from "./rib-3d-preview";
 import {
-  buildRibToolOutline,
+  anchorsToOverride,
+  getClosestProfilePointToPoint,
+  pickAnchorHandle,
+  type AnchorHandle,
+  type AnchorGestureEvent,
+  type ManualAnchorOverride,
+} from "./anchor-utils";
+import {
+  buildGeometryWorkProfile,
+  buildDisplayContour,
+  buildDisplayWorkProfile,
+  buildSvgPath,
+  buildSvgPolylinePath,
+  getOutlineBounds,
+} from "./profile-geometry";
+import {
+  buildPreparedToolProfile,
+  resolveToolAnchors,
+  selectActiveAnchors,
+} from "./tool-profile-workflow";
+import {
+  buildToolGeometryState,
+  createEmptyToolGeometryState,
+  type ToolGeometryState,
+} from "./tool-geometry";
+import { MobileBottomBar, type MobileTab } from "./components/MobileBottomBar";
+import { DesktopRibbon } from "./components/DesktopRibbon";
+import { PhotoPanel } from "./components/PhotoPanel";
+import { ProfilePanel } from "./components/ProfilePanel";
+import { Preview3DPanel } from "./components/Preview3DPanel";
+import {
+  getFooterNote,
+  getDraggingAnchorStatus,
+  getCurrentStepLabel,
+  getLoadedImageStatus,
+  getResetSelectionStatus,
+  getSideSelectedStatus,
+  pageText,
+} from "./page-copy";
+import {
   createExtrudedStl,
   detectProfileAnchors,
   type Point,
-  type ProfileAnchors,
   type ToolHole,
   validateToolGeometry,
   type WorkProfileSide,
@@ -16,32 +53,16 @@ import {
 import {
   loadInteractiveSegmenter,
   resetInteractiveSegmenter,
-  segmentRasterFromPoint,
 } from "../lib/interactive-segmenter";
-import {
-  deriveNormalizedProfileFromMask,
-  smoothWorkProfileCurve,
-} from "../lib/profile-normalization";
 import { getRasterSize, type RasterSource } from "../lib/perspective";
+import { runSegmentationWorkflow } from "./segmentation-workflow";
 
 const DEFAULT_MASK_THRESHOLD = 0.18;
 const DEFAULT_MASK_SMOOTH_PASSES = 1;
 const DEFAULT_CROP_BOTTOM_RATIO = 0.04;
 const EXTREME_ASPECT_RATIO = 3.2;
 const ANCHOR_COLOR = "#C9704A";
-const DISPLAY_PROFILE_MAX_DRIFT_PX = 0.9;
 const DEFAULT_TOOL_WIDTH_MM = 65;
-
-const initialStatus = "Foto laden und danach direkt in das Gefaess klicken.";
-
-type CanvasGestureEvent = {
-  clientX: number;
-  clientY: number;
-  pointerType?: string;
-};
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value));
 
 const loadImageFromUrl = (url: string) =>
   new Promise<HTMLImageElement>((resolve, reject) => {
@@ -52,7 +73,7 @@ const loadImageFromUrl = (url: string) =>
   });
 
 const mapCanvasToImage = (
-  event: CanvasGestureEvent,
+  event: AnchorGestureEvent,
   canvas: HTMLCanvasElement,
   image: RasterSource,
 ) => {
@@ -62,86 +83,6 @@ const mapCanvasToImage = (
     x: ((event.clientX - rect.left) / rect.width) * width,
     y: ((event.clientY - rect.top) / rect.height) * height,
   };
-};
-
-const buildDisplayWorkProfile = (profile: Point[], smoothingStrength: number) => {
-  if (profile.length < 2) {
-    return profile.slice();
-  }
-
-  if (profile.length < 7) {
-    return profile.map((point) => ({ ...point }));
-  }
-
-  const windowRadius = 3 + Math.round(smoothingStrength / 28);
-  const blend = Math.min(0.18 + (smoothingStrength / 100) * 0.36, 0.54);
-  const smoothed = smoothWorkProfileCurve(profile, {
-    windowRadius,
-    blend,
-  });
-
-  return smoothed.map((point, index) => ({
-    x: clamp(
-      point.x,
-      profile[index].x - DISPLAY_PROFILE_MAX_DRIFT_PX,
-      profile[index].x + DISPLAY_PROFILE_MAX_DRIFT_PX,
-    ),
-    y: profile[index].y,
-  }));
-};
-
-const buildDisplayContour = (leftProfile: Point[], rightProfile: Point[]) => {
-  if (leftProfile.length === 0 || rightProfile.length === 0) {
-    return [];
-  }
-
-  return [...leftProfile, ...rightProfile.slice().reverse()];
-};
-
-const getProfileBounds = (profile: Point[]) => {
-  if (profile.length === 0) {
-    return null;
-  }
-
-  let minX = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-
-  for (const point of profile) {
-    minX = Math.min(minX, point.x);
-    maxX = Math.max(maxX, point.x);
-    minY = Math.min(minY, point.y);
-    maxY = Math.max(maxY, point.y);
-  }
-
-  return { minX, maxX, minY, maxY };
-};
-
-const applyHorizontalCorrection = (profile: Point[], angleDeg: number) => {
-  if (profile.length < 2 || Math.abs(angleDeg) < 0.01) {
-    return profile.slice();
-  }
-
-  const bounds = getProfileBounds(profile);
-  if (!bounds) {
-    return profile.slice();
-  }
-
-  const centerX = (bounds.minX + bounds.maxX) / 2;
-  const centerY = (bounds.minY + bounds.maxY) / 2;
-  const angleRad = (angleDeg * Math.PI) / 180;
-  const cos = Math.cos(angleRad);
-  const sin = Math.sin(angleRad);
-
-  return profile.map((point) => {
-    const dx = point.x - centerX;
-    const dy = point.y - centerY;
-    return {
-      x: centerX + dx * cos - dy * sin,
-      y: centerY + dx * sin + dy * cos,
-    };
-  });
 };
 
 const drawAnchor = (
@@ -387,222 +328,12 @@ const drawPreview = (
   }
 };
 
-const buildSvgPath = (points: Point[]) => {
-  if (points.length === 0) return "";
-  return points
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
-    .join(" ")
-    .concat(" Z");
-};
-
-const buildSvgPolylinePath = (points: Point[]) => {
-  if (points.length === 0) return "";
-  return points
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
-    .join(" ");
-};
-
-const getOutlineBounds = (outline: Point[]) => {
-  if (outline.length === 0) return null;
-  const xs = outline.map((p) => p.x);
-  const ys = outline.map((p) => p.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const padding = Math.max((maxX - minX) * 0.08, (maxY - minY) * 0.05, 4);
-  return {
-    minX: minX - padding,
-    minY: minY - padding,
-    width: Math.max(1, maxX - minX + padding * 2),
-    height: Math.max(1, maxY - minY + padding * 2),
-  };
-};
-
 const getFeedbackTone = (message: string) => {
   const text = message.toLowerCase();
   if (text.includes("konnte nicht") || text.includes("fehl")) return "error";
   if (text.includes("stl exportiert")) return "success";
   if (text.includes("sehr breites") || text.includes("bitte ein bild")) return "warning";
   return "neutral";
-};
-
-type AnchorHandle = "top" | "bottom";
-
-type ManualAnchorOverride = {
-  topY: number;
-  bottomY: number;
-};
-
-const getClosestProfilePointByY = (profile: Point[], targetY: number) => {
-  if (profile.length === 0) {
-    return null;
-  }
-
-  let best = profile[0];
-  let bestDistance = Math.abs(profile[0].y - targetY);
-
-  for (let index = 1; index < profile.length; index += 1) {
-    const distance = Math.abs(profile[index].y - targetY);
-    if (distance < bestDistance) {
-      best = profile[index];
-      bestDistance = distance;
-    }
-  }
-
-  return best;
-};
-
-const getClosestProfilePointToPoint = (profile: Point[], target: Point) => {
-  if (profile.length === 0) {
-    return null;
-  }
-
-  let best = profile[0];
-  let bestDistance = Math.hypot(profile[0].x - target.x, profile[0].y - target.y);
-
-  for (let index = 1; index < profile.length; index += 1) {
-    const point = profile[index];
-    const distance = Math.hypot(point.x - target.x, point.y - target.y);
-    if (distance < bestDistance) {
-      best = point;
-      bestDistance = distance;
-    }
-  }
-
-  return best;
-};
-
-const resolveAnchorsForProfile = (
-  profile: Point[],
-  override: ManualAnchorOverride | null,
-): ProfileAnchors | null => {
-  if (profile.length < 2) {
-    return null;
-  }
-
-  if (!override) {
-    return detectProfileAnchors(profile);
-  }
-
-  const topPoint = getClosestProfilePointByY(profile, override.topY);
-  const bottomPoint = getClosestProfilePointByY(profile, override.bottomY);
-
-  if (!topPoint || !bottomPoint) {
-    return detectProfileAnchors(profile);
-  }
-
-  return topPoint.y <= bottomPoint.y
-    ? { top: topPoint, bottom: bottomPoint }
-    : { top: bottomPoint, bottom: topPoint };
-};
-
-const anchorsToOverride = (anchors: ProfileAnchors | null): ManualAnchorOverride | null =>
-  anchors
-    ? {
-        topY: anchors.top.y,
-        bottomY: anchors.bottom.y,
-      }
-    : null;
-
-const applyLiveAnchorPreview = (
-  profile: Point[],
-  anchors: ProfileAnchors | null,
-  activeHandle: AnchorHandle | null,
-  livePoint: Point | null,
-): ProfileAnchors | null => {
-  if (!anchors || !activeHandle || !livePoint || profile.length < 2) {
-    return anchors;
-  }
-
-  const snappedPoint = getClosestProfilePointToPoint(profile, livePoint);
-  if (!snappedPoint) {
-    return anchors;
-  }
-
-  const updated =
-    activeHandle === "top"
-      ? { top: snappedPoint, bottom: anchors.bottom }
-      : { top: anchors.top, bottom: snappedPoint };
-
-  return updated.top.y <= updated.bottom.y
-    ? updated
-    : { top: updated.bottom, bottom: updated.top };
-};
-
-const trimProfileBetweenAnchors = (
-  profile: Point[],
-  anchors: ProfileAnchors | null,
-) => {
-  if (profile.length < 2 || !anchors) {
-    return profile;
-  }
-
-  let topIndex = 0;
-  let bottomIndex = profile.length - 1;
-  let bestTopDistance = Number.POSITIVE_INFINITY;
-  let bestBottomDistance = Number.POSITIVE_INFINITY;
-
-  for (let index = 0; index < profile.length; index += 1) {
-    const point = profile[index];
-    const topDistance = Math.abs(point.y - anchors.top.y);
-    const bottomDistance = Math.abs(point.y - anchors.bottom.y);
-
-    if (topDistance < bestTopDistance) {
-      bestTopDistance = topDistance;
-      topIndex = index;
-    }
-
-    if (bottomDistance < bestBottomDistance) {
-      bestBottomDistance = bottomDistance;
-      bottomIndex = index;
-    }
-  }
-
-  const start = Math.min(topIndex, bottomIndex);
-  const end = Math.max(topIndex, bottomIndex);
-  return profile.slice(start, end + 1);
-};
-
-const getProfileReferenceBounds = (profile: Point[]) => {
-  if (profile.length === 0) {
-    return null;
-  }
-
-  return {
-    minY: profile[0].y,
-    maxY: profile[profile.length - 1].y,
-  };
-};
-
-const pickAnchorHandle = (
-  event: CanvasGestureEvent,
-  canvas: HTMLCanvasElement,
-  image: RasterSource,
-  anchors: ProfileAnchors | null,
-): AnchorHandle | null => {
-  if (!anchors) return null;
-
-  const rect = canvas.getBoundingClientRect();
-  const { width, height } = getRasterSize(image);
-  const candidatePoints = [
-    { handle: "top" as const, point: anchors.top },
-    { handle: "bottom" as const, point: anchors.bottom },
-  ];
-
-  const hitRadius = event.pointerType === "touch" ? 48 : event.pointerType === "pen" ? 30 : 18;
-
-  for (const candidate of candidatePoints) {
-    const x = (candidate.point.x / width) * rect.width;
-    const y = (candidate.point.y / height) * rect.height;
-    const dx = event.clientX - rect.left - x;
-    const dy = event.clientY - rect.top - y;
-    if (Math.hypot(dx, dy) <= hitRadius) {
-      return candidate.handle;
-    }
-  }
-
-  return null;
 };
 
 export default function Home() {
@@ -635,7 +366,7 @@ export default function Home() {
   const [heightInput, setHeightInput] = useState("120");
   const [widthInput, setWidthInput] = useState(String(DEFAULT_TOOL_WIDTH_MM));
   const [thicknessInput, setThicknessInput] = useState("4.2");
-  const [status, setStatus] = useState(initialStatus);
+  const [status, setStatus] = useState<string>(pageText.initialStatus);
   const [segmenterState, setSegmenterState] = useState<"loading" | "ready" | "error">("loading");
   const [segmenting, setSegmenting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -654,7 +385,7 @@ export default function Home() {
     right: null,
   });
   const [lensPoint, setLensPoint] = useState<Point | null>(null);
-  const [mobileTab, setMobileTab] = useState<"foto" | "profil" | "3d">("foto");
+  const [mobileTab, setMobileTab] = useState<MobileTab>("foto");
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageStyle = useMemo(
@@ -670,21 +401,13 @@ export default function Home() {
     () => (workProfileSide === "left" ? leftWorkProfile : rightWorkProfile),
     [leftWorkProfile, rightWorkProfile, workProfileSide],
   );
-  const geometryWindowRadius = 2 + Math.round(curveSmoothing / 25);
-  const geometryBlend = Math.min(0.05 + (curveSmoothing / 100) * 0.35, 0.4);
   const geometryLeftWorkProfile = useMemo(
-    () => smoothWorkProfileCurve(leftWorkProfile, {
-      windowRadius: geometryWindowRadius,
-      blend: geometryBlend,
-    }),
-    [geometryBlend, geometryWindowRadius, leftWorkProfile],
+    () => buildGeometryWorkProfile(leftWorkProfile, curveSmoothing),
+    [curveSmoothing, leftWorkProfile],
   );
   const geometryRightWorkProfile = useMemo(
-    () => smoothWorkProfileCurve(rightWorkProfile, {
-      windowRadius: geometryWindowRadius,
-      blend: geometryBlend,
-    }),
-    [geometryBlend, geometryWindowRadius, rightWorkProfile],
+    () => buildGeometryWorkProfile(rightWorkProfile, curveSmoothing),
+    [curveSmoothing, rightWorkProfile],
   );
   const geometryWorkProfile = useMemo(
     () => (workProfileSide === "left" ? geometryLeftWorkProfile : geometryRightWorkProfile),
@@ -712,14 +435,17 @@ export default function Home() {
   const displayedAnchorOverride = anchorEditMode
     ? currentDraftAnchorOverride ?? currentAnchorOverride
     : currentAnchorOverride;
-  const resolvedImageAnchors = useMemo(
-    () => resolveAnchorsForProfile(displayWorkProfile, displayedAnchorOverride),
-    [displayWorkProfile, displayedAnchorOverride],
-  );
-  const imageAnchors = useMemo(
-    () => applyLiveAnchorPreview(displayWorkProfile, resolvedImageAnchors, draggingAnchor, lensPoint),
-    [displayWorkProfile, draggingAnchor, lensPoint, resolvedImageAnchors],
-  );
+  const imageAnchors = useMemo(() => {
+    const { displayedAnchors } = resolveToolAnchors({
+      currentAnchorOverride,
+      displayedAnchorOverride,
+      draggingAnchor,
+      enableLivePreview: true,
+      lensPoint,
+      profile: displayWorkProfile,
+    });
+    return displayedAnchors;
+  }, [currentAnchorOverride, displayWorkProfile, displayedAnchorOverride, draggingAnchor, lensPoint]);
   const outlinePath = useMemo(() => buildSvgPath(toolOutline), [toolOutline]);
   const outlineBounds = useMemo(() => getOutlineBounds(toolOutline), [toolOutline]);
   const rulerLeftGap = 18;
@@ -746,18 +472,60 @@ export default function Home() {
     !anchorEditMode &&
     !segmenting &&
     geometryValidation.valid;
-  const currentStepLabel = !sourceRaster
-    ? "Schritt 1: Bild hochladen"
-    : !markerConfirmed
-      ? "Schritt 1: Marker setzen und bestaetigen"
-      : !currentAnchorsConfirmed || anchorEditMode
-        ? "Schritt 3: Start und Ende pruefen"
-        : "Schritt 4-5: Feintuning und Download";
+  const currentStepLabel = getCurrentStepLabel({
+    anchorEditMode,
+    currentAnchorsConfirmed,
+    hasSourceRaster: Boolean(sourceRaster),
+    markerConfirmed,
+  });
   const footerTone = shouldShowGeometryValidation && geometryValidation.errors[0]
     ? "error"
     : shouldShowGeometryValidation && geometryValidation.warnings[0]
       ? "warning"
       : feedbackTone;
+  const footerNote = getFooterNote({
+    anchorEditMode,
+    currentAnchorsConfirmed,
+    hasPromptPoint: Boolean(promptPoint),
+    hasSourceRaster: Boolean(sourceRaster),
+    validationError: shouldShowGeometryValidation ? geometryValidation.errors[0]?.message ?? null : null,
+    validationWarning:
+      shouldShowGeometryValidation && !geometryValidation.errors[0]
+        ? geometryValidation.warnings[0]?.message ?? null
+        : null,
+  });
+
+  const applyToolGeometryState = (nextState: ToolGeometryState) => {
+    setToolProfile(nextState.toolProfile);
+    setToolOutline(nextState.toolOutline);
+    setToolHoles(nextState.toolHoles);
+    setToolAnchors(nextState.toolAnchors);
+    setResolvedToolWidthMm(nextState.resolvedToolWidthMm);
+    setToolAutoWidened(nextState.toolAutoWidened);
+  };
+
+  const clearToolGeometry = (resolvedWidthMm: number = toolWidthMm) => {
+    applyToolGeometryState(createEmptyToolGeometryState(resolvedWidthMm));
+  };
+
+  const resetDetectedGeometry = () => {
+    setContour([]);
+    setLeftWorkProfile([]);
+    setRightWorkProfile([]);
+    setReferenceBounds(null);
+    setProfileImageSize(null);
+    setUsableColumns(0);
+    clearToolGeometry(toolWidthMm);
+  };
+
+  const resetAnchorWorkflow = () => {
+    setAnchorsConfirmed({ left: false, right: false });
+    setManualAnchorOverrides({ left: null, right: null });
+    setDraftAnchorOverrides({ left: null, right: null });
+    setAnchorEditMode(false);
+    setDraggingAnchor(null);
+    setLensPoint(null);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -765,12 +533,12 @@ export default function Home() {
       .then(() => {
         if (cancelled) return;
         setSegmenterState("ready");
-        setStatus("Bereit. Lade ein Foto hoch und klicke in das Gefaess.");
+        setStatus(pageText.readyStatus);
       })
       .catch(() => {
         if (cancelled) return;
         setSegmenterState("error");
-        setStatus("MediaPipe konnte nicht geladen werden.");
+        setStatus(pageText.segmenterLoadError);
       });
     return () => {
       cancelled = true;
@@ -807,18 +575,7 @@ export default function Home() {
   useEffect(() => {
     if (!sourceRaster || !promptPoint || segmenterState !== "ready") {
       if (!promptPoint) {
-        setContour([]);
-        setLeftWorkProfile([]);
-        setRightWorkProfile([]);
-        setReferenceBounds(null);
-        setProfileImageSize(null);
-        setUsableColumns(0);
-        setToolProfile([]);
-        setToolOutline([]);
-        setToolHoles([]);
-        setToolAnchors(null);
-        setResolvedToolWidthMm(toolWidthMm);
-        setToolAutoWidened(false);
+        resetDetectedGeometry();
       }
       return;
     }
@@ -828,130 +585,47 @@ export default function Home() {
     const runSegmentation = async () => {
       try {
         setSegmenting(true);
-        const { width, height } = getRasterSize(sourceRaster);
-        const workerCanvas = document.createElement("canvas");
-        workerCanvas.width = width;
-        workerCanvas.height = height;
-        const workerContext = workerCanvas.getContext("2d");
-        if (!workerContext) throw new Error("Canvas konnte nicht erstellt werden.");
-
-        workerContext.drawImage(sourceRaster, 0, 0, width, height);
-        const sourceImageData = workerContext.getImageData(0, 0, width, height);
-        const result = await segmentRasterFromPoint(
-          workerCanvas,
-          { x: promptPoint.x / width, y: promptPoint.y / height },
-          DEFAULT_MASK_THRESHOLD,
-        );
-
-        if (cancelled) return;
-
-        const contourSeedPoint = {
-          x: (promptPoint.x / width) * result.width,
-          y: (promptPoint.y / height) * result.height,
-        };
-        let contourImageData = sourceImageData;
-        if (result.width !== width || result.height !== height) {
-          const contourCanvas = document.createElement("canvas");
-          contourCanvas.width = result.width;
-          contourCanvas.height = result.height;
-          const contourContext = contourCanvas.getContext("2d");
-          if (!contourContext) {
-            throw new Error("Kontur-Canvas konnte nicht erstellt werden.");
-          }
-          contourContext.drawImage(sourceRaster, 0, 0, result.width, result.height);
-          contourImageData = contourContext.getImageData(0, 0, result.width, result.height);
-        }
-
-        const contourResult = deriveNormalizedProfileFromMask(
-          result.binaryMask,
-          result.width,
-          result.height,
-          {
-            smoothPasses: DEFAULT_MASK_SMOOTH_PASSES,
-            cropBottomRatio: DEFAULT_CROP_BOTTOM_RATIO,
-            seedPoint: contourSeedPoint,
-          },
-          contourImageData,
-          result.confidence,
-        );
-
-        if (cancelled) return;
-
-        const localGeometryWindowRadius = 2 + Math.round(curveSmoothing / 25);
-        const localGeometryBlend = Math.min(0.05 + (curveSmoothing / 100) * 0.35, 0.4);
-        const smoothedLeftGeometryProfile = smoothWorkProfileCurve(contourResult.leftWorkProfile, {
-          windowRadius: localGeometryWindowRadius,
-          blend: localGeometryBlend,
-        });
-        const smoothedRightGeometryProfile = smoothWorkProfileCurve(contourResult.rightWorkProfile, {
-          windowRadius: localGeometryWindowRadius,
-          blend: localGeometryBlend,
-        });
-        const selectedGeometryProfile =
-          workProfileSide === "left" ? smoothedLeftGeometryProfile : smoothedRightGeometryProfile;
-        const displayedAnchors = resolveAnchorsForProfile(selectedGeometryProfile, displayedAnchorOverride);
-        const confirmedAnchors = resolveAnchorsForProfile(selectedGeometryProfile, currentAnchorOverride);
-        const activeAnchors = anchorsConfirmed[workProfileSide] ? confirmedAnchors : displayedAnchors;
-
-        setContour(contourResult.contour);
-        setLeftWorkProfile(contourResult.leftWorkProfile);
-        setRightWorkProfile(contourResult.rightWorkProfile);
-        setReferenceBounds(contourResult.referenceBounds);
-
-        setProfileImageSize({ width: result.width, height: result.height });
-        setUsableColumns(contourResult.usableColumns);
-
-        setStatus(`Kontur erkannt â€” ${contourResult.usableColumns} Messpunkte. Jetzt links oder rechts im Bild wÃ¤hlen.`);
-        setStatus(
-          `Kontur erkannt - ${contourResult.usableColumns} Messpunkte. Seite bei Bedarf wechseln oder Start/Ende direkt ziehen.`,
-        );
-        const profileForGeometry = activeAnchors
-          ? trimProfileBetweenAnchors(selectedGeometryProfile, activeAnchors)
-          : selectedGeometryProfile;
-        const geometryReferenceBounds =
-          getProfileReferenceBounds(profileForGeometry) ?? contourResult.referenceBounds;
-
-        const ribGeometry = buildRibToolOutline(
-          profileForGeometry,
-          result.width,
-          result.height,
-          toolWidthMm,
-          toolHeightMm,
-          workProfileSide,
-          geometryReferenceBounds,
+        const result = await runSegmentationWorkflow({
+          anchorEditMode,
+          anchorsConfirmedForSide: anchorsConfirmed[workProfileSide],
+          cropBottomRatio: DEFAULT_CROP_BOTTOM_RATIO,
+          currentAnchorOverride,
+          curveSmoothing,
+          displayedAnchorOverride,
+          maskSmoothPasses: DEFAULT_MASK_SMOOTH_PASSES,
+          maskThreshold: DEFAULT_MASK_THRESHOLD,
           printFriendliness,
-          activeAnchors,
-        );
+          promptPoint,
+          sourceRaster,
+          toolHeightMm,
+          toolWidthMm,
+          workProfileSide,
+        });
 
-        setToolProfile(ribGeometry.workEdge);
-        setToolOutline(ribGeometry.outline);
-        setToolHoles(ribGeometry.holes);
-        setToolAnchors(anchorEditMode || !anchorsConfirmed[workProfileSide] ? ribGeometry.anchors : null);
-        setResolvedToolWidthMm(ribGeometry.resolvedWidthMm);
-        setToolAutoWidened(ribGeometry.autoWidened);
-        setStatus(
+        if (cancelled) return;
+
+        setContour(result.contour);
+        setLeftWorkProfile(result.leftWorkProfile);
+        setRightWorkProfile(result.rightWorkProfile);
+        setReferenceBounds(result.referenceBounds);
+        setProfileImageSize(result.profileImageSize);
+        setUsableColumns(result.usableColumns);
+        applyToolGeometryState(result.toolGeometryState);
+        setStatus(result.status);
+
+
+        
+
+        
+        /* `result.status` is already the single success status for this workflow.
           anchorsConfirmed[workProfileSide]
             ? `Bereit — ${contourResult.usableColumns} Messpunkte, ${workProfileSide === "left" ? "links" : "rechts"}.`
             : `Kontur erkannt — jetzt links oder rechts im Bild wählen.`,
-        );
-        if (!anchorsConfirmed[workProfileSide]) {
-          setStatus("Kontur erkannt - aktuelle Seite ist aktiv. Bei Bedarf wechseln oder Start/Ende direkt ziehen.");
-        }
+        */
       } catch (error) {
         if (cancelled) return;
-        setContour([]);
-        setLeftWorkProfile([]);
-        setRightWorkProfile([]);
-        setReferenceBounds(null);
-        setProfileImageSize(null);
-        setUsableColumns(0);
-        setToolProfile([]);
-        setToolOutline([]);
-        setToolHoles([]);
-        setToolAnchors(null);
-        setResolvedToolWidthMm(toolWidthMm);
-        setToolAutoWidened(false);
-        setStatus(error instanceof Error ? error.message : "Segmentierung fehlgeschlagen.");
+        resetDetectedGeometry();
+        setStatus(error instanceof Error ? error.message : pageText.segmentationFailed);
       } finally {
         if (!cancelled) setSegmenting(false);
       }
@@ -965,65 +639,50 @@ export default function Home() {
 
   useEffect(() => {
     if (!profileImageSize || geometryWorkProfile.length === 0) {
-      setToolProfile([]);
-      setToolOutline([]);
-      setToolHoles([]);
-      setToolAnchors(null);
-      setResolvedToolWidthMm(toolWidthMm);
-      setToolAutoWidened(false);
+      clearToolGeometry(toolWidthMm);
       return;
     }
 
-    const displayedAnchors = applyLiveAnchorPreview(
-      geometryWorkProfile,
-      resolveAnchorsForProfile(geometryWorkProfile, displayedAnchorOverride),
+    const { displayedAnchors, confirmedAnchors } = resolveToolAnchors({
+      currentAnchorOverride,
+      displayedAnchorOverride,
       draggingAnchor,
+      enableLivePreview: true,
       lensPoint,
-    );
-    const confirmedAnchors = resolveAnchorsForProfile(geometryWorkProfile, currentAnchorOverride);
-    const activeAnchors = anchorEditMode
-      ? displayedAnchors
-      : currentAnchorsConfirmed
-        ? confirmedAnchors
-        : displayedAnchors;
-    const profileForGeometry = activeAnchors
-      ? trimProfileBetweenAnchors(geometryWorkProfile, activeAnchors)
-      : geometryWorkProfile;
-    const correctedProfileForGeometry = applyHorizontalCorrection(
-      profileForGeometry,
+      profile: geometryWorkProfile,
+    });
+    const activeAnchors = selectActiveAnchors({
+      anchorEditMode,
+      confirmedAnchors,
+      currentAnchorsConfirmed,
+      displayedAnchors,
+    });
+    const { correctedProfile, correctedReferenceBounds } = buildPreparedToolProfile({
+      activeAnchors,
       horizontalCorrectionDeg,
-    );
-    const geometryReferenceBounds =
-      getProfileReferenceBounds(correctedProfileForGeometry) ?? referenceBounds ?? undefined;
+      profile: geometryWorkProfile,
+      referenceBounds,
+    });
 
-    if (correctedProfileForGeometry.length === 0) {
-      setToolProfile([]);
-      setToolOutline([]);
-      setToolHoles([]);
-      setToolAnchors(null);
-      setResolvedToolWidthMm(toolWidthMm);
-      setToolAutoWidened(false);
+    if (correctedProfile.length === 0) {
+      clearToolGeometry(toolWidthMm);
       return;
     }
 
-    const ribGeometry = buildRibToolOutline(
-      correctedProfileForGeometry,
-      profileImageSize.width,
-      profileImageSize.height,
-      toolWidthMm,
-      toolHeightMm,
-      workProfileSide,
-      geometryReferenceBounds,
-      printFriendliness,
-      activeAnchors,
+    applyToolGeometryState(
+      buildToolGeometryState({
+        activeAnchors,
+        imageHeight: profileImageSize.height,
+        imageWidth: profileImageSize.width,
+        printFriendliness,
+        referenceBounds: correctedReferenceBounds,
+        showAnchors: anchorEditMode || !currentAnchorsConfirmed,
+        toolHeightMm,
+        toolWidthMm,
+        workProfile: correctedProfile,
+        workProfileSide,
+      }),
     );
-
-    setToolProfile(ribGeometry.workEdge);
-    setToolOutline(ribGeometry.outline);
-    setToolHoles(ribGeometry.holes);
-    setToolAnchors(anchorEditMode || !currentAnchorsConfirmed ? ribGeometry.anchors : null);
-    setResolvedToolWidthMm(ribGeometry.resolvedWidthMm);
-    setToolAutoWidened(ribGeometry.autoWidened);
   }, [anchorEditMode, currentAnchorOverride, currentAnchorsConfirmed, displayedAnchorOverride, draggingAnchor, geometryWorkProfile, horizontalCorrectionDeg, lensPoint, printFriendliness, profileImageSize, referenceBounds, toolHeightMm, toolWidthMm, workProfileSide]);
 
   const handleImageUpload = async (file: File) => {
@@ -1041,32 +700,15 @@ export default function Home() {
     setMarkerPlacementMode(false);
     setMarkerConfirmed(false);
     setHorizontalCorrectionDeg(0);
-    setContour([]);
-    setLeftWorkProfile([]);
-    setRightWorkProfile([]);
-    setReferenceBounds(null);
-    setProfileImageSize(null);
-    setUsableColumns(0);
-    setToolProfile([]);
-    setResolvedToolWidthMm(toolWidthMm);
-    setToolAutoWidened(false);
-    setToolOutline([]);
-    setToolHoles([]);
-    setAnchorsConfirmed({ left: false, right: false });
-    setManualAnchorOverrides({ left: null, right: null });
-    setDraftAnchorOverrides({ left: null, right: null });
-    setAnchorEditMode(false);
-    setDraggingAnchor(null);
-    setLensPoint(null);
+    resetDetectedGeometry();
+    resetAnchorWorkflow();
 
     if (extremeRatio) {
-      setStatus(
-        `"${file.name}" geladen. Format ist speziell. Aktiviere Schritt 1 und setze dann den Marker.`,
-      );
+      setStatus(getLoadedImageStatus(file.name, true));
       return;
     }
 
-    setStatus(`"${file.name}" geladen. Starte jetzt mit Schritt 1 und setze den Marker im Gefaess.`);
+    setStatus(getLoadedImageStatus(file.name, false));
   };
 
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1084,16 +726,11 @@ export default function Home() {
   const handleCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
     if (anchorEditMode) return;
     if (!canvasRef.current || !sourceRaster || segmenterState !== "ready") return;
-    setAnchorsConfirmed({ left: false, right: false });
-    setManualAnchorOverrides({ left: null, right: null });
-    setDraftAnchorOverrides({ left: null, right: null });
+    resetAnchorWorkflow();
     setMarkerConfirmed(true);
-    setToolProfile([]);
-    setToolOutline([]);
-    setToolHoles([]);
-    setToolAnchors(null);
+    clearToolGeometry(toolWidthMm);
     setPromptPoint(mapCanvasToImage(event, canvasRef.current, sourceRaster));
-    setStatus("Kontur wird erkannt...");
+    setStatus(pageText.segmentationInProgress);
   };
 
   // kept for test-compat
@@ -1103,7 +740,7 @@ export default function Home() {
   const selectSide = (side: WorkProfileSide) => {
     setWorkProfileSide(side);
     setAnchorsConfirmed((prev) => ({ ...prev, [side]: true }));
-    setStatus(`Seite ${side === "left" ? "links" : "rechts"} gewählt — Start/Ende-Punkte ziehen zum Anpassen, oder direkt STL herunterladen.`);
+    setStatus(getSideSelectedStatus(side));
   };
 
   const handleCanvasPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
@@ -1130,7 +767,7 @@ export default function Home() {
     event.currentTarget.setPointerCapture(event.pointerId);
     setDraggingAnchor(handle);
     setLensPoint(handle === "top" ? imageAnchors?.top ?? null : imageAnchors?.bottom ?? null);
-    setStatus(`${handle === "top" ? "Start" : "Ende"} verschieben…`);
+    setStatus(getDraggingAnchorStatus(handle));
   };
 
   const handleCanvasPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
@@ -1190,7 +827,7 @@ export default function Home() {
     }
     setDraggingAnchor(null);
     setLensPoint(null);
-    setStatus("Start und Ende als Entwurf verschoben. Uebernehmen aktualisiert Rib-Profil, 3D und STL.");
+    setStatus(pageText.anchorDraftMoved);
   };
 
   const resetCurrentAnchors = () => {
@@ -1206,7 +843,7 @@ export default function Home() {
       ...previous,
       [workProfileSide]: false,
     }));
-    setStatus("Start und Ende wieder automatisch gesetzt. Bitte erneut bestaetigen.");
+    setStatus(pageText.anchorsReset);
   };
 
   const beginAnchorEditing = () => {
@@ -1225,7 +862,7 @@ export default function Home() {
     setAnchorEditMode(true);
     setDraggingAnchor(null);
     setLensPoint(null);
-    setStatus("Ankerbearbeitung aktiv. Ziehe Start und Ende direkt auf der hellen Kontur.");
+    setStatus(pageText.anchorEditActive);
   };
 
   const cancelAnchorEditing = () => {
@@ -1236,7 +873,7 @@ export default function Home() {
     setAnchorEditMode(false);
     setDraggingAnchor(null);
     setLensPoint(null);
-    setStatus("Ankerbearbeitung verworfen.");
+    setStatus(pageText.anchorEditCancelled);
   };
 
   const applyAnchorEditing = () => {
@@ -1252,7 +889,7 @@ export default function Home() {
     setAnchorEditMode(false);
     setDraggingAnchor(null);
     setLensPoint(null);
-    setStatus("Start und Ende uebernommen. Rib-Profil, 3D-Vorschau und STL sind aktualisiert.");
+    setStatus(pageText.anchorsApplied);
   };
 
   const confirmAutomaticAnchors = () => {
@@ -1260,7 +897,7 @@ export default function Home() {
       ...previous,
       [workProfileSide]: true,
     }));
-    setStatus("Start und Ende bestaetigt. Jetzt kannst du das Rib fein einstellen.");
+    setStatus(pageText.anchorsConfirmed);
   };
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
@@ -1279,7 +916,7 @@ export default function Home() {
     setDragActive(false);
     const file = Array.from(event.dataTransfer.files).find((candidate) => candidate.type.startsWith("image/"));
     if (!file) {
-      setStatus("Bitte ein Bild per Drag-and-Drop hineinziehen.");
+      setStatus(pageText.dropImagePrompt);
       return;
     }
     await handleImageUpload(file);
@@ -1287,32 +924,33 @@ export default function Home() {
 
   const handleDownload = () => {
     if (!sourceRaster || !profileImageSize || geometryWorkProfile.length === 0) {
-      setStatus("Zuerst eine Kontur erkennen, dann STL exportieren.");
+      setStatus(pageText.downloadNeedsContour);
       return;
     }
     if (!geometryValidation.valid) {
-      setStatus(geometryValidation.errors[0]?.message ?? "Die Rib-Geometrie ist noch nicht exportierbar.");
+      setStatus(geometryValidation.errors[0]?.message ?? pageText.geometryNotExportable);
       return;
     }
-    const confirmedAnchors = resolveAnchorsForProfile(geometryWorkProfile, currentAnchorOverride);
-    const profileForExport = currentAnchorsConfirmed
-      ? trimProfileBetweenAnchors(geometryWorkProfile, confirmedAnchors)
-      : geometryWorkProfile;
-    const correctedProfileForExport = applyHorizontalCorrection(
-      profileForExport,
+    const { confirmedAnchors } = resolveToolAnchors({
+      currentAnchorOverride,
+      displayedAnchorOverride: currentAnchorOverride,
+      profile: geometryWorkProfile,
+    });
+    const { correctedProfile, correctedReferenceBounds } = buildPreparedToolProfile({
+      activeAnchors: currentAnchorsConfirmed ? confirmedAnchors : null,
       horizontalCorrectionDeg,
-    );
-    const exportReferenceBounds =
-      getProfileReferenceBounds(correctedProfileForExport) ?? referenceBounds ?? undefined;
+      profile: geometryWorkProfile,
+      referenceBounds,
+    });
     const stl = createExtrudedStl(
-      correctedProfileForExport,
+      correctedProfile,
       profileImageSize.width,
       profileImageSize.height,
       toolWidthMm,
       toolHeightMm,
       thicknessMm,
       workProfileSide,
-      exportReferenceBounds,
+      correctedReferenceBounds,
       printFriendliness,
       currentAnchorsConfirmed ? confirmedAnchors : null,
       bevelStrength,
@@ -1324,7 +962,7 @@ export default function Home() {
     link.download = "rib-tool.stl";
     link.click();
     URL.revokeObjectURL(url);
-    setStatus("STL exportiert.");
+    setStatus(pageText.stlExported);
   };
 
   const buildDiagnosticsSnapshot = () => {
@@ -1405,9 +1043,9 @@ export default function Home() {
   const copyDiagnostics = async () => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(buildDiagnosticsSnapshot(), null, 2));
-      setStatus("Diagnose in die Zwischenablage kopiert.");
+      setStatus(pageText.diagnosticsCopied);
     } catch {
-      setStatus("Diagnose konnte nicht kopiert werden.");
+      setStatus(pageText.diagnosticsCopyFailed);
     }
   };
 
@@ -1423,7 +1061,7 @@ export default function Home() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    setStatus("Diagnose als JSON exportiert.");
+    setStatus(pageText.diagnosticsDownloaded);
   };
 
   const resetSelection = () => {
@@ -1431,124 +1069,54 @@ export default function Home() {
     setMarkerPlacementMode(false);
     setMarkerConfirmed(false);
     setHorizontalCorrectionDeg(0);
-    setContour([]);
-    setLeftWorkProfile([]);
-    setRightWorkProfile([]);
-    setReferenceBounds(null);
-    setProfileImageSize(null);
-    setUsableColumns(0);
-    setToolProfile([]);
-    setToolOutline([]);
-    setToolHoles([]);
-    setToolAnchors(null);
-    setResolvedToolWidthMm(toolWidthMm);
-    setToolAutoWidened(false);
-    setAnchorsConfirmed({ left: false, right: false });
-    setManualAnchorOverrides({ left: null, right: null });
-    setDraftAnchorOverrides({ left: null, right: null });
-    setDraggingAnchor(null);
-    setAnchorEditMode(false);
-    setLensPoint(null);
-    setStatus(sourceRaster ? "Zurueckgesetzt. Klicke erneut ins Gefaess." : initialStatus);
+    resetDetectedGeometry();
+    resetAnchorWorkflow();
+    setStatus(getResetSelectionStatus(Boolean(sourceRaster)));
   };
 
   return (
     <main className={styles.page} style={pageStyle}>
-      {/* ── Ribbon ── */}
-      <div className={styles.ribbon}>
-        {/* Upload */}
-        <label className={styles.uploadBtn}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <polyline points="17 8 12 3 7 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-          Foto
-          <input type="file" accept="image/*" data-testid="upload-input" onChange={(e) => { void handleFile(e); }} className={styles.hiddenInput} />
-        </label>
-
-        <div className={styles.ribbonDivider} />
-
-        {/* Maße */}
-        <div className={styles.ribbonGroup}>
-          <span className={styles.ribbonLabel}>Maße (mm)</span>
-          <div className={styles.dimRow}>
-            <label className={styles.dimField}>
-              H <input type="number" className={styles.numInput} min="60" max="180" step="1"
-                value={heightInput}
-                onChange={(e) => setHeightInput(e.target.value)}
-                onBlur={(e) => updateNumericValue(e.target.value, setToolHeightMm, 60, 180)}
-                onKeyDown={(e) => { if (e.key === "Enter") updateNumericValue(e.currentTarget.value, setToolHeightMm, 60, 180); }}
-                disabled={!canFineTune} data-testid="height-input" />
-            </label>
-            <label className={styles.dimField}>
-              B <input type="number" className={styles.numInput} min="35" max="120" step="1"
-                value={widthInput}
-                onChange={(e) => setWidthInput(e.target.value)}
-                onBlur={(e) => updateNumericValue(e.target.value, setToolWidthMm, 35, 120)}
-                onKeyDown={(e) => { if (e.key === "Enter") updateNumericValue(e.currentTarget.value, setToolWidthMm, 35, 120); }}
-                disabled={!canFineTune} data-testid="width-input" />
-            </label>
-            <label className={styles.dimField}>
-              D <input type="number" className={styles.numInput} min="2" max="10" step="0.1"
-                value={thicknessInput}
-                onChange={(e) => setThicknessInput(e.target.value)}
-                onBlur={(e) => updateNumericValue(e.target.value, setThicknessMm, 2, 10)}
-                onKeyDown={(e) => { if (e.key === "Enter") updateNumericValue(e.currentTarget.value, setThicknessMm, 2, 10); }}
-                disabled={!canFineTune} data-testid="thickness-input" />
-            </label>
-          </div>
-        </div>
-
-        <div className={styles.ribbonDivider} />
-
-        {/* Three sliders side by side */}
-        <div className={styles.sliderRow}>
-          <div className={styles.sliderCell} data-tip="Glättet die erkannte Kontur. Höhere Werte erzeugen weichere Kurven, niedrigere erhalten mehr Originaltreue.">
-            <span className={styles.ribbonLabel}>Glättung <strong>{curveSmoothing}%</strong></span>
-            <input id="smoothing" type="range" min="0" max="100" step="1" value={curveSmoothing}
-              onChange={(e) => setCurveSmoothing(Number(e.target.value))}
-              className={styles.ribbonSlider} disabled={!canFineTune} data-testid="curve-smoothing-slider" />
-          </div>
-          <div className={styles.sliderCell} data-tip="Korrigiert leicht gekippte Aufnahmen fuer die Rib-Geometrie.">
-            <span className={styles.ribbonLabel}>Horizont <strong>{horizontalCorrectionDeg.toFixed(1)} deg</strong></span>
-            <input id="horizontal-correction" type="range" min="-8" max="8" step="0.25" value={horizontalCorrectionDeg}
-              onChange={(e) => setHorizontalCorrectionDeg(Number(e.target.value))}
-              className={styles.ribbonSlider} disabled={!canFineTune} data-testid="horizontal-correction-slider" />
-          </div>
-          <div className={styles.sliderCell} data-tip="Optimiert das Profil für den 3D-Druck. Höhere Werte vermeiden Überhänge und dünne Stellen.">
-            <span className={styles.ribbonLabel}>Druckoptimierung <strong>{printFriendliness}%</strong></span>
-            <input id="print-friendliness" type="range" min="0" max="100" step="1" value={printFriendliness}
-              onChange={(e) => setPrintFriendliness(Number(e.target.value))}
-              className={styles.ribbonSlider} disabled={!canFineTune} data-testid="print-friendliness-slider" />
-          </div>
-          <div className={styles.sliderCell} data-tip="Fügt eine abgerundete Fase an den 3D-Kanten hinzu. Höhere Werte erzeugen stärkere Kantenverrundung.">
-            <span className={styles.ribbonLabel}>3D-Fase <strong>{bevelStrength}%</strong></span>
-            <input id="bevel-strength" type="range" min="0" max="100" step="1" value={bevelStrength}
-              onChange={(e) => setBevelStrength(Number(e.target.value))}
-              className={styles.ribbonSlider} disabled={!canFineTune} data-testid="bevel-strength-slider" />
-          </div>
-        </div>
-
-        <div className={styles.ribbonSpacer} />
-
-        {/* Download */}
-        <button type="button" className={styles.downloadBtn} onClick={handleDownload} disabled={!canDownload} data-testid="download-button">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <polyline points="7 10 12 15 17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-          STL herunterladen
-        </button>
-
-        {/* Reset */}
-        <button type="button" className={styles.resetBtn} onClick={resetSelection} title="Neu starten" data-testid="reset-button">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M3 12a9 9 0 109-9M3 12V6m0 6H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-      </div>
+      <DesktopRibbon
+        bevelStrength={bevelStrength}
+        canDownload={canDownload}
+        canFineTune={canFineTune}
+        curveSmoothing={curveSmoothing}
+        heightInput={heightInput}
+        horizontalCorrectionDeg={horizontalCorrectionDeg}
+        printFriendliness={printFriendliness}
+        thicknessInput={thicknessInput}
+        widthInput={widthInput}
+        onBevelStrengthChange={setBevelStrength}
+        onCurveSmoothingChange={setCurveSmoothing}
+        onDownload={handleDownload}
+        onFileChange={(event) => {
+          void handleFile(event);
+        }}
+        onHeightBlur={(value) => updateNumericValue(value, setToolHeightMm, 60, 180)}
+        onHeightInputChange={setHeightInput}
+        onHeightKeyDown={(event) => {
+          if (event.key === "Enter") {
+            updateNumericValue(event.currentTarget.value, setToolHeightMm, 60, 180);
+          }
+        }}
+        onHorizontalCorrectionChange={setHorizontalCorrectionDeg}
+        onPrintFriendlinessChange={setPrintFriendliness}
+        onReset={resetSelection}
+        onThicknessBlur={(value) => updateNumericValue(value, setThicknessMm, 2, 10)}
+        onThicknessInputChange={setThicknessInput}
+        onThicknessKeyDown={(event) => {
+          if (event.key === "Enter") {
+            updateNumericValue(event.currentTarget.value, setThicknessMm, 2, 10);
+          }
+        }}
+        onWidthBlur={(value) => updateNumericValue(value, setToolWidthMm, 35, 120)}
+        onWidthInputChange={setWidthInput}
+        onWidthKeyDown={(event) => {
+          if (event.key === "Enter") {
+            updateNumericValue(event.currentTarget.value, setToolWidthMm, 35, 120);
+          }
+        }}
+      />
 
       {/* ── Status ── */}
       <div className={styles.statusBar}>
@@ -1561,371 +1129,100 @@ export default function Home() {
       {/* ── Work Area ── */}
       <div className={styles.workArea}>
 
-        {/* Panel 1: Foto */}
-        <section className={styles.panel} data-mobile-tab="foto" data-mobile-active={mobileTab === "foto" || undefined}>
-          <span className={styles.panelLabel}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
-              <polyline points="21 15 16 10 5 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Foto
-          </span>
+        <PhotoPanel
+          anchorEditMode={anchorEditMode}
+          canEditAnchors={canEditAnchors}
+          canvasRef={canvasRef}
+          dragActive={dragActive}
+          hasManualAnchorOverride={Boolean(manualAnchorOverrides[workProfileSide])}
+          hasSourceRaster={Boolean(sourceRaster)}
+          imageAnchors={imageAnchors}
+          mobileActive={mobileTab === "foto"}
+          promptPoint={promptPoint}
+          resolvedToolWidthMm={resolvedToolWidthMm}
+          segmenting={segmenting}
+          showSideSelector={leftWorkProfile.length > 0 && rightWorkProfile.length > 0}
+          toolAutoWidened={toolAutoWidened}
+          workProfileSide={workProfileSide}
+          onApplyAnchorEditing={applyAnchorEditing}
+          onBeginAnchorEditing={beginAnchorEditing}
+          onCancelAnchorEditing={cancelAnchorEditing}
+          onCanvasClick={handleCanvasClick}
+          onCanvasPointerCancel={finishAnchorDrag}
+          onCanvasPointerDown={handleCanvasPointerDown}
+          onCanvasPointerMove={handleCanvasPointerMove}
+          onCanvasPointerUp={finishAnchorDrag}
+          onCanvasTouchMove={(event) => {
+            if (draggingAnchor) event.preventDefault();
+          }}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={(event) => {
+            void handleDrop(event);
+          }}
+          onResetCurrentAnchors={resetCurrentAnchors}
+          onSelectSide={selectSide}
+        />
 
-          <div
-            className={`${styles.canvasWrap} ${dragActive ? styles.canvasWrapDragActive : ""}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={(e) => { void handleDrop(e); }}
-          >
-            <canvas
-              ref={canvasRef}
-              data-testid="original-canvas"
-              className={`${styles.canvas} ${anchorEditMode ? styles.canvasAnchorEdit : ""}`}
-              style={{ touchAction: (canEditAnchors || anchorEditMode || imageAnchors) ? "none" : "manipulation" }}
-              onClick={handleCanvasClick}
-              onPointerDown={handleCanvasPointerDown}
-              onPointerMove={handleCanvasPointerMove}
-              onPointerUp={finishAnchorDrag}
-              onPointerCancel={finishAnchorDrag}
-              onTouchMove={(e) => { if (draggingAnchor) e.preventDefault(); }}
-            />
+        <ProfilePanel
+          anchorEditMode={anchorEditMode}
+          currentAnchorsConfirmed={currentAnchorsConfirmed}
+          mobileActive={mobileTab === "profil"}
+          outlineBounds={outlineBounds}
+          outlinePath={outlinePath}
+          outlineViewBox={outlineViewBox}
+          profilePreviewPath={profilePreviewPath}
+          resolvedToolWidthMm={resolvedToolWidthMm}
+          toolAnchors={toolAnchors}
+          toolHeightMm={toolHeightMm}
+          toolHoles={toolHoles}
+          toolOutline={toolOutline}
+          toolProfile={toolProfile}
+        />
 
-            {/* Empty state */}
-            {!sourceRaster && (
-              <div className={styles.canvasEmpty}>
-                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" aria-hidden style={{ opacity: 0.35 }}>
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  <polyline points="17 8 12 3 7 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                <span>Foto hier hineinziehen oder oben auf «Foto» klicken</span>
-              </div>
-            )}
-
-            {/* Click hint when image loaded but no contour yet */}
-            {sourceRaster && !promptPoint && !segmenting && (
-              <div className={styles.canvasHint}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
-                  <circle cx="12" cy="12" r="3" fill="currentColor" />
-                </svg>
-                Ins Gefäss klicken
-              </div>
-            )}
-
-            {/* L / R side selector — appears after segmentation, hidden during anchor editing */}
-            {leftWorkProfile.length > 0 && rightWorkProfile.length > 0 && !anchorEditMode && (
-              <>
-                <button
-                  type="button"
-                  className={`${styles.sideBtn} ${styles.sideBtnLeft} ${workProfileSide === "left" ? styles.sideBtnActive : ""}`}
-                  onClick={() => selectSide("left")}
-                  data-testid="side-left-button"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
-                    <polyline points="15 18 9 12 15 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Links
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.sideBtn} ${styles.sideBtnRight} ${workProfileSide === "right" ? styles.sideBtnActive : ""}`}
-                  onClick={() => selectSide("right")}
-                  data-testid="side-right-button"
-                >
-                  Rechts
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
-                    <polyline points="9 18 15 12 9 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              </>
-            )}
-
-            {/* Drag hint — shown as soon as anchors appear, fades after a few seconds */}
-            {imageAnchors && !anchorEditMode && (
-              <div key={`${imageAnchors.top.y}-${imageAnchors.bottom.y}`} className={styles.anchorDragHint}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path d="M5 9l-3 3 3 3M19 9l3 3-3 3M9 5l3-3 3 3M9 19l3 3 3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                Start/Ende-Punkte ziehen zum Anpassen
-              </div>
-            )}
-
-            {/* Floating confirm/cancel — top-center */}
-            {anchorEditMode && (
-              <div className={styles.anchorOverlay}>
-                <button
-                  type="button"
-                  className={styles.anchorOverlayApply}
-                  onClick={applyAnchorEditing}
-                  data-testid="anchor-apply-button"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
-                    <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Übernehmen
-                </button>
-                <button
-                  type="button"
-                  className={styles.anchorOverlayCancel}
-                  onClick={cancelAnchorEditing}
-                  data-testid="anchor-cancel-button"
-                >
-                  Abbrechen
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Subtle anchor trigger — only when not editing, only when anchors exist */}
-          {canEditAnchors && !anchorEditMode && (
-            <div className={styles.anchorTrigger}>
-              <button type="button" className={styles.anchorTriggerBtn} onClick={beginAnchorEditing} data-testid="anchor-edit-button">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
-                  <line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  <line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  <line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  <line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                Start/Ende justieren
-              </button>
-              {manualAnchorOverrides[workProfileSide] && (
-                <button type="button" className={styles.anchorTriggerReset} onClick={resetCurrentAnchors} data-testid="anchor-auto-button">
-                  Zurücksetzen
-                </button>
-              )}
-              {toolAutoWidened && (
-                <span className={styles.anchorHint}>Breite auf {resolvedToolWidthMm.toFixed(1)} mm erhöht.</span>
-              )}
-            </div>
-          )}
-
-          {/* Hidden for test-compat */}
-          <button style={{ display: "none" }} type="button" onClick={confirmAutomaticAnchors} data-testid="anchor-confirm-button" />
-        </section>
-
-        {/* Panel 2: 2D Profil */}
-        <section className={styles.panel} data-mobile-tab="profil" data-mobile-active={mobileTab === "profil" || undefined}>
-          <span className={styles.panelLabel}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M3 18 C5 12, 9 6, 12 3 C15 6, 19 12, 21 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <line x1="3" y1="18" x2="21" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            Rib-Profil
-          </span>
-          <div className={styles.previewWrap}>
-            {toolOutline.length > 1 && outlineBounds ? (() => {
-              const rx = outlineBounds.minX - 6.5;
-              const ry1 = outlineBounds.minY;
-              const ry2 = outlineBounds.minY + outlineBounds.height;
-              const rym = (ry1 + ry2) / 2;
-              const bx1 = outlineBounds.minX;
-              const bx2 = outlineBounds.minX + outlineBounds.width;
-              const bxm = (bx1 + bx2) / 2;
-              const by = outlineBounds.minY + outlineBounds.height + 7;
-              const fs = Math.max(3.5, outlineBounds.height * 0.04);
-              const sw = "0.7";
-              const col = "rgba(122,142,110,0.55)";
-              const cap = 2.8;
-              return (
-                <svg className={styles.outlineSvg} data-testid="rib-profile-svg" viewBox={outlineViewBox} preserveAspectRatio="xMidYMid meet" aria-label="2D Rib-Vorschau">
-                  <rect x={outlineBounds.minX} y={outlineBounds.minY} width={outlineBounds.width} height={outlineBounds.height} fill="rgba(255,255,255,0.001)" />
-                  <path className={styles.outlinePath} d={outlinePath} />
-                  {toolHoles.map((hole, index) => (
-                    <circle key={`${hole.center.x}-${hole.center.y}-${index}`} className={styles.holePath} cx={hole.center.x} cy={hole.center.y} r={hole.radius} />
-                  ))}
-                  {toolProfile.length > 1 && <path className={styles.activeProfilePath} d={profilePreviewPath} />}
-                  {toolAnchors && (anchorEditMode || !currentAnchorsConfirmed) && (
-                    <>
-                      <circle className={styles.anchorDot} cx={toolAnchors.top.x} cy={toolAnchors.top.y} r={5.5} />
-                      <text className={styles.anchorLabel} x={toolAnchors.top.x + 9} y={toolAnchors.top.y}>Start</text>
-                      <circle className={styles.anchorDot} cx={toolAnchors.bottom.x} cy={toolAnchors.bottom.y} r={5.5} />
-                      <text className={styles.anchorLabel} x={toolAnchors.bottom.x + 9} y={toolAnchors.bottom.y}>Ende</text>
-                    </>
-                  )}
-
-                  {/* ── Ruler: height (left) ── */}
-                  <line x1={rx} y1={ry1} x2={rx} y2={ry2} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={rx - cap} y1={ry1} x2={rx + cap} y2={ry1} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={rx - cap} y1={ry2} x2={rx + cap} y2={ry2} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <text
-                    x={rx - fs * 0.6}
-                    y={rym}
-                    fontSize={fs}
-                    fill="rgba(122,142,110,0.8)"
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    transform={`rotate(-90,${rx - fs * 0.6},${rym})`}
-                  >{toolHeightMm} mm</text>
-
-                  {/* ── Ruler: width (bottom) ── */}
-                  <line x1={bx1} y1={by} x2={bx2} y2={by} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={bx1} y1={by - cap} x2={bx1} y2={by + cap} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <line x1={bx2} y1={by - cap} x2={bx2} y2={by + cap} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
-                  <text
-                    x={bxm}
-                    y={by + fs * 1.35}
-                    fontSize={fs}
-                    fill="rgba(122,142,110,0.8)"
-                    textAnchor="middle"
-                    dominantBaseline="hanging"
-                  >{resolvedToolWidthMm.toFixed(0)} mm</text>
-                </svg>
-              );
-            })() : (
-              <div className={styles.previewEmpty}>Kontur folgt nach Klick ins Gefäss</div>
-            )}
-          </div>
-        </section>
-
-        {/* Panel 3: 3D */}
-        <section className={styles.panel} data-mobile-tab="3d" data-mobile-active={mobileTab === "3d" || undefined}>
-          <span className={styles.panelLabel}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            3D-Vorschau
-          </span>
-          <div className={`${styles.previewWrap} ${styles.previewWrap3d}`} data-testid="rib-3d-shell">
-            {toolOutline.length > 1 ? (
-              <Rib3DPreview outline={toolOutline} holes={toolHoles} thicknessMm={thicknessMm} bevelStrength={bevelStrength} className={styles.preview3dMount} />
-            ) : (
-              <div className={styles.previewEmpty}>Kontur folgt nach Klick ins Gefäss</div>
-            )}
-          </div>
-        </section>
+        <Preview3DPanel
+          bevelStrength={bevelStrength}
+          mobileActive={mobileTab === "3d"}
+          thicknessMm={thicknessMm}
+          toolHoles={toolHoles}
+          toolOutline={toolOutline}
+        />
       </div>
 
-      {/* ── Mobile Bottom Bar ── */}
-      <div className={styles.mobileBottomBar}>
-        {/* Tab navigation */}
-        <div className={styles.mobileTabs}>
-          <button type="button" className={`${styles.mobileTabBtn} ${mobileTab === "foto" ? styles.mobileTabActive : ""}`} onClick={() => setMobileTab("foto")}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
-              <polyline points="21 15 16 10 5 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Foto
-          </button>
-          <button type="button" className={`${styles.mobileTabBtn} ${mobileTab === "profil" ? styles.mobileTabActive : ""}`} onClick={() => setMobileTab("profil")}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M3 18 C5 12, 9 6, 12 3 C15 6, 19 12, 21 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <line x1="3" y1="18" x2="21" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            Profil
-          </button>
-          <button type="button" className={`${styles.mobileTabBtn} ${mobileTab === "3d" ? styles.mobileTabActive : ""}`} onClick={() => setMobileTab("3d")}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            3D
-          </button>
-        </div>
-
-        {/* Action row */}
-        <div className={styles.mobileActions}>
-          <label className={styles.mobileFab}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="2" />
-            </svg>
-            <input type="file" accept="image/*" data-testid="upload-input-mobile" onChange={(e) => { void handleFile(e); }} className={styles.hiddenInput} />
-          </label>
-
-          <button type="button" className={styles.mobileSheetToggle} onClick={() => setMobileSheetOpen(!mobileSheetOpen)}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden style={{ transform: mobileSheetOpen ? "rotate(180deg)" : undefined, transition: "transform 0.25s" }}>
-              <polyline points="18 15 12 9 6 15" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Einstellungen
-          </button>
-
-          <button type="button" className={styles.mobileFabDownload} onClick={handleDownload} disabled={!canDownload}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <polyline points="7 10 12 15 17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Expandable settings sheet */}
-        <div className={`${styles.mobileSheet} ${mobileSheetOpen ? styles.mobileSheetOpen : ""}`}>
-          <div className={styles.mobileSheetRow}>
-            <label className={styles.mobileSliderGroup}>
-              <span className={styles.mobileSliderLabel}>Glättung <strong>{curveSmoothing}%</strong></span>
-              <input type="range" min="0" max="100" step="1" value={curveSmoothing}
-                onChange={(e) => setCurveSmoothing(Number(e.target.value))}
-                className={styles.mobileSlider} disabled={!canFineTune} />
-            </label>
-            <label className={styles.mobileSliderGroup}>
-              <span className={styles.mobileSliderLabel}>Druckopt. <strong>{printFriendliness}%</strong></span>
-              <input type="range" min="0" max="100" step="1" value={printFriendliness}
-                onChange={(e) => setPrintFriendliness(Number(e.target.value))}
-                className={styles.mobileSlider} disabled={!canFineTune} />
-            </label>
-            <label className={styles.mobileSliderGroup}>
-              <span className={styles.mobileSliderLabel}>Fase <strong>{bevelStrength}%</strong></span>
-              <input type="range" min="0" max="100" step="1" value={bevelStrength}
-                onChange={(e) => setBevelStrength(Number(e.target.value))}
-                className={styles.mobileSlider} disabled={!canFineTune} />
-            </label>
-          </div>
-          <div className={styles.mobileSheetRow}>
-            <label className={styles.mobileSliderGroup}>
-              <span className={styles.mobileSliderLabel}>Horizont <strong>{horizontalCorrectionDeg.toFixed(1)}°</strong></span>
-              <input type="range" min="-8" max="8" step="0.25" value={horizontalCorrectionDeg}
-                onChange={(e) => setHorizontalCorrectionDeg(Number(e.target.value))}
-                className={styles.mobileSlider} disabled={!canFineTune} />
-            </label>
-            <label className={styles.mobileDimField}>
-              H <input type="number" className={styles.mobileNumInput} min="60" max="180" step="1"
-                value={heightInput}
-                onChange={(e) => setHeightInput(e.target.value)}
-                onBlur={(e) => updateNumericValue(e.target.value, setToolHeightMm, 60, 180)}
-                disabled={!canFineTune} />
-            </label>
-            <label className={styles.mobileDimField}>
-              B <input type="number" className={styles.mobileNumInput} min="35" max="120" step="1"
-                value={widthInput}
-                onChange={(e) => setWidthInput(e.target.value)}
-                onBlur={(e) => updateNumericValue(e.target.value, setToolWidthMm, 35, 120)}
-                disabled={!canFineTune} />
-            </label>
-            <label className={styles.mobileDimField}>
-              D <input type="number" className={styles.mobileNumInput} min="2" max="10" step="0.1"
-                value={thicknessInput}
-                onChange={(e) => setThicknessInput(e.target.value)}
-                onBlur={(e) => updateNumericValue(e.target.value, setThicknessMm, 2, 10)}
-                disabled={!canFineTune} />
-            </label>
-          </div>
-          <button type="button" className={styles.mobileResetBtn} onClick={resetSelection}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M3 12a9 9 0 109-9M3 12V6m0 6H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Zurücksetzen
-          </button>
-        </div>
-      </div>
+      <MobileBottomBar
+        bevelStrength={bevelStrength}
+        canDownload={canDownload}
+        canFineTune={canFineTune}
+        curveSmoothing={curveSmoothing}
+        heightInput={heightInput}
+        horizontalCorrectionDeg={horizontalCorrectionDeg}
+        mobileSheetOpen={mobileSheetOpen}
+        mobileTab={mobileTab}
+        printFriendliness={printFriendliness}
+        thicknessInput={thicknessInput}
+        widthInput={widthInput}
+        onBevelStrengthChange={setBevelStrength}
+        onCurveSmoothingChange={setCurveSmoothing}
+        onDownload={handleDownload}
+        onFileChange={(event) => {
+          void handleFile(event);
+        }}
+        onHeightBlur={(value) => updateNumericValue(value, setToolHeightMm, 60, 180)}
+        onHeightInputChange={setHeightInput}
+        onHorizontalCorrectionChange={setHorizontalCorrectionDeg}
+        onPrintFriendlinessChange={setPrintFriendliness}
+        onReset={resetSelection}
+        onTabChange={setMobileTab}
+        onThicknessBlur={(value) => updateNumericValue(value, setThicknessMm, 2, 10)}
+        onThicknessInputChange={setThicknessInput}
+        onToggleSheet={() => setMobileSheetOpen(!mobileSheetOpen)}
+        onWidthBlur={(value) => updateNumericValue(value, setToolWidthMm, 35, 120)}
+        onWidthInputChange={setWidthInput}
+      />
 
       {/* ── Footer ── */}
       <p className={styles.footerNote} data-tone={footerTone}>
-        {shouldShowGeometryValidation && geometryValidation.errors[0]
-          ? geometryValidation.errors[0].message
-          : shouldShowGeometryValidation && geometryValidation.warnings[0]
-          ? geometryValidation.warnings[0].message
-          : anchorEditMode
-          ? "Bearbeitung aktiv — Marker auf der Kontur ziehen, dann Übernehmen."
-          : !sourceRaster
-          ? "Foto hochladen und ins Gefäss klicken — danach links oder rechts wählen."
-          : !promptPoint
-          ? "Direkt ins Gefäss klicken um die Kontur zu erkennen."
-          : !currentAnchorsConfirmed
-          ? "Links oder rechts im Foto wählen um das Profil zu aktivieren."
-          : "Einstellungen anpassen, dann STL herunterladen."}
+        {footerNote}
       </p>
 
       {/* Hidden buttons for test-compat */}

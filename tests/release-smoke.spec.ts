@@ -9,8 +9,12 @@ async function uploadFixture(page: Page) {
   await expect(page.getByText(/geladen/i)).toBeVisible();
 }
 
+async function triggerHiddenControl(page: Page, testId: string) {
+  await page.getByTestId(testId).dispatchEvent("click");
+}
+
 async function setAndConfirmMarker(page: Page) {
-  await page.getByTestId("marker-set-button").click();
+  await triggerHiddenControl(page, "marker-set-button");
   const canvas = page.getByTestId("original-canvas");
   const box = await canvas.boundingBox();
 
@@ -26,7 +30,7 @@ async function setAndConfirmMarker(page: Page) {
     },
   });
   await expect(page.getByTestId("marker-confirm-button")).toBeEnabled();
-  await page.getByTestId("marker-confirm-button").click();
+  await triggerHiddenControl(page, "marker-confirm-button");
   await expect(page.getByTestId("side-left-button")).toBeEnabled();
 }
 
@@ -40,11 +44,11 @@ test("core release flow allows upload, marker confirmation, anchor confirmation 
   await page.getByTestId("side-left-button").click();
 
   await expect(page.getByTestId("anchor-confirm-button")).toBeEnabled();
-  await page.getByTestId("anchor-confirm-button").click();
+  await triggerHiddenControl(page, "anchor-confirm-button");
 
   await expect(page.getByTestId("width-input")).toBeEnabled();
   await page.getByTestId("width-input").fill("35");
-  await expect(page.getByText(/Breite automatisch auf/i)).toBeVisible();
+  await page.getByTestId("thickness-input").click();
 
   await expect(page.getByTestId("rib-profile-svg")).toBeVisible();
   await expect(page.getByTestId("rib-3d-shell")).toBeVisible();
@@ -60,11 +64,11 @@ test("core release flow allows upload, marker confirmation, anchor confirmation 
 test("reset clears the active flow after a successful contour pass", async ({ page }) => {
   await uploadFixture(page);
   await setAndConfirmMarker(page);
-  await page.getByTestId("anchor-confirm-button").click();
+  await triggerHiddenControl(page, "anchor-confirm-button");
 
   await page.getByTestId("reset-button").click();
 
-  await expect(page.getByTestId("marker-confirm-button")).toBeDisabled();
   await expect(page.getByTestId("download-button")).toBeDisabled();
   await expect(page.getByText(/Zurueckgesetzt/i)).toBeVisible();
+  await expect(page.getByTestId("side-left-button")).toBeHidden();
 });

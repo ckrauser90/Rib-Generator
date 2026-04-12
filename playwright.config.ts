@@ -9,11 +9,11 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:3005",
     trace: "on-first-retry",
-    video: "retain-on-failure",
+    video: process.env.CI ? "retain-on-failure" : "off",
   },
   webServer: {
     command:
-      'powershell -Command "npm run build; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm run start -- --hostname 127.0.0.1 --port 3005"',
+      'cmd /c "npm run build && npm run start -- --hostname 127.0.0.1 --port 3005"',
     url: "http://127.0.0.1:3005",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
