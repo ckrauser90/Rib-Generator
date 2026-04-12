@@ -1068,7 +1068,6 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    position: relative;
     transition: height 0.32s ease;
   }
 
@@ -1144,21 +1143,18 @@
   /* Anchor trigger below canvas — reposition */
   .anchorTrigger {
     position: absolute;
-    bottom: 14px;
+    bottom: 8px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 15;
-    white-space: nowrap;
   }
   .anchorTriggerBtn {
-    font-size: 0.85rem;
-    padding: 10px 20px;
-    min-height: 44px;
-    background: rgba(250, 248, 245, 0.95);
-    backdrop-filter: blur(8px);
-    border-radius: 22px;
-    border: 1.5px solid rgba(122, 142, 110, 0.35);
-    box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+    font-size: 0.8rem;
+    padding: 6px 14px;
+    background: rgba(250, 248, 245, 0.9);
+    backdrop-filter: blur(6px);
+    border-radius: 18px;
+    border: 1px solid rgba(122, 142, 110, 0.2);
     text-decoration: none;
   }
 

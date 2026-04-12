@@ -751,19 +751,7 @@ export default function Home() {
     // — prevents blocking marker placement clicks in the early flow
     if (!anchorEditMode && workProfile.length < 2) return;
 
-    let handle = pickAnchorHandle(event, canvasRef.current, sourceRaster, imageAnchors);
-
-    // On mobile in anchor edit mode: if the tap missed the handle hit circle,
-    // fall back to the nearest anchor by Y position so any tap on the canvas works.
-    if (!handle && anchorEditMode && imageAnchors && event.pointerType === "touch") {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const { height } = getRasterSize(sourceRaster);
-      const tapY = ((event.clientY - rect.top) / rect.height) * height;
-      const distTop = Math.abs(tapY - imageAnchors.top.y);
-      const distBottom = Math.abs(tapY - imageAnchors.bottom.y);
-      handle = distTop <= distBottom ? "top" : "bottom";
-    }
-
+    const handle = pickAnchorHandle(event, canvasRef.current, sourceRaster, imageAnchors);
     if (!handle) return;
 
     if (!anchorEditMode) {
