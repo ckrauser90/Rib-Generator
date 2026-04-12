@@ -5,15 +5,9 @@ import { getRasterSize, type RasterSource } from "../lib/perspective";
 import { getContourReadyStatus } from "./page-copy";
 import { buildGeometryWorkProfile } from "./profile-geometry";
 import {
-  buildPreparedToolProfile,
-  resolveToolAnchors,
-  selectActiveAnchors,
-} from "./tool-profile-workflow";
-import {
-  buildToolGeometryState,
-  createEmptyToolGeometryState,
   type ToolGeometryState,
 } from "./tool-geometry";
+import { buildPreparedToolGeometryState } from "./tool-geometry-workflow";
 import type { ManualAnchorOverride } from "./anchor-utils";
 
 type RunSegmentationWorkflowOptions = {
@@ -140,37 +134,22 @@ export const runSegmentationWorkflow = async ({
   );
   const geometryWorkProfile =
     workProfileSide === "left" ? geometryLeftWorkProfile : geometryRightWorkProfile;
-  const { displayedAnchors, confirmedAnchors } = resolveToolAnchors({
-    currentAnchorOverride,
-    displayedAnchorOverride,
-    profile: geometryWorkProfile,
-  });
-  const activeAnchors = selectActiveAnchors({
+  const toolGeometryState = buildPreparedToolGeometryState({
     anchorEditMode,
-    confirmedAnchors,
+    currentAnchorOverride,
     currentAnchorsConfirmed: anchorsConfirmedForSide,
-    displayedAnchors,
-  });
-  const { correctedProfile, correctedReferenceBounds } = buildPreparedToolProfile({
-    activeAnchors,
+    displayedAnchorOverride,
+    imageSize: {
+      width: segmentationResult.width,
+      height: segmentationResult.height,
+    },
+    printFriendliness,
     profile: geometryWorkProfile,
     referenceBounds: contourResult.referenceBounds,
+    toolHeightMm,
+    toolWidthMm,
+    workProfileSide,
   });
-  const toolGeometryState =
-    correctedProfile.length > 0
-      ? buildToolGeometryState({
-          activeAnchors,
-          imageHeight: segmentationResult.height,
-          imageWidth: segmentationResult.width,
-          printFriendliness,
-          referenceBounds: correctedReferenceBounds,
-          showAnchors: anchorEditMode || !anchorsConfirmedForSide,
-          toolHeightMm,
-          toolWidthMm,
-          workProfile: correctedProfile,
-          workProfileSide,
-        })
-      : createEmptyToolGeometryState(toolWidthMm);
 
   return {
     contour: contourResult.contour,

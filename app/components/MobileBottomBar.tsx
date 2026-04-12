@@ -6,7 +6,7 @@ import { pageText } from "../page-copy";
 
 export type MobileTab = "foto" | "profil" | "3d";
 
-type MobileBottomBarProps = {
+export type MobileBottomBarProps = {
   bevelStrength: number;
   canDownload: boolean;
   canFineTune: boolean;

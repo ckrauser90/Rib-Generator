@@ -3,7 +3,7 @@
 import { ChangeEvent, KeyboardEvent } from "react";
 import styles from "../page.module.css";
 
-type DesktopRibbonProps = {
+export type DesktopRibbonProps = {
   bevelStrength: number;
   canDownload: boolean;
   canFineTune: boolean;

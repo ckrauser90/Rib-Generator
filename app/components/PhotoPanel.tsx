@@ -11,7 +11,7 @@ import styles from "../page.module.css";
 import { pageText } from "../page-copy";
 import type { ProfileAnchors, WorkProfileSide } from "../../lib/contour";
 
-type PhotoPanelProps = {
+export type PhotoPanelProps = {
   anchorEditMode: boolean;
   canEditAnchors: boolean;
   canvasRef: RefObject<HTMLCanvasElement | null>;
