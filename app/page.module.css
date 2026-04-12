@@ -1229,27 +1229,54 @@
     padding: 0 16px;
   }
   .mobileSheetOpen {
-    max-height: 300px;
-    padding: 10px 16px 12px;
+    max-height: 340px;
+    padding: 8px 16px 12px;
   }
 
-  .mobileSheetRow {
+  /* Sheet section tabs */
+  .mobileSheetTabs {
     display: flex;
-    align-items: flex-end;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 4px;
     margin-bottom: 10px;
+    background: rgba(122, 142, 110, 0.08);
+    border-radius: 10px;
+    padding: 3px;
+  }
+  .mobileSheetTabBtn {
+    appearance: none;
+    flex: 1;
+    padding: 6px 0;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .mobileSheetTabActive {
+    background: var(--panel);
+    color: var(--accent);
+    box-shadow: 0 1px 4px rgba(62, 56, 50, 0.1);
+  }
+
+  .mobileSheetContent {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .mobileSliderGroup {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    flex: 1;
-    min-width: 80px;
+    gap: 2px;
   }
   .mobileSliderLabel {
-    font-size: 0.65rem;
+    font-size: 0.68rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -1260,10 +1287,40 @@
   .mobileSlider {
     width: 100%;
     accent-color: var(--accent);
-    height: 28px;
+    height: 32px;
     cursor: pointer;
   }
   .mobileSlider:disabled { opacity: 0.35; }
+
+  /* Dimension fields — large touch-friendly inputs */
+  .mobileDimRow {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .mobileDimGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+  }
+  .mobileNumInputLarge {
+    width: 100%;
+    padding: 10px 8px;
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    font: inherit;
+    font-size: 1.1rem;
+    font-weight: 600;
+    text-align: center;
+    color: var(--text);
+  }
+  .mobileNumInputLarge:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+  .mobileNumInputLarge:disabled { opacity: 0.35; }
 
   .mobileDimField {
     display: flex;
@@ -1291,13 +1348,13 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 16px;
+    padding: 10px 16px;
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--panel);
     color: var(--bark-light);
     font: inherit;
-    font-size: 0.76rem;
+    font-size: 0.78rem;
     font-weight: 600;
     cursor: pointer;
     width: 100%;

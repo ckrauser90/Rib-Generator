@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent } from "react";
+import { ChangeEvent, useState } from "react";
 import styles from "../page.module.css";
 import { pageText } from "../page-copy";
 
@@ -35,6 +35,8 @@ type MobileBottomBarProps = {
   onWidthInputChange: (value: string) => void;
 };
 
+type SheetSection = "form" | "masse";
+
 export function MobileBottomBar({
   bevelStrength,
   canDownload,
@@ -63,6 +65,8 @@ export function MobileBottomBar({
   onWidthBlur,
   onWidthInputChange,
 }: MobileBottomBarProps) {
+  const [sheetSection, setSheetSection] = useState<SheetSection>("form");
+
   return (
     <div className={styles.mobileBottomBar}>
       <div className={styles.mobileTabs}>
@@ -140,110 +144,89 @@ export function MobileBottomBar({
       </div>
 
       <div className={`${styles.mobileSheet} ${mobileSheetOpen ? styles.mobileSheetOpen : ""}`}>
-        <div className={styles.mobileSheetRow}>
-          <label className={styles.mobileSliderGroup}>
-            <span className={styles.mobileSliderLabel}>Glättung <strong>{curveSmoothing}%</strong></span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={curveSmoothing}
-              onChange={(event) => onCurveSmoothingChange(Number(event.target.value))}
-              className={styles.mobileSlider}
-              disabled={!canFineTune}
-            />
-          </label>
-          <label className={styles.mobileSliderGroup}>
-            <span className={styles.mobileSliderLabel}>Druckopt. <strong>{printFriendliness}%</strong></span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={printFriendliness}
-              onChange={(event) => onPrintFriendlinessChange(Number(event.target.value))}
-              className={styles.mobileSlider}
-              disabled={!canFineTune}
-            />
-          </label>
-          <label className={styles.mobileSliderGroup}>
-            <span className={styles.mobileSliderLabel}>Fase <strong>{bevelStrength}%</strong></span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={bevelStrength}
-              onChange={(event) => onBevelStrengthChange(Number(event.target.value))}
-              className={styles.mobileSlider}
-              disabled={!canFineTune}
-            />
-          </label>
+        {/* Section switcher */}
+        <div className={styles.mobileSheetTabs}>
+          <button
+            type="button"
+            className={`${styles.mobileSheetTabBtn} ${sheetSection === "form" ? styles.mobileSheetTabActive : ""}`}
+            onClick={() => setSheetSection("form")}
+          >
+            Form
+          </button>
+          <button
+            type="button"
+            className={`${styles.mobileSheetTabBtn} ${sheetSection === "masse" ? styles.mobileSheetTabActive : ""}`}
+            onClick={() => setSheetSection("masse")}
+          >
+            Maße
+          </button>
         </div>
-        <div className={styles.mobileSheetRow}>
-          <label className={styles.mobileSliderGroup}>
-            <span className={styles.mobileSliderLabel}>Horizont <strong>{horizontalCorrectionDeg.toFixed(1)}°</strong></span>
-            <input
-              type="range"
-              min="-8"
-              max="8"
-              step="0.25"
-              value={horizontalCorrectionDeg}
-              onChange={(event) => onHorizontalCorrectionChange(Number(event.target.value))}
-              className={styles.mobileSlider}
-              disabled={!canFineTune}
-            />
-          </label>
-          <label className={styles.mobileDimField}>
-            H{" "}
-            <input
-              type="number"
-              className={styles.mobileNumInput}
-              min="60"
-              max="180"
-              step="1"
-              value={heightInput}
-              onChange={(event) => onHeightInputChange(event.target.value)}
-              onBlur={(event) => onHeightBlur(event.target.value)}
-              disabled={!canFineTune}
-            />
-          </label>
-          <label className={styles.mobileDimField}>
-            B{" "}
-            <input
-              type="number"
-              className={styles.mobileNumInput}
-              min="35"
-              max="120"
-              step="1"
-              value={widthInput}
-              onChange={(event) => onWidthInputChange(event.target.value)}
-              onBlur={(event) => onWidthBlur(event.target.value)}
-              disabled={!canFineTune}
-            />
-          </label>
-          <label className={styles.mobileDimField}>
-            D{" "}
-            <input
-              type="number"
-              className={styles.mobileNumInput}
-              min="2"
-              max="10"
-              step="0.1"
-              value={thicknessInput}
-              onChange={(event) => onThicknessInputChange(event.target.value)}
-              onBlur={(event) => onThicknessBlur(event.target.value)}
-              disabled={!canFineTune}
-            />
-          </label>
-        </div>
-        <button type="button" className={styles.mobileResetBtn} onClick={onReset}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M3 12a9 9 0 109-9M3 12V6m0 6H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          {pageText.anchorResetLabel}
-        </button>
+
+        {sheetSection === "form" && (
+          <div className={styles.mobileSheetContent}>
+            <label className={styles.mobileSliderGroup}>
+              <span className={styles.mobileSliderLabel}>Glättung <strong>{curveSmoothing}%</strong></span>
+              <input type="range" min="0" max="100" step="1" value={curveSmoothing}
+                onChange={(e) => onCurveSmoothingChange(Number(e.target.value))}
+                className={styles.mobileSlider} disabled={!canFineTune} />
+            </label>
+            <label className={styles.mobileSliderGroup}>
+              <span className={styles.mobileSliderLabel}>Druckoptimierung <strong>{printFriendliness}%</strong></span>
+              <input type="range" min="0" max="100" step="1" value={printFriendliness}
+                onChange={(e) => onPrintFriendlinessChange(Number(e.target.value))}
+                className={styles.mobileSlider} disabled={!canFineTune} />
+            </label>
+            <label className={styles.mobileSliderGroup}>
+              <span className={styles.mobileSliderLabel}>3D-Fase <strong>{bevelStrength}%</strong></span>
+              <input type="range" min="0" max="100" step="1" value={bevelStrength}
+                onChange={(e) => onBevelStrengthChange(Number(e.target.value))}
+                className={styles.mobileSlider} disabled={!canFineTune} />
+            </label>
+            <label className={styles.mobileSliderGroup}>
+              <span className={styles.mobileSliderLabel}>Horizont <strong>{horizontalCorrectionDeg.toFixed(1)}°</strong></span>
+              <input type="range" min="-8" max="8" step="0.25" value={horizontalCorrectionDeg}
+                onChange={(e) => onHorizontalCorrectionChange(Number(e.target.value))}
+                className={styles.mobileSlider} disabled={!canFineTune} />
+            </label>
+          </div>
+        )}
+
+        {sheetSection === "masse" && (
+          <div className={styles.mobileSheetContent}>
+            <div className={styles.mobileDimRow}>
+              <label className={styles.mobileDimGroup}>
+                <span className={styles.mobileSliderLabel}>Höhe (mm)</span>
+                <input type="number" className={styles.mobileNumInputLarge} min="60" max="180" step="1"
+                  value={heightInput}
+                  onChange={(e) => onHeightInputChange(e.target.value)}
+                  onBlur={(e) => onHeightBlur(e.target.value)}
+                  disabled={!canFineTune} />
+              </label>
+              <label className={styles.mobileDimGroup}>
+                <span className={styles.mobileSliderLabel}>Breite (mm)</span>
+                <input type="number" className={styles.mobileNumInputLarge} min="35" max="120" step="1"
+                  value={widthInput}
+                  onChange={(e) => onWidthInputChange(e.target.value)}
+                  onBlur={(e) => onWidthBlur(e.target.value)}
+                  disabled={!canFineTune} />
+              </label>
+              <label className={styles.mobileDimGroup}>
+                <span className={styles.mobileSliderLabel}>Dicke (mm)</span>
+                <input type="number" className={styles.mobileNumInputLarge} min="2" max="10" step="0.1"
+                  value={thicknessInput}
+                  onChange={(e) => onThicknessInputChange(e.target.value)}
+                  onBlur={(e) => onThicknessBlur(e.target.value)}
+                  disabled={!canFineTune} />
+              </label>
+            </div>
+            <button type="button" className={styles.mobileResetBtn} onClick={onReset}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M3 12a9 9 0 109-9M3 12V6m0 6H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {pageText.anchorResetLabel}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

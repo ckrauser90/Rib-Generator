@@ -52,7 +52,7 @@ export function Rib3DPreview({ outline, holes, thicknessMm, bevelStrength = 68, 
       setIsUnavailable(false);
 
       const scene = new THREE.Scene();
-      scene.background = new THREE.Color("#F6F2EC");
+      scene.background = new THREE.Color("#EDE7DD");
 
       const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 2000);
 
@@ -74,14 +74,14 @@ export function Rib3DPreview({ outline, holes, thicknessMm, bevelStrength = 68, 
       controls.touches.ONE = THREE.TOUCH.ROTATE;
       controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
 
-      const ambientLight = new THREE.HemisphereLight("#fff6eb", "#cfb397", 1.15);
+      const ambientLight = new THREE.HemisphereLight("#f5f0e8", "#b5a892", 1.2);
       scene.add(ambientLight);
 
-      const keyLight = new THREE.DirectionalLight("#ffffff", 1.15);
+      const keyLight = new THREE.DirectionalLight("#faf8f5", 1.1);
       keyLight.position.set(90, -120, 160);
       scene.add(keyLight);
 
-      const rimLight = new THREE.DirectionalLight("#ffd1ad", 0.7);
+      const rimLight = new THREE.DirectionalLight("#d4c4a8", 0.65);
       rimLight.position.set(-80, 60, 110);
       scene.add(rimLight);
 
@@ -89,9 +89,9 @@ export function Rib3DPreview({ outline, holes, thicknessMm, bevelStrength = 68, 
       geometry.center();
 
       material = new THREE.MeshStandardMaterial({
-        color: "#f2f0eb",
-        roughness: 0.64,
-        metalness: 0.04,
+        color: "#c8bfb0",
+        roughness: 0.72,
+        metalness: 0.02,
       });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.rotation.x = -0.22;
