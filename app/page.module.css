@@ -939,6 +939,72 @@
 
 /* ─── Mobile Bottom Bar (hidden on desktop) ──── */
 .mobileBottomBar { display: none; }
+.mobileInfoBtn { display: none; }
+.mobileInfoPill { display: none; }
+
+/* Mobile info button base styles */
+.mobileInfoBtn {
+  appearance: none;
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  z-index: 55;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(122, 142, 110, 0.25);
+  background: rgba(250, 248, 245, 0.92);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(62, 56, 50, 0.1);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.mobileInfoBtnActive {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.mobileInfoBtnActive .mobileInfoIcon {
+  color: #fff;
+}
+.mobileInfoIcon {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 1rem;
+  font-weight: 700;
+  font-style: italic;
+  color: var(--accent);
+  line-height: 1;
+}
+
+/* Info pill that expands from i-button */
+.mobileInfoPill {
+  position: fixed;
+  top: 10px;
+  right: 52px;
+  left: 12px;
+  z-index: 54;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 16px;
+  background: rgba(250, 248, 245, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(122, 142, 110, 0.18);
+  box-shadow: 0 4px 16px rgba(62, 56, 50, 0.12);
+  animation: fadeInfoIn 0.2s ease both;
+}
+.mobileInfoText {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+@keyframes fadeInfoIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
 
 /* ─── Responsive: Tablet ─────────────────────── */
 @media (max-width: 980px) {
@@ -963,22 +1029,18 @@
   .footerNote { display: none; }
   .panelLabel { display: none; }
 
-  /* Status bar is a floating pill at top */
-  .statusBar {
-    position: fixed;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 50;
-    background: rgba(250, 248, 245, 0.92);
-    backdrop-filter: blur(10px);
-    border-radius: 20px;
-    padding: 5px 14px;
-    border: 1px solid rgba(122, 142, 110, 0.18);
-    box-shadow: 0 4px 14px rgba(62, 56, 50, 0.1);
-    max-width: 88vw;
+  /* Hide full status bar on mobile — replaced by i-button */
+  .statusBar { display: none; }
+
+  /* Mobile info button — top right */
+  .mobileInfoBtn {
+    display: flex;
   }
-  .statusText { font-size: 0.72rem; }
+
+  /* Mobile info pill — appears on tap */
+  .mobileInfoPill {
+    display: flex;
+  }
 
   /* Work area fills available space above bottom bar */
   .workArea {

@@ -387,6 +387,7 @@ export default function Home() {
   const [lensPoint, setLensPoint] = useState<Point | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("foto");
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const [mobileInfoOpen, setMobileInfoOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageStyle = useMemo(
     () =>
@@ -1118,13 +1119,29 @@ export default function Home() {
         }}
       />
 
-      {/* ── Status ── */}
+      {/* ── Status (desktop: full bar, mobile: collapsible i-button) ── */}
       <div className={styles.statusBar}>
         <span className={styles.statusDot} data-state={segmenting ? "loading" : feedbackTone} />
         <p className={styles.statusText}>
           {segmenting ? "Bild wird analysiert..." : status}
         </p>
       </div>
+      <button
+        type="button"
+        className={`${styles.mobileInfoBtn} ${mobileInfoOpen ? styles.mobileInfoBtnActive : ""}`}
+        onClick={() => setMobileInfoOpen(!mobileInfoOpen)}
+        aria-label="Info"
+      >
+        <span className={styles.mobileInfoIcon}>i</span>
+      </button>
+      {mobileInfoOpen && (
+        <div className={styles.mobileInfoPill} onClick={() => setMobileInfoOpen(false)}>
+          <span className={styles.statusDot} data-state={segmenting ? "loading" : feedbackTone} />
+          <p className={styles.mobileInfoText}>
+            {segmenting ? "Bild wird analysiert..." : status}
+          </p>
+        </div>
+      )}
 
       {/* ── Work Area ── */}
       <div className={styles.workArea}>
