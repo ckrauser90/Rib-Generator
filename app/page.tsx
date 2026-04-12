@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, MouseEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, MouseEvent, PointerEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import styles from "./page.module.css";
 import { Rib3DPreview } from "./rib-3d-preview";
 import {
@@ -657,6 +657,14 @@ export default function Home() {
   const [mobileTab, setMobileTab] = useState<"foto" | "profil" | "3d">("foto");
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pageStyle = useMemo(
+    () =>
+      ({
+        "--mobile-bottom-height": mobileSheetOpen ? "380px" : "122px",
+        "--mobile-overlay-top": "82px",
+      }) as CSSProperties,
+    [mobileSheetOpen],
+  );
 
   const workProfile = useMemo(
     () => (workProfileSide === "left" ? leftWorkProfile : rightWorkProfile),
@@ -1445,7 +1453,7 @@ export default function Home() {
   };
 
   return (
-    <main className={styles.page}>
+    <main className={styles.page} style={pageStyle}>
       {/* ── Ribbon ── */}
       <div className={styles.ribbon}>
         {/* Upload */}

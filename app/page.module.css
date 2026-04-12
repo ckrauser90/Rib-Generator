@@ -986,9 +986,9 @@
     gap: 0;
     padding: 0;
     overflow: hidden;
-    /* subtract bottom bar (~120px) and top status (~44px) */
-    height: calc(100dvh - 120px);
+    height: calc(100dvh - var(--mobile-bottom-height, 120px));
     margin-top: 44px;
+    transition: height 0.32s ease;
   }
 
   /* Only active tab panel is visible */
@@ -1005,6 +1005,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    transition: height 0.32s ease;
   }
 
   /* Canvas fills the panel */
@@ -1015,6 +1016,7 @@
     min-height: 0;
     aspect-ratio: auto;
     position: relative;
+    transition: height 0.32s ease, min-height 0.32s ease;
   }
   .canvas {
     width: 100%;
@@ -1034,16 +1036,35 @@
     border-radius: 0;
     border: none;
     aspect-ratio: auto;
+    transition: height 0.32s ease, min-height 0.32s ease;
   }
   .preview3dMount { min-height: 0; height: 100%; }
 
-  /* Anchor overlay & drag hint must clear the bottom bar */
+  /* Anchor overlay — fixed below the floating status pill on mobile */
   .anchorOverlay {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + var(--mobile-overlay-top, 82px));
     bottom: auto;
-    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 70;
+    padding: 8px 10px;
+    animation: fadeUp 0.2s ease both;
+    max-width: calc(100vw - 20px);
+    white-space: normal;
+    justify-content: center;
+  }
+  .anchorOverlayApply {
+    padding: 8px 18px;
+    font-size: 0.85rem;
+  }
+  .anchorOverlayCancel {
+    padding: 8px 14px;
+    font-size: 0.85rem;
   }
   .anchorDragHint {
-    bottom: 12px;
+    bottom: 130px;
+    z-index: 65;
   }
 
   /* Side buttons bigger for touch */
