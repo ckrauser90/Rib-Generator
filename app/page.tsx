@@ -5,9 +5,9 @@ import styles from "./page.module.css";
 import {
   anchorsToOverride,
   getClosestProfilePointToPoint,
+  mapGestureToImagePoint,
   pickAnchorHandle,
   type AnchorHandle,
-  type AnchorGestureEvent,
   type ManualAnchorOverride,
 } from "./anchor-utils";
 import {
@@ -71,19 +71,6 @@ const loadImageFromUrl = (url: string) =>
     image.onerror = () => reject(new Error("Bild konnte nicht geladen werden."));
     image.src = url;
   });
-
-const mapCanvasToImage = (
-  event: AnchorGestureEvent,
-  canvas: HTMLCanvasElement,
-  image: RasterSource,
-) => {
-  const rect = canvas.getBoundingClientRect();
-  const { width, height } = getRasterSize(image);
-  return {
-    x: ((event.clientX - rect.left) / rect.width) * width,
-    y: ((event.clientY - rect.top) / rect.height) * height,
-  };
-};
 
 const drawAnchor = (
   context: CanvasRenderingContext2D,
@@ -730,7 +717,7 @@ export default function Home() {
     resetAnchorWorkflow();
     setMarkerConfirmed(true);
     clearToolGeometry(toolWidthMm);
-    setPromptPoint(mapCanvasToImage(event, canvasRef.current, sourceRaster));
+    setPromptPoint(mapGestureToImagePoint(event, canvasRef.current, sourceRaster));
     setStatus(pageText.segmentationInProgress);
   };
 
@@ -777,7 +764,7 @@ export default function Home() {
     }
 
     event.preventDefault();
-    const point = mapCanvasToImage(event, canvasRef.current, sourceRaster);
+    const point = mapGestureToImagePoint(event, canvasRef.current, sourceRaster);
     const snappedPoint = getClosestProfilePointToPoint(workProfile, point);
     if (!snappedPoint) {
       return;

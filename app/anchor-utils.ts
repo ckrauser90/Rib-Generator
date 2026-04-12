@@ -14,6 +14,44 @@ export type AnchorGestureEvent = {
   pointerType?: string;
 };
 
+type RenderedCanvasFrame = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const getRenderedCanvasFrame = (canvas: HTMLCanvasElement): RenderedCanvasFrame => {
+  const rect = canvas.getBoundingClientRect();
+  const intrinsicWidth = canvas.width > 0 ? canvas.width : rect.width;
+  const intrinsicHeight = canvas.height > 0 ? canvas.height : rect.height;
+
+  if (rect.width <= 0 || rect.height <= 0 || intrinsicWidth <= 0 || intrinsicHeight <= 0) {
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: Math.max(rect.width, 1),
+      height: Math.max(rect.height, 1),
+    };
+  }
+
+  const scale = Math.min(rect.width / intrinsicWidth, rect.height / intrinsicHeight);
+  const width = intrinsicWidth * scale;
+  const height = intrinsicHeight * scale;
+  const offsetX = (rect.width - width) / 2;
+  const offsetY = (rect.height - height) / 2;
+
+  return {
+    left: rect.left + offsetX,
+    top: rect.top + offsetY,
+    width: Math.max(width, 1),
+    height: Math.max(height, 1),
+  };
+};
+
 const getClosestProfilePointByY = (profile: Point[], targetY: number) => {
   if (profile.length === 0) {
     return null;
@@ -51,6 +89,22 @@ export const getClosestProfilePointToPoint = (profile: Point[], target: Point) =
   }
 
   return best;
+};
+
+export const mapGestureToImagePoint = (
+  event: AnchorGestureEvent,
+  canvas: HTMLCanvasElement,
+  image: RasterSource,
+): Point => {
+  const frame = getRenderedCanvasFrame(canvas);
+  const { width, height } = getRasterSize(image);
+  const relativeX = clamp(event.clientX - frame.left, 0, frame.width);
+  const relativeY = clamp(event.clientY - frame.top, 0, frame.height);
+
+  return {
+    x: (relativeX / frame.width) * width,
+    y: (relativeY / frame.height) * height,
+  };
 };
 
 export const resolveAnchorsForProfile = (
@@ -154,20 +208,20 @@ export const pickAnchorHandle = (
 ): AnchorHandle | null => {
   if (!anchors) return null;
 
-  const rect = canvas.getBoundingClientRect();
+  const frame = getRenderedCanvasFrame(canvas);
   const { width, height } = getRasterSize(image);
   const candidatePoints = [
     { handle: "top" as const, point: anchors.top },
     { handle: "bottom" as const, point: anchors.bottom },
   ];
 
-  const hitRadius = event.pointerType === "touch" ? 48 : event.pointerType === "pen" ? 30 : 18;
+  const hitRadius = event.pointerType === "touch" ? 56 : event.pointerType === "pen" ? 32 : 18;
 
   for (const candidate of candidatePoints) {
-    const x = (candidate.point.x / width) * rect.width;
-    const y = (candidate.point.y / height) * rect.height;
-    const dx = event.clientX - rect.left - x;
-    const dy = event.clientY - rect.top - y;
+    const x = frame.left + (candidate.point.x / width) * frame.width;
+    const y = frame.top + (candidate.point.y / height) * frame.height;
+    const dx = event.clientX - x;
+    const dy = event.clientY - y;
     if (Math.hypot(dx, dy) <= hitRadius) {
       return candidate.handle;
     }

@@ -164,6 +164,17 @@ This means:
 
 Because PowerShell may block `npm.ps1`, Windows commands should usually go through `cmd /c`.
 
+Agent CLI preference:
+
+- Prefer `rtk.exe` for routine shell usage to keep command output compact and token-efficient.
+- Use native commands only when raw, unfiltered output is specifically needed.
+- Typical examples:
+  - `rtk read app/page.tsx`
+  - `rtk git status`
+  - `rtk diff`
+  - `rtk next build`
+  - `rtk playwright test`
+
 Useful commands:
 
 ```powershell
@@ -275,4 +286,3 @@ Do this first:
 5. Only then dive into `lib/contour.ts`
 
 Do not start by reading `lib/contour.ts` linearly unless your task is explicitly geometry-heavy.
-
