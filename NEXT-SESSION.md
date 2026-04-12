@@ -1,31 +1,48 @@
 # Next Session
 
-## Current Stable Baseline
+Last updated: 2026-04-12
 
-- Bubble-style bevel was tuned to match the OBJ reference more closely.
-- The upload image keeps its aspect ratio now, and the reload button was visually cleaned up.
-- MediaPipe gets reset between image uploads, so repeated tests no longer degrade over time.
-- The conservative mode stays the baseline:
-  - raw detected work profiles remain the source of truth
-  - normalized profiles are preserved separately for a later assistive mode
-- Preview contour and geometry contour are separated:
-  - preview can be smoothed tightly for readability
-  - STL/3D geometry still uses its own geometry profile
-- Boundary snapping was improved with continuity-aware forward/backward passes, which fixed the visible side spikes on the latest cup test.
+## Current Stable Baseline (main @ b3cb8cf)
 
-## What To Test First Tomorrow
+Mobile UX was significantly improved this session:
 
-- Re-run 2-3 additional cup photos, especially glossy or highly textured glazes.
-- Verify that preview line, anchor positions, 3D preview, and exported STL still agree closely on those images.
-- Check whether the latest boundary snapping also behaves well near the rim and near the base transition.
+- Mobile settings sheet split into Form/Maße tabs (sliders vs. dimension inputs)
+- Dimension inputs are large and touch-friendly (min-height 44px)
+- 3D preview colors match the earthy site palette (linen/clay tones)
+- Status bar hidden on mobile, replaced by collapsible i-button (top-right)
+- Ruler no longer disappears when bottom sheet is open (overflow: visible fix)
+- Anchor overlay (Übernehmen/Abbrechen) is fixed at top of canvas on mobile
 
-## Most Likely Next Improvement
+## Known Open Problem: Mobile Anchor Drag
 
-- Add a true local boundary-band refinement step only around the active outer edge.
-- Goal: remove remaining micro-zigzags on difficult ceramic surfaces without changing the conservative baseline into a hallucinatory one.
+The Start/Ende anchor drag still doesn't work reliably on mobile.
+One attempt was made (tap-anywhere fallback in pointerDown) — reverted, no improvement.
+
+Root cause is not fully diagnosed. What to investigate next time:
+- Confirm that `touchAction: "none"` is actually applied to the canvas before the first touch
+- Log `event.pointerType`, `clientX/Y`, `rect`, and computed anchor CSS position to check coordinate mapping
+- Check if the `onClick` fires after a failed pointerDown on touch and causes re-segmentation
+- Consider an alternative UX: dedicated up/down step buttons in the bottom sheet for Start/Ende (no canvas drag required)
+
+Do NOT retry the tap-anywhere-on-canvas fallback approach — it was tried and reverted.
+
+## Next Improvements (priority order)
+
+1. Fix mobile anchor drag — either debug the coordinate issue or switch to a step-button UX
+2. Local boundary-band refinement around the active edge only (conservative, not generative)
+3. Unit tests for pure helpers (resolveAnchorsForProfile, trimProfileBetweenAnchors)
+4. Continue maintainability refactor of page.tsx
 
 ## Guardrails To Keep
 
 - Conservative mode must always remain the recoverable default.
-- Any future assistive mode should consume `normalizedWorkProfile` and stay opt-in.
 - Do not let preview-only smoothing silently alter export geometry.
+- displayWorkProfile ≠ geometryWorkProfile — do not merge.
+- Any future assistive mode must stay optional and consume normalizedWorkProfile.
+
+## RTK Reminder
+
+Always prefix shell commands with `rtk`:
+- `rtk git status`, `rtk git diff`, `rtk git log`
+- `rtk npx tsc --noEmit`
+- `rtk next build`

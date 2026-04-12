@@ -2,7 +2,7 @@
 
 Project guide for Claude Code and future agent sessions.
 
-Last updated: 2026-04-12
+Last updated: 2026-04-12 (session 2)
 
 ## 1. What This Project Is
 
@@ -225,7 +225,15 @@ If you need to change this app safely:
   - 3D tab
   - sheet open / closed
 
-## 11. Known Open Work
+## 11. Known Failed Approaches
+
+Do NOT retry these — they were attempted and reverted:
+
+- **Mobile anchor drag: tap-anywhere canvas fallback** (2026-04-12)
+  Added a fallback in `handleCanvasPointerDown` that in anchor edit mode snapped to the nearest anchor by Y for any touch tap. Reverted — did not solve the underlying problem.
+  Commit: `4e2c364`, reverted in `b3cb8cf`.
+
+## 12. Known Open Work
 
 Maintainability / architecture:
 
@@ -247,7 +255,7 @@ Mobile UX:
 - Anchor editing can likely still become more finger-friendly
 - Keep large touch targets and bottom-area actions
 
-## 12. Current Priorities
+## 13. Current Priorities
 
 If you need to decide what to do next, this is the recommended order:
 
@@ -256,7 +264,7 @@ If you need to decide what to do next, this is the recommended order:
 3. Only then continue with contour-quality / bug work
 4. Preserve conservative mode while improving quality
 
-## 13. If You Are New To The Repo
+## 14. If You Are New To The Repo
 
 Do this first:
 
