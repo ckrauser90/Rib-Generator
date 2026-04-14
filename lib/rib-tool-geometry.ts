@@ -717,17 +717,17 @@ export const buildRibToolOutline = (
   const stabilizedProfile = suppressProfileSpikes(profile);
   const friendlinessFactor = clamp(printFriendliness / 100, 0, 1);
   const simplifyToleranceMm = clamp(
-    (0.18 + cavityDepthMm * 0.014) * lerp(0.72, 1.85, friendlinessFactor),
+    (0.18 + cavityDepthMm * 0.014) * lerp(0.72, 3.2, friendlinessFactor),
     0.24,
-    1.35,
+    2.8,
   );
   const simplifiedProfile = simplifyPolylineRdp(stabilizedProfile, simplifyToleranceMm);
   const targetProfileCount = clamp(
     Math.max(
-      Math.round(totalHeight / lerp(1.25, 2.35, friendlinessFactor)),
-      Math.round(simplifiedProfile.length * lerp(3.4, 2.1, friendlinessFactor)),
+      Math.round(totalHeight / lerp(1.25, 4.0, friendlinessFactor)),
+      Math.round(simplifiedProfile.length * lerp(3.4, 1.4, friendlinessFactor)),
     ),
-    42,
+    24,
     132,
   );
   const topY = 0;

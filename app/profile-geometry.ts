@@ -7,8 +7,8 @@ const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
 export const getGeometrySmoothingConfig = (smoothingStrength: number) => ({
-  windowRadius: 2 + Math.round(smoothingStrength / 25),
-  blend: Math.min(0.05 + (smoothingStrength / 100) * 0.35, 0.4),
+  windowRadius: 2 + Math.round(smoothingStrength / 14),
+  blend: Math.min(0.05 + (smoothingStrength / 100) * 0.7, 0.75),
 });
 
 export const buildGeometryWorkProfile = (profile: Point[], smoothingStrength: number) => {
