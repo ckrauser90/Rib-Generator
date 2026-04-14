@@ -36,17 +36,17 @@ test("mobile sheet tab switch shows Maße inputs and hides sliders", async ({ pa
   await setupConfirmedFlow(page);
   await page.getByTestId("mobile-sheet-toggle").click();
 
-  // Form tab is default — sliders visible, dimension inputs not
+  // Form tab is default — range sliders visible, dimension inputs not
   await expect(page.getByTestId("mobile-sheet-tab-form")).toBeVisible();
-  await expect(page.locator('[class*="mobileSlider"]').first()).toBeVisible();
+  await expect(page.locator('input[type="range"]').first()).toBeVisible();
   await expect(page.getByTestId("mobile-height-input")).not.toBeVisible();
 
-  // Switch to Maße
+  // Switch to Maße — dimension inputs visible, range sliders gone
   await page.getByTestId("mobile-sheet-tab-masse").click();
   await expect(page.getByTestId("mobile-height-input")).toBeVisible();
   await expect(page.getByTestId("mobile-width-input")).toBeVisible();
   await expect(page.getByTestId("mobile-thickness-input")).toBeVisible();
-  await expect(page.locator('[class*="mobileSlider"]').first()).not.toBeVisible();
+  await expect(page.locator('input[type="range"]').first()).not.toBeVisible();
 });
 
 test("mobile sheet Maße inputs are disabled before anchor confirmation", async ({ page }) => {
