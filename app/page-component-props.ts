@@ -61,6 +61,7 @@ type BuildPhotoPanelPropsOptions = {
   onDragLeave: PhotoPanelProps["onDragLeave"];
   onDragOver: PhotoPanelProps["onDragOver"];
   onDrop: (event: Parameters<PhotoPanelProps["onDrop"]>[0]) => Promise<void>;
+  onFileChange: PhotoPanelProps["onFileChange"];
   onResetCurrentAnchors: () => void;
   onSelectSide: (side: WorkProfileSide) => void;
 };
@@ -206,6 +207,7 @@ export const buildPhotoPanelProps = ({
   onDragLeave,
   onDragOver,
   onDrop,
+  onFileChange,
   onResetCurrentAnchors,
   onSelectSide,
 }: BuildPhotoPanelPropsOptions): PhotoPanelProps => ({
@@ -241,6 +243,7 @@ export const buildPhotoPanelProps = ({
   onDrop: (event) => {
     void onDrop(event);
   },
+  onFileChange,
   onResetCurrentAnchors,
   onSelectSide,
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  ChangeEvent,
   DragEventHandler,
   MouseEventHandler,
   PointerEventHandler,
@@ -38,6 +39,7 @@ export type PhotoPanelProps = {
   onDragLeave: DragEventHandler<HTMLDivElement>;
   onDragOver: DragEventHandler<HTMLDivElement>;
   onDrop: DragEventHandler<HTMLDivElement>;
+  onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onResetCurrentAnchors: () => void;
   onSelectSide: (side: WorkProfileSide) => void;
 };
@@ -69,6 +71,7 @@ export function PhotoPanel({
   onDragLeave,
   onDragOver,
   onDrop,
+  onFileChange,
   onResetCurrentAnchors,
   onSelectSide,
 }: PhotoPanelProps) {
@@ -106,12 +109,33 @@ export function PhotoPanel({
 
         {!hasSourceRaster && (
           <div className={styles.canvasEmpty}>
-            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" aria-hidden style={{ opacity: 0.35 }}>
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <polyline points="17 8 12 3 7 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            <span>{pageText.dropzoneHint}</span>
+            {mobileActive ? (
+              <label className={styles.mobileUploadCta}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <circle cx="12" cy="12" r="11" stroke="currentColor" strokeWidth="1.5" />
+                  <line x1="12" y1="7" x2="12" y2="17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="7" y1="12" x2="17" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span>Foto hochladen</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  data-testid="upload-input-mobile-cta"
+                  onChange={onFileChange}
+                  className={styles.hiddenInput}
+                />
+              </label>
+            ) : (
+              <>
+                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" aria-hidden style={{ opacity: 0.35 }}>
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <polyline points="17 8 12 3 7 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <span>{pageText.dropzoneHint}</span>
+              </>
+            )}
           </div>
         )}
 

@@ -418,6 +418,7 @@ export default function Home() {
     onDragLeave: handleDragLeave,
     onDragOver: handleDragOver,
     onDrop: handleDrop,
+    onFileChange: (event) => { void handleFile(event); },
     onResetCurrentAnchors: resetCurrentAnchors,
     onSelectSide: selectSide,
   });
