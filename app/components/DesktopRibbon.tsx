@@ -2,6 +2,7 @@
 
 import { ChangeEvent, KeyboardEvent } from "react";
 import styles from "../page.module.css";
+import { SliderControl } from "./SliderControl";
 
 export type DesktopRibbonProps = {
   bevelStrength: number;
@@ -129,75 +130,31 @@ export function DesktopRibbon({
       <div className={styles.ribbonDivider} />
 
       <div className={styles.sliderRow}>
-        <div
-          className={styles.sliderCell}
-          data-tip="Glättet die erkannte Kontur. Höhere Werte erzeugen weichere Kurven, niedrigere erhalten mehr Originaltreue."
-        >
-          <span className={styles.ribbonLabel}>Glättung <strong>{curveSmoothing}%</strong></span>
-          <input
-            id="smoothing"
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={curveSmoothing}
-            onChange={(event) => onCurveSmoothingChange(Number(event.target.value))}
-            className={styles.ribbonSlider}
-            disabled={!canFineTune}
-            data-testid="curve-smoothing-slider"
-          />
-        </div>
-        <div className={styles.sliderCell} data-tip="Korrigiert leicht gekippte Aufnahmen fuer die Rib-Geometrie.">
-          <span className={styles.ribbonLabel}>Horizont <strong>{horizontalCorrectionDeg.toFixed(1)} deg</strong></span>
-          <input
-            id="horizontal-correction"
-            type="range"
-            min="-8"
-            max="8"
-            step="0.25"
-            value={horizontalCorrectionDeg}
-            onChange={(event) => onHorizontalCorrectionChange(Number(event.target.value))}
-            className={styles.ribbonSlider}
-            disabled={!canFineTune}
-            data-testid="horizontal-correction-slider"
-          />
-        </div>
-        <div
-          className={styles.sliderCell}
-          data-tip="Optimiert das Profil für den 3D-Druck. Höhere Werte vermeiden Überhänge und dünne Stellen."
-        >
-          <span className={styles.ribbonLabel}>Druckoptimierung <strong>{printFriendliness}%</strong></span>
-          <input
-            id="print-friendliness"
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={printFriendliness}
-            onChange={(event) => onPrintFriendlinessChange(Number(event.target.value))}
-            className={styles.ribbonSlider}
-            disabled={!canFineTune}
-            data-testid="print-friendliness-slider"
-          />
-        </div>
-        <div
-          className={styles.sliderCell}
-          data-tip="Fügt eine abgerundete Fase an den 3D-Kanten hinzu. Höhere Werte erzeugen stärkere Kantenverrundung."
-        >
-          <span className={styles.ribbonLabel}>3D-Fase <strong>{bevelStrength}%</strong></span>
-          <input
-            id="bevel-strength"
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={bevelStrength}
-            onChange={(event) => onBevelStrengthChange(Number(event.target.value))}
-            className={styles.ribbonSlider}
-            disabled={!canFineTune}
-            data-testid="bevel-strength-slider"
-          />
-        </div>
+        <SliderControl
+          label="Glättung" value={curveSmoothing} min={0} max={100} step={1} defaultValue={34}
+          tooltip="Glättet die erkannte Kontur. Höhere Werte erzeugen weichere Kurven, niedrigere erhalten mehr Originaltreue."
+          disabled={!canFineTune} onChange={onCurveSmoothingChange}
+          className={styles.sliderCell} sliderClassName={styles.ribbonSlider}
+          testId="curve-smoothing-slider" />
+        <SliderControl
+          label="Horizont" value={horizontalCorrectionDeg} min={-8} max={8} step={0.25} defaultValue={0}
+          unit="°" formatValue={(v) => `${v.toFixed(1)}°`}
+          tooltip="Korrigiert leicht gekippte Aufnahmen für die Rib-Geometrie. Doppelklick setzt zurück."
+          disabled={!canFineTune} onChange={onHorizontalCorrectionChange}
+          className={styles.sliderCell} sliderClassName={styles.ribbonSlider}
+          testId="horizontal-correction-slider" />
+        <SliderControl
+          label="Druckoptimierung" value={printFriendliness} min={0} max={100} step={1} defaultValue={58}
+          tooltip="Optimiert das Profil für den 3D-Druck. Höhere Werte vermeiden Überhänge und dünne Stellen."
+          disabled={!canFineTune} onChange={onPrintFriendlinessChange}
+          className={styles.sliderCell} sliderClassName={styles.ribbonSlider}
+          testId="print-friendliness-slider" />
+        <SliderControl
+          label="3D-Fase" value={bevelStrength} min={0} max={100} step={1} defaultValue={68}
+          tooltip="Fügt eine abgerundete Fase an den 3D-Kanten hinzu. Höhere Werte erzeugen stärkere Kantenverrundung."
+          disabled={!canFineTune} onChange={onBevelStrengthChange}
+          className={styles.sliderCell} sliderClassName={styles.ribbonSlider}
+          testId="bevel-strength-slider" />
       </div>
 
       <div className={styles.ribbonSpacer} />

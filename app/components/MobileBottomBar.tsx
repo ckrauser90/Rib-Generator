@@ -3,6 +3,7 @@
 import { ChangeEvent, useCallback, useState } from "react";
 import styles from "../page.module.css";
 import { pageText } from "../page-copy";
+import { SliderControl } from "./SliderControl";
 
 export type MobileTab = "foto" | "profil" | "3d";
 
@@ -211,30 +212,23 @@ export function MobileBottomBar({
 
         {sheetSection === "form" && (
           <div className={styles.mobileSheetContent}>
-            <label className={styles.mobileSliderGroup}>
-              <span className={styles.mobileSliderLabel}>Glättung <strong>{curveSmoothing}%</strong></span>
-              <input type="range" min="0" max="100" step="1" value={curveSmoothing}
-                onChange={(e) => onCurveSmoothingChange(Number(e.target.value))}
-                className={styles.mobileSlider} disabled={!canFineTune} />
-            </label>
-            <label className={styles.mobileSliderGroup}>
-              <span className={styles.mobileSliderLabel}>Druckoptimierung <strong>{printFriendliness}%</strong></span>
-              <input type="range" min="0" max="100" step="1" value={printFriendliness}
-                onChange={(e) => onPrintFriendlinessChange(Number(e.target.value))}
-                className={styles.mobileSlider} disabled={!canFineTune} />
-            </label>
-            <label className={styles.mobileSliderGroup}>
-              <span className={styles.mobileSliderLabel}>3D-Fase <strong>{bevelStrength}%</strong></span>
-              <input type="range" min="0" max="100" step="1" value={bevelStrength}
-                onChange={(e) => onBevelStrengthChange(Number(e.target.value))}
-                className={styles.mobileSlider} disabled={!canFineTune} />
-            </label>
-            <label className={styles.mobileSliderGroup}>
-              <span className={styles.mobileSliderLabel}>Horizont <strong>{horizontalCorrectionDeg.toFixed(1)}°</strong></span>
-              <input type="range" min="-8" max="8" step="0.25" value={horizontalCorrectionDeg}
-                onChange={(e) => onHorizontalCorrectionChange(Number(e.target.value))}
-                className={styles.mobileSlider} disabled={!canFineTune} />
-            </label>
+            <SliderControl
+              label="Glättung" value={curveSmoothing} min={0} max={100} step={1} defaultValue={34}
+              tooltip="Glättet die erkannte Kontur. Höhere Werte erzeugen weichere Kurven."
+              disabled={!canFineTune} onChange={onCurveSmoothingChange} />
+            <SliderControl
+              label="Druckoptimierung" value={printFriendliness} min={0} max={100} step={1} defaultValue={58}
+              tooltip="Optimiert das Profil für den 3D-Druck. Vermeidet Überhänge und dünne Stellen."
+              disabled={!canFineTune} onChange={onPrintFriendlinessChange} />
+            <SliderControl
+              label="3D-Fase" value={bevelStrength} min={0} max={100} step={1} defaultValue={68}
+              tooltip="Fügt eine abgerundete Fase an den 3D-Kanten hinzu."
+              disabled={!canFineTune} onChange={onBevelStrengthChange} />
+            <SliderControl
+              label="Horizont" value={horizontalCorrectionDeg} min={-8} max={8} step={0.25} defaultValue={0}
+              unit="°" formatValue={(v) => `${v.toFixed(1)}°`}
+              tooltip="Korrigiert leicht gekippte Aufnahmen für die Rib-Geometrie. Doppeltippen setzt zurück."
+              disabled={!canFineTune} onChange={onHorizontalCorrectionChange} />
           </div>
         )}
 
