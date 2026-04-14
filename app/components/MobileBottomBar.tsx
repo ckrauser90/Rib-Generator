@@ -120,7 +120,7 @@ export function MobileBottomBar({
           />
         </label>
 
-        <button type="button" className={styles.mobileSheetToggle} onClick={onToggleSheet}>
+        <button type="button" className={styles.mobileSheetToggle} onClick={onToggleSheet} data-testid="mobile-sheet-toggle">
           <svg
             width="16"
             height="16"
@@ -148,6 +148,7 @@ export function MobileBottomBar({
         <div className={styles.mobileSheetTabs}>
           <button
             type="button"
+            data-testid="mobile-sheet-tab-form"
             className={`${styles.mobileSheetTabBtn} ${sheetSection === "form" ? styles.mobileSheetTabActive : ""}`}
             onClick={() => setSheetSection("form")}
           >
@@ -155,6 +156,7 @@ export function MobileBottomBar({
           </button>
           <button
             type="button"
+            data-testid="mobile-sheet-tab-masse"
             className={`${styles.mobileSheetTabBtn} ${sheetSection === "masse" ? styles.mobileSheetTabActive : ""}`}
             onClick={() => setSheetSection("masse")}
           >
@@ -197,6 +199,7 @@ export function MobileBottomBar({
               <label className={styles.mobileDimGroup}>
                 <span className={styles.mobileSliderLabel}>Höhe (mm)</span>
                 <input type="number" className={styles.mobileNumInputLarge} min="60" max="180" step="1"
+                  data-testid="mobile-height-input"
                   value={heightInput}
                   onChange={(e) => onHeightInputChange(e.target.value)}
                   onBlur={(e) => onHeightBlur(e.target.value)}
@@ -205,6 +208,7 @@ export function MobileBottomBar({
               <label className={styles.mobileDimGroup}>
                 <span className={styles.mobileSliderLabel}>Breite (mm)</span>
                 <input type="number" className={styles.mobileNumInputLarge} min="35" max="120" step="1"
+                  data-testid="mobile-width-input"
                   value={widthInput}
                   onChange={(e) => onWidthInputChange(e.target.value)}
                   onBlur={(e) => onWidthBlur(e.target.value)}
@@ -213,6 +217,7 @@ export function MobileBottomBar({
               <label className={styles.mobileDimGroup}>
                 <span className={styles.mobileSliderLabel}>Dicke (mm)</span>
                 <input type="number" className={styles.mobileNumInputLarge} min="2" max="10" step="0.1"
+                  data-testid="mobile-thickness-input"
                   value={thicknessInput}
                   onChange={(e) => onThicknessInputChange(e.target.value)}
                   onBlur={(e) => onThicknessBlur(e.target.value)}

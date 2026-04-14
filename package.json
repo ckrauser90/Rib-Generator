@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:e2e": "playwright test tests/release-smoke.spec.ts",
+    "test:e2e": "playwright test tests/release-smoke.spec.ts tests/mobile-sheet.spec.ts tests/dimension-inputs.spec.ts tests/stl-content.spec.ts",
     "test:unit": "playwright test -c playwright.unit.config.ts"
   },
   "dependencies": {
