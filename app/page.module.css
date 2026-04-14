@@ -1241,43 +1241,51 @@
     align-items: center;
     justify-content: center;
     gap: 0;
-    padding: 6px 16px 2px;
+    padding: 6px 12px 4px;
   }
   .mobileStepItem {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 0;
   }
   .mobileStepLine {
-    width: 28px;
-    height: 1.5px;
+    width: 22px;
+    height: 2px;
     background: var(--line);
     border-radius: 1px;
-    margin: 0 2px;
     flex-shrink: 0;
   }
   .mobileStepLineDone {
     background: var(--accent);
   }
-  /* The clickable button wrapping dot + label */
+  /* Clickable chip — the main affordance */
   .mobileStepBtn {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 3px;
-    background: none;
-    border: none;
+    gap: 5px;
+    background: var(--panel);
+    border: 1.5px solid var(--line);
+    border-radius: 20px;
     cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 8px;
+    padding: 4px 10px 4px 7px;
+    min-width: 0;
     -webkit-tap-highlight-color: transparent;
-    transition: background 0.15s;
+    transition: background 0.15s, border-color 0.15s;
   }
   .mobileStepBtn:active {
     background: var(--line);
   }
+  .mobileStepBtnActive {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  .mobileStepBtnDone {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
   .mobileStepBtnLocked {
-    opacity: 0.38;
+    opacity: 0.4;
     cursor: default;
   }
   .mobileStepDot {
@@ -1302,15 +1310,25 @@
     background: var(--accent);
     color: var(--bg);
   }
-  .mobileStepLabel {
-    font-size: 0.68rem;
+  .mobileStepNum {
+    font-size: 0.6rem;
+    font-weight: 700;
     color: var(--muted);
-    letter-spacing: 0.01em;
+    line-height: 1;
+  }
+  .mobileStepBtnActive .mobileStepNum,
+  .mobileStepBtnDone .mobileStepNum {
+    color: var(--bg);
+  }
+  .mobileStepLabel {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--muted);
     white-space: nowrap;
   }
   .mobileStepLabelActive {
     color: var(--accent);
-    font-weight: 600;
+    font-weight: 700;
   }
 
   /* Shared slider control */

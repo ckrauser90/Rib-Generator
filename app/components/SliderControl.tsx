@@ -18,7 +18,6 @@ type SliderControlProps = {
   className?: string;
   sliderClassName?: string;
   testId?: string;
-  /** Pass a unique id when you want externally-controlled single-open tooltip behaviour. */
   tipId?: string;
   openTipId?: string | null;
   onTipOpen?: (id: string | null) => void;
@@ -43,7 +42,6 @@ export function SliderControl({
   openTipId,
   onTipOpen,
 }: SliderControlProps) {
-  // Local fallback when no external tip control is provided.
   const [localTipOpen, setLocalTipOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
@@ -51,21 +49,30 @@ export function SliderControl({
 
   const tipVisible = tipId !== undefined ? openTipId === tipId : localTipOpen;
 
-  const toggleTip = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const openTip = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (tipId !== undefined && onTipOpen) {
-      onTipOpen(tipVisible ? null : tipId);
+      onTipOpen(tipId);
     } else {
-      setLocalTipOpen((v) => !v);
+      setLocalTipOpen(true);
     }
   };
 
-  const closeTip = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const closeTip = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (tipId !== undefined && onTipOpen) {
       onTipOpen(null);
     } else {
       setLocalTipOpen(false);
+    }
+  };
+
+  const toggleTip = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (tipVisible) {
+      closeTip(e);
+    } else {
+      openTip(e);
     }
   };
 
@@ -122,17 +129,22 @@ export function SliderControl({
             </strong>
           )}
           {tooltip && (
-            <span className={styles.sliderTipWrapper}>
+            <span
+              className={styles.sliderTipWrapper}
+              onMouseEnter={openTip}
+              onMouseLeave={() => closeTip()}
+            >
               <button
                 type="button"
                 className={`${styles.sliderInfoBtn} ${tipVisible ? styles.sliderInfoBtnActive : ""}`}
                 onClick={toggleTip}
                 aria-label="Info"
+                aria-expanded={tipVisible}
               >
                 ⓘ
               </button>
               {tipVisible && (
-                <span className={styles.sliderTipBubble} onClick={closeTip}>
+                <span className={styles.sliderTipBubble} onClick={(e) => { e.stopPropagation(); closeTip(); }}>
                   {tooltip}
                 </span>
               )}

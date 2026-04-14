@@ -133,7 +133,7 @@ export function MobileBottomBar({
                 <span className={styles.mobileStepDot}>
                   {s.done
                     ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><polyline points="2 6 5 9 10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                    : null}
+                    : <span className={styles.mobileStepNum}>{i + 1}</span>}
                 </span>
                 <span className={`${styles.mobileStepLabel} ${isSelected ? styles.mobileStepLabelActive : ""}`}>{s.label}</span>
               </button>
