@@ -39,15 +39,16 @@ test("mobile sheet tab switch shows Maße inputs and hides sliders", async ({ pa
   // Form tab is default — smoothing slider visible, dimension inputs not
   await expect(page.getByTestId("mobile-sheet-tab-form")).toBeVisible();
   await expect(page.getByTestId("mobile-height-input")).not.toBeVisible();
-  // The sheet content is visible (form section rendered)
-  await expect(page.getByText("Glättung")).toBeVisible();
+  // The sheet form content is visible (scoped to mobile sheet)
+  const sheet = page.getByTestId("mobile-sheet");
+  await expect(sheet.getByText(/Glättung/)).toBeVisible();
 
   // Switch to Maße — dimension inputs visible, form content gone
   await page.getByTestId("mobile-sheet-tab-masse").click();
   await expect(page.getByTestId("mobile-height-input")).toBeVisible();
   await expect(page.getByTestId("mobile-width-input")).toBeVisible();
   await expect(page.getByTestId("mobile-thickness-input")).toBeVisible();
-  await expect(page.getByText("Glättung")).not.toBeVisible();
+  await expect(sheet.getByText(/Glättung/)).not.toBeVisible();
 });
 
 test("mobile sheet Maße inputs are disabled before anchor confirmation", async ({ page }) => {
