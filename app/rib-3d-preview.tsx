@@ -52,7 +52,7 @@ export function Rib3DPreview({ outline, holes, thicknessMm, bevelStrength = 68, 
       setIsUnavailable(false);
 
       const scene = new THREE.Scene();
-      scene.background = new THREE.Color("#EDE7DD");
+      scene.background = new THREE.Color("#FAF8F5");
 
       const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 2000);
 
