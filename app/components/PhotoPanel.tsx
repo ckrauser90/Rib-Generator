@@ -120,7 +120,6 @@ export function PhotoPanel({
                 <input
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   data-testid="upload-input-mobile-cta"
                   onChange={onFileChange}
                   className={styles.hiddenInput}
