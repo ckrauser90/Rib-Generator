@@ -190,6 +190,7 @@ export const usePageViewModel = ({
   const canChooseSide = markerConfirmed && workProfile.length > 0;
   const canEditAnchors = markerConfirmed && workProfile.length > 1;
   const canDownload =
+    toolOutline.length > 1 &&
     geometryWorkProfile.length > 0 &&
     markerConfirmed &&
     currentAnchorsConfirmed &&

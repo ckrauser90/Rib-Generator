@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, KeyboardEvent } from "react";
+import { ChangeEvent, KeyboardEvent, useEffect, useState } from "react";
 import styles from "../page.module.css";
 import { SliderControl } from "./SliderControl";
 
@@ -59,6 +59,14 @@ export function DesktopRibbon({
   onWidthInputChange,
   onWidthKeyDown,
 }: DesktopRibbonProps) {
+  const [openTipId, setOpenTipId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const close = () => setOpenTipId(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
+
   return (
     <div className={styles.ribbon}>
       <label className={styles.uploadBtn}>
@@ -135,26 +143,30 @@ export function DesktopRibbon({
           tooltip="Glättet die erkannte Kontur. Höhere Werte erzeugen weichere Kurven, niedrigere erhalten mehr Originaltreue."
           disabled={!canFineTune} onChange={onCurveSmoothingChange}
           className={styles.sliderCell} sliderClassName={styles.ribbonSlider}
-          testId="curve-smoothing-slider" />
+          testId="curve-smoothing-slider"
+          tipId="d-smooth" openTipId={openTipId} onTipOpen={setOpenTipId} />
         <SliderControl
           label="Horizont" value={horizontalCorrectionDeg} min={-8} max={8} step={0.25} defaultValue={0}
           unit="°" formatValue={(v) => `${v.toFixed(1)}°`}
           tooltip="Korrigiert leicht gekippte Aufnahmen für die Rib-Geometrie. Doppelklick setzt zurück."
           disabled={!canFineTune} onChange={onHorizontalCorrectionChange}
           className={styles.sliderCell} sliderClassName={styles.ribbonSlider}
-          testId="horizontal-correction-slider" />
+          testId="horizontal-correction-slider"
+          tipId="d-horizon" openTipId={openTipId} onTipOpen={setOpenTipId} />
         <SliderControl
           label="Druckoptimierung" value={printFriendliness} min={0} max={100} step={1} defaultValue={58}
           tooltip="Optimiert das Profil für den 3D-Druck. Höhere Werte vermeiden Überhänge und dünne Stellen."
           disabled={!canFineTune} onChange={onPrintFriendlinessChange}
           className={styles.sliderCell} sliderClassName={styles.ribbonSlider}
-          testId="print-friendliness-slider" />
+          testId="print-friendliness-slider"
+          tipId="d-print" openTipId={openTipId} onTipOpen={setOpenTipId} />
         <SliderControl
           label="3D-Fase" value={bevelStrength} min={0} max={100} step={1} defaultValue={68}
           tooltip="Fügt eine abgerundete Fase an den 3D-Kanten hinzu. Höhere Werte erzeugen stärkere Kantenverrundung."
           disabled={!canFineTune} onChange={onBevelStrengthChange}
           className={styles.sliderCell} sliderClassName={styles.ribbonSlider}
-          testId="bevel-strength-slider" />
+          testId="bevel-strength-slider"
+          tipId="d-bevel" openTipId={openTipId} onTipOpen={setOpenTipId} />
       </div>
 
       <div className={styles.ribbonSpacer} />

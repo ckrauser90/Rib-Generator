@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useCallback, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useState } from "react";
 import styles from "../page.module.css";
 import { pageText } from "../page-copy";
 import { SliderControl } from "./SliderControl";
@@ -72,6 +72,13 @@ export function MobileBottomBar({
 }: MobileBottomBarProps) {
   const [sheetSection, setSheetSection] = useState<SheetSection>("form");
   const [toast, setToast] = useState<string | null>(null);
+  const [openTipId, setOpenTipId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const close = () => setOpenTipId(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
 
   const step = !hasPhoto ? 1 : !hasProfile ? 2 : 3;
   const steps = [
@@ -95,61 +102,45 @@ export function MobileBottomBar({
     onTabChange("3d");
   };
 
+  const tabHandlers: Record<MobileTab, () => void> = {
+    foto: () => onTabChange("foto"),
+    profil: handleProfilTab,
+    "3d": handle3dTab,
+  };
+
   return (
     <div className={styles.mobileBottomBar}>
       {toast && <div className={styles.mobileToast}>{toast}</div>}
 
-      <div className={styles.mobileStepIndicator} aria-hidden>
-        {steps.map((s, i) => (
-          <span key={s.label} className={styles.mobileStepItem}>
-            {i > 0 && <span className={`${styles.mobileStepLine} ${steps[i - 1].done ? styles.mobileStepLineDone : ""}`} />}
-            <span className={`${styles.mobileStepDot} ${s.done ? styles.mobileStepDotDone : s.active ? styles.mobileStepDotActive : ""}`}>
-              {s.done
-                ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><polyline points="2 6 5 9 10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                : null}
+      {/* Step indicator doubles as tab navigator — replaces old tab row */}
+      <nav className={styles.mobileStepNav} aria-label="Schritte">
+        {steps.map((s, i) => {
+          const tab = (["foto", "profil", "3d"] as MobileTab[])[i];
+          const isSelected = mobileTab === tab;
+          const isLocked = (tab === "profil" && !hasPhoto) || (tab === "3d" && !hasProfile);
+          return (
+            <span key={s.label} className={styles.mobileStepItem}>
+              {i > 0 && (
+                <span className={`${styles.mobileStepLine} ${steps[i - 1].done ? styles.mobileStepLineDone : ""}`} />
+              )}
+              <button
+                type="button"
+                className={`${styles.mobileStepBtn} ${s.done ? styles.mobileStepBtnDone : isSelected ? styles.mobileStepBtnActive : ""} ${isLocked ? styles.mobileStepBtnLocked : ""}`}
+                onClick={tabHandlers[tab]}
+                aria-current={isSelected ? "step" : undefined}
+                aria-disabled={isLocked}
+              >
+                <span className={styles.mobileStepDot}>
+                  {s.done
+                    ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><polyline points="2 6 5 9 10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    : null}
+                </span>
+                <span className={`${styles.mobileStepLabel} ${isSelected ? styles.mobileStepLabelActive : ""}`}>{s.label}</span>
+              </button>
             </span>
-            <span className={`${styles.mobileStepLabel} ${s.active ? styles.mobileStepLabelActive : ""}`}>{s.label}</span>
-          </span>
-        ))}
-      </div>
-
-      <div className={styles.mobileTabs}>
-        <button
-          type="button"
-          className={`${styles.mobileTabBtn} ${mobileTab === "foto" ? styles.mobileTabActive : ""}`}
-          onClick={() => onTabChange("foto")}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
-            <polyline points="21 15 16 10 5 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Foto
-        </button>
-        <button
-          type="button"
-          className={`${styles.mobileTabBtn} ${mobileTab === "profil" ? styles.mobileTabActive : ""} ${!hasPhoto ? styles.mobileTabDisabled : ""}`}
-          onClick={handleProfilTab}
-          aria-disabled={!hasPhoto}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M3 18 C5 12, 9 6, 12 3 C15 6, 19 12, 21 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <line x1="3" y1="18" x2="21" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-          Profil
-        </button>
-        <button
-          type="button"
-          className={`${styles.mobileTabBtn} ${mobileTab === "3d" ? styles.mobileTabActive : ""} ${!hasProfile ? styles.mobileTabDisabled : ""}`}
-          onClick={handle3dTab}
-          aria-disabled={!hasProfile}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          3D
-        </button>
-      </div>
+          );
+        })}
+      </nav>
 
       <div className={styles.mobileActions}>
         <label className={styles.mobileFab}>
@@ -215,20 +206,24 @@ export function MobileBottomBar({
             <SliderControl
               label="Glättung" value={curveSmoothing} min={0} max={100} step={1} defaultValue={34}
               tooltip="Glättet die erkannte Kontur. Höhere Werte erzeugen weichere Kurven."
-              disabled={!canFineTune} onChange={onCurveSmoothingChange} />
+              disabled={!canFineTune} onChange={onCurveSmoothingChange}
+              tipId="smooth" openTipId={openTipId} onTipOpen={setOpenTipId} />
             <SliderControl
               label="Druckoptimierung" value={printFriendliness} min={0} max={100} step={1} defaultValue={58}
               tooltip="Optimiert das Profil für den 3D-Druck. Vermeidet Überhänge und dünne Stellen."
-              disabled={!canFineTune} onChange={onPrintFriendlinessChange} />
+              disabled={!canFineTune} onChange={onPrintFriendlinessChange}
+              tipId="print" openTipId={openTipId} onTipOpen={setOpenTipId} />
             <SliderControl
               label="3D-Fase" value={bevelStrength} min={0} max={100} step={1} defaultValue={68}
               tooltip="Fügt eine abgerundete Fase an den 3D-Kanten hinzu."
-              disabled={!canFineTune} onChange={onBevelStrengthChange} />
+              disabled={!canFineTune} onChange={onBevelStrengthChange}
+              tipId="bevel" openTipId={openTipId} onTipOpen={setOpenTipId} />
             <SliderControl
               label="Horizont" value={horizontalCorrectionDeg} min={-8} max={8} step={0.25} defaultValue={0}
               unit="°" formatValue={(v) => `${v.toFixed(1)}°`}
               tooltip="Korrigiert leicht gekippte Aufnahmen für die Rib-Geometrie. Doppeltippen setzt zurück."
-              disabled={!canFineTune} onChange={onHorizontalCorrectionChange} />
+              disabled={!canFineTune} onChange={onHorizontalCorrectionChange}
+              tipId="horizon" openTipId={openTipId} onTipOpen={setOpenTipId} />
           </div>
         )}
 

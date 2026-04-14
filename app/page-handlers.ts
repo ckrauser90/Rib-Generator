@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import type {
   ChangeEvent,
   Dispatch,
@@ -177,6 +178,11 @@ export const usePageHandlers = ({
   workProfile,
   workProfileSide,
 }: UsePageHandlersOptions) => {
+  // Guards against a click event firing immediately after a pointer drag ends.
+  // Browsers synthesize a click on pointerup even when the pointer moved significantly.
+  const lastDragEndTimeRef = useRef(0);
+  const dragMovedRef = useRef(false);
+
   const handleImageUpload = async (file: File) => {
     const preparedUpload = await prepareImageUpload({
       createObjectUrl: (nextFile) => URL.createObjectURL(nextFile),
@@ -202,6 +208,8 @@ export const usePageHandlers = ({
   const handleCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
     if (anchorEditMode) return;
     if (!canvasRef.current || !sourceRaster || segmenterState !== "ready") return;
+    // Ignore synthetic click that follows a pointer drag (fires within 150 ms of drag end).
+    if (Date.now() - lastDragEndTimeRef.current < 150) return;
 
     resetAnchorWorkflow();
     setMarkerConfirmed(true);
@@ -255,6 +263,7 @@ export const usePageHandlers = ({
 
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    dragMovedRef.current = false;
     setDraggingAnchor(handle);
     setLensPoint(handle === "top" ? imageAnchors?.top ?? null : imageAnchors?.bottom ?? null);
     setStatus(getDraggingAnchorStatus(handle));
@@ -271,6 +280,7 @@ export const usePageHandlers = ({
 
     if (!snappedPoint) return;
 
+    dragMovedRef.current = true;
     setDraftAnchorOverrides((previous) => {
       const nextState = { ...previous };
       nextState[workProfileSide] = moveDraftAnchorOverride({
@@ -290,6 +300,9 @@ export const usePageHandlers = ({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     if (!draggingAnchor) return;
+    if (dragMovedRef.current) {
+      lastDragEndTimeRef.current = Date.now();
+    }
 
     const liveOverride = anchorsToOverride(imageAnchors);
     if (liveOverride) {

@@ -155,19 +155,21 @@ export function PhotoPanel({
               className={`${styles.sideBtn} ${styles.sideBtnLeft} ${workProfileSide === "left" ? styles.sideBtnActive : ""}`}
               onClick={() => onSelectSide("left")}
               data-testid="side-left-button"
+              title="Linke Gefäßseite als Profil verwenden"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <polyline points="15 18 9 12 15 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Links
+              Linke Seite
             </button>
             <button
               type="button"
               className={`${styles.sideBtn} ${styles.sideBtnRight} ${workProfileSide === "right" ? styles.sideBtnActive : ""}`}
               onClick={() => onSelectSide("right")}
               data-testid="side-right-button"
+              title="Rechte Gefäßseite als Profil verwenden"
             >
-              Rechts
+              Rechte Seite
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <polyline points="9 18 15 12 9 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>

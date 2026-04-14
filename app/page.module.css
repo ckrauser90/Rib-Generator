@@ -1128,8 +1128,8 @@
   /* Anchor overlay — fixed below the floating status pill on mobile */
   .anchorOverlay {
     position: fixed;
-    top: calc(env(safe-area-inset-top, 0px) + var(--mobile-overlay-top, 82px));
-    bottom: auto;
+    top: auto;
+    bottom: calc(var(--mobile-bottom-height, 122px) + 12px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 70;
@@ -1235,32 +1235,54 @@
     cursor: default;
   }
 
-  /* Step indicator */
-  .mobileStepIndicator {
+  /* Step navigator (replaces tab bar + old step indicator) */
+  .mobileStepNav {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0;
-    padding: 5px 16px 2px;
+    padding: 6px 16px 2px;
   }
   .mobileStepItem {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
   }
   .mobileStepLine {
-    width: 24px;
+    width: 28px;
     height: 1.5px;
     background: var(--line);
     border-radius: 1px;
     margin: 0 2px;
+    flex-shrink: 0;
   }
   .mobileStepLineDone {
     background: var(--accent);
   }
+  /* The clickable button wrapping dot + label */
+  .mobileStepBtn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 8px;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s;
+  }
+  .mobileStepBtn:active {
+    background: var(--line);
+  }
+  .mobileStepBtnLocked {
+    opacity: 0.38;
+    cursor: default;
+  }
   .mobileStepDot {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     border: 1.5px solid var(--line);
     background: transparent;
@@ -1269,13 +1291,13 @@
     justify-content: center;
     color: var(--bg);
     flex-shrink: 0;
+    box-sizing: border-box;
   }
-  .mobileStepDotActive {
+  .mobileStepBtnActive .mobileStepDot {
     border-color: var(--accent);
     background: var(--accent);
-    color: var(--bg);
   }
-  .mobileStepDotDone {
+  .mobileStepBtnDone .mobileStepDot {
     border-color: var(--accent);
     background: var(--accent);
     color: var(--bg);
@@ -1284,6 +1306,7 @@
     font-size: 0.68rem;
     color: var(--muted);
     letter-spacing: 0.01em;
+    white-space: nowrap;
   }
   .mobileStepLabelActive {
     color: var(--accent);
@@ -1307,26 +1330,53 @@
   .sliderValueBadge {
     font-size: 0.82rem;
     font-weight: 600;
-    cursor: pointer;
     padding: 1px 4px;
     border-radius: 4px;
     color: var(--ink);
+  }
+  .sliderValueBadgeClickable {
+    cursor: pointer;
     transition: background 0.15s;
   }
-  .sliderValueBadge:hover {
+  .sliderValueBadgeClickable:hover {
     background: var(--line);
   }
+  .sliderEditRow {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
   .sliderInlineInput {
-    width: 54px;
+    width: 52px;
     font-size: 0.82rem;
     font-weight: 600;
     border: 1.5px solid var(--accent);
     border-radius: 4px;
     background: var(--bg);
     color: var(--ink);
-    padding: 1px 4px;
+    padding: 2px 4px;
     text-align: right;
     outline: none;
+  }
+  .sliderEditConfirm {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    padding: 2px 5px;
+    cursor: pointer;
+    line-height: 1.4;
+  }
+  .sliderEditCancel {
+    background: none;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-size: 0.72rem;
+    padding: 2px 5px;
+    cursor: pointer;
+    line-height: 1.4;
   }
   .sliderTipWrapper {
     position: relative;
@@ -1342,29 +1392,42 @@
     padding: 0 2px;
     line-height: 1;
     opacity: 0.7;
+    transition: opacity 0.15s;
   }
-  .sliderInfoBtn:hover {
+  .sliderInfoBtn:hover,
+  .sliderInfoBtnActive {
     opacity: 1;
+    color: var(--accent);
   }
   .sliderTipBubble {
     position: absolute;
-    bottom: calc(100% + 6px);
-    right: 0;
-    background: rgba(40, 40, 40, 0.92);
+    bottom: calc(100% + 8px);
+    right: -8px;
+    background: rgba(40, 40, 40, 0.95);
     color: #fff;
-    font-size: 0.75rem;
-    padding: 8px 10px;
-    border-radius: 8px;
-    width: 200px;
-    z-index: 300;
-    line-height: 1.4;
+    font-size: 0.73rem;
+    font-weight: 400;
+    padding: 9px 12px;
+    border-radius: 9px;
+    width: 190px;
+    z-index: 400;
+    line-height: 1.45;
     cursor: pointer;
     pointer-events: auto;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  }
+  .sliderTipBubble::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    right: 14px;
+    border: 5px solid transparent;
+    border-top-color: rgba(40, 40, 40, 0.95);
   }
 
   .mobileToast {
     position: absolute;
-    top: -44px;
+    top: -52px;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(40, 40, 40, 0.88);
