@@ -2,98 +2,79 @@
 
 Last updated: 2026-04-14
 
-Current pushed baseline: `main @ 910b6d8`
+Current pushed baseline: `main @ fb28cb8`
+
+## Token-Saving Rules (read first)
+
+- **Never read a file unless the task explicitly needs it.** Use Grep to find what you need.
+- **Never read `app/page.module.css` unless the task is CSS/visual.** It's large and expensive.
+- **Never read geometry modules** (`lib/contour-detection.ts`, `lib/rib-tool-geometry.ts`) unless the task touches segmentation, profile extraction, outline, or STL.
+- **Always use `rtk` prefix** for shell commands: `rtk git status`, `rtk tsc`, `rtk playwright test`. RTK is on Windows so hook-mode doesn't work — manual prefix required.
+- **Commit after each feature/fix**, not at end of session. Keeps diffs small.
+- **Read only what you need to change**, not the whole file. Use `offset`+`limit` on large files.
 
 ## What This Repo Is
 
-Next.js app that turns a mug / vessel side photo into a conservative, printable rib tool:
+Next.js app that turns a mug/vessel photo into a printable ceramic rib tool.
 
-1. Upload image
-2. Click inside vessel
-3. Segment with MediaPipe
-4. Choose left/right side
-5. Adjust `Start` / `Ende` anchors
-6. Tune dimensions and print-friendliness
-7. Preview 2D / 3D
-8. Export STL
+Flow: Upload → click vessel → MediaPipe segments → choose side → adjust anchors → tune params → preview 2D/3D → export STL.
 
-## Read Order
+Goal: conservative, reliable geometry. Not generative or beautified.
 
-Read these first:
+## Minimal Read Order (start here, stop when you have enough)
 
-1. [CLAUDE.md](../CLAUDE.md)
-2. [NEXT-SESSION.md](../NEXT-SESSION.md)
-3. [app/page.tsx](../app/page.tsx)
-4. [app/page-view-model.ts](../app/page-view-model.ts)
-5. [app/page-handlers.ts](../app/page-handlers.ts)
+1. This file — done
+2. [NEXT-SESSION.md](../NEXT-SESSION.md) — current state and open problems
+3. Only then: grep or read specific files the task needs
 
-Only read these when your task needs them:
+Skip [CLAUDE.md](../CLAUDE.md) and [app/page.tsx](../app/page.tsx) unless the task is architectural.
 
-- [lib/profile-normalization.ts](../lib/profile-normalization.ts)
-- [lib/contour-detection.ts](../lib/contour-detection.ts)
-- [lib/rib-tool-geometry.ts](../lib/rib-tool-geometry.ts)
-- [app/page.module.css](../app/page.module.css)
+## File Map (grep first, read only if needed)
 
-## Current Structure
+UI entry points:
+- `app/page.tsx` — thin orchestrator, mostly wiring
+- `app/components/PhotoPanel.tsx` — upload canvas, anchors
+- `app/components/MobileBottomBar.tsx` — mobile tabs + sheet
+- `app/components/DesktopRibbon.tsx` — desktop controls
 
-- `app/page.tsx`
-  Thin page orchestrator
-- `app/components/*`
-  UI panels and bars
-- `app/page-*.ts`, `app/tool-*.ts`, `app/*workflow.ts`
-  Page hooks, workflows, and shared helpers
-- `lib/*`
-  Heavy geometry, normalization, STL, and MediaPipe integration
-- `tests/release-smoke.spec.ts`
-  Main end-to-end smoke flow
-- `tests/unit/*.spec.ts`
-  Helper and workflow coverage
+Page logic:
+- `app/page-handlers.ts` — upload, marker, anchor, export handlers
+- `app/page-view-model.ts` — derived state from raw state
+- `app/page-effects.ts` — canvas draw, segmentation, geometry effects
+- `app/page-component-props.ts` — prop builders for panels
+- `app/page-session-actions.ts` — state reset helpers
 
-## Main Hotspots
+Styling:
+- `app/page.module.css` — **expensive, only read for CSS tasks**
 
-- [app/page-handlers.ts](../app/page-handlers.ts)
-  Upload, drag, anchor-edit, export, diagnostics actions
-- [app/page-effects.ts](../app/page-effects.ts)
-  Segmenter lifecycle, canvas draw, segmentation, geometry rebuild
-- [lib/contour-detection.ts](../lib/contour-detection.ts)
-  Detection and mask-to-profile pipeline
-- [lib/rib-tool-geometry.ts](../lib/rib-tool-geometry.ts)
-  Rib outline, validation, 3D, STL
-- [app/page.module.css](../app/page.module.css)
-  Still very large; styling tasks should be scoped carefully
+Heavy domain (only for geometry/STL tasks):
+- `lib/contour-detection.ts`
+- `lib/rib-tool-geometry.ts`
+- `lib/profile-normalization.ts`
 
 ## Guardrails
 
-- Conservative geometry is the default and must remain recoverable.
-- `displayWorkProfile` and `geometryWorkProfile` are intentionally different.
-- Do not silently let preview-only smoothing change STL geometry.
-- MediaPipe reset between uploads is intentional.
-- Mobile flow is its own UX mode, not just stacked desktop.
+- `displayWorkProfile` ≠ `geometryWorkProfile` — never merge
+- Conservative geometry is the default — no generative cleanup
+- MediaPipe reset between uploads is intentional
+- Mobile is its own UX mode — test tabs + sheet separately
 
 ## Commands
 
-Prefer compact output:
+```bash
+rtk git status / diff / log / add / commit / push
+rtk tsc                    # type check
+rtk next build             # build check
+rtk playwright test        # e2e
+cmd /c "npm run test:unit"  # unit tests (rtk playwright doesn't cover unit)
+```
 
-- `rtk git status`
-- `rtk diff`
-- `rtk read app/page.tsx`
-- `rtk next build`
-- `rtk playwright test`
+## Avoid Repeating
 
-Windows fallback:
+- **Mobile tap-anywhere anchor fallback** — tried, reverted. Does not solve coordinate alignment.
 
-- `cmd /c "npm run build"`
-- `cmd /c "npm run test:unit"`
-- `cmd /c "npm run test:e2e"`
+## Noise To Ignore
 
-## Known Noise To Ignore
-
-- `tsconfig.tsbuildinfo` is a local build artifact.
-- `/.well-known/appspecific/com.chrome.devtools.json` 404 is harmless.
-
-## Best Next Improvements
-
-1. Continue splitting `lib/contour-detection.ts` and `lib/rib-tool-geometry.ts` when a task naturally stays in one subdomain
-2. Split `app/page.module.css` by panel/component
-3. Split `app/page-handlers.ts` by responsibility
-4. Keep repo docs current when structure changes
+- `tsconfig.tsbuildinfo` changes are build artifacts, don't commit
+- `/.well-known/appspecific/com.chrome.devtools.json` 404 is harmless
+- Pre-existing TS errors in `tests/unit/export-workflow.spec.ts` and `tests/unit/anchor-utils.spec.ts` — not our changes
