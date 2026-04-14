@@ -8,6 +8,10 @@
 
 ---
 
+Hinweis: Dieses Dokument enthaelt auch historische Ausbauideen.
+Es ist nicht die beste Quelle fuer den aktuellen Code-Stand.
+Fuer neue Sessions zuerst `docs/AI-START.md`, `CLAUDE.md` und `NEXT-SESSION.md` lesen.
+
 ## Vision
 
 > "Das Tool, das jeder Töpfer braucht um seine Formen zu digitalisieren."

@@ -291,58 +291,64 @@ Das ist besonders nuetzlich, wenn:
 
 ## Projektstruktur
 
+### Einstieg fuer Menschen und Agenten
+
+- [docs/AI-START.md](docs/AI-START.md)
+  kompakter Repo-Startpunkt fuer neue Sessions
+- [CLAUDE.md](CLAUDE.md)
+  Guardrails, Architektur, Befehle
+- [NEXT-SESSION.md](NEXT-SESSION.md)
+  aktueller, kurzer Session-Handover
+
 ### App
 
-- [app/page.tsx](C:\Users\chris\Documents\New project\app\page.tsx)
-  Hauptoberflaeche, State, Workflow, STL-Download
-
-- [app/page.module.css](C:\Users\chris\Documents\New project\app\page.module.css)
-  Layout und Styling der Hauptansicht
-
-- [app/rib-3d-preview.tsx](C:\Users\chris\Documents\New project\app\rib-3d-preview.tsx)
-  Three.js-Vorschau des extrudierten Rib-Koerpers mit echter Fase
-
-- [app/globals.css](C:\Users\chris\Documents\New project\app\globals.css)
+- [app/page.tsx](app/page.tsx)
+  page-level Orchestrator und Wiring zwischen UI, Workflows und Zustand
+- [app/components](app/components)
+  Panels, Ribbon und Mobile-Bar
+- [app/page-view-model.ts](app/page-view-model.ts)
+  abgeleiteter UI-Zustand
+- [app/page-handlers.ts](app/page-handlers.ts)
+  Upload-, Marker-, Anchor- und Export-Aktionen
+- [app/page-effects.ts](app/page-effects.ts)
+  Segmenter-, Canvas- und Geometry-Effekte
+- [app/page.module.css](app/page.module.css)
+  zentrales Layout- und Komponenten-Styling
+- [app/rib-3d-preview.tsx](app/rib-3d-preview.tsx)
+  Three.js-Vorschau des extrudierten Rib-Koerpers
+- [app/globals.css](app/globals.css)
   globale Design-Tokens und Basistypografie
 
 ### Bild- und Profilverarbeitung
 
-- [lib/interactive-segmenter.ts](C:\Users\chris\Documents\New project\lib\interactive-segmenter.ts)
-  MediaPipe-Integration, Masken-Bridge und robuster Retry bei schlechten Segmentierungen
+- [lib/interactive-segmenter.ts](lib/interactive-segmenter.ts)
+  MediaPipe-Integration und Reset zwischen Uploads
+- [lib/profile-normalization.ts](lib/profile-normalization.ts)
+  Profilanalyse, Glaettung und konservatives Refit
+- [lib/contour-detection.ts](lib/contour-detection.ts)
+  Masken-/Konturerkennung und Ableitung der linken/rechten Arbeitskante
+- [lib/rib-tool-geometry.ts](lib/rib-tool-geometry.ts)
+  Rib-Template, Validierung, 3D-Koerper und STL
+- [lib/contour.ts](lib/contour.ts)
+  duenne Kompatibilitaetsschicht fuer bestehende Imports
+- [lib/perspective.ts](lib/perspective.ts)
+  Rastergroessen und Bildkoordinaten-Helfer
 
-- [lib/profile-normalization.ts](C:\Users\chris\Documents\New project\lib\profile-normalization.ts)
-  Profilanalyse, Whittaker-Glaettung und formbewahrendes Refit der Arbeitskante
+### Weitere Dokumente
 
-- [lib/contour.ts](C:\Users\chris\Documents\New project\lib\contour.ts)
-  Rohkontur, Spike-Filter, Rib-Template, Loecher, 3D-Fase und STL-Erzeugung
+- [README.md](README.md)
+  Produkt- und Workflow-Ueberblick
+- [PRODUCT-PLAN.md](PRODUCT-PLAN.md)
+  grobere Produktideen und teilweise historische Erweiterungsrichtung
+- [design-system.md](design-system.md)
+  visuelle Richtung
+- [research](research)
+  Recherchematerialien
 
-- [lib/perspective.ts](C:\Users\chris\Documents\New project\lib\perspective.ts)
-  Hilfsfunktionen fuer Rastergroessen und fruehere Perspektiv-Experimente
+### Hinweis zu historischen Pfaden
 
-## Design- und Produktdokumente
-
-- [PRODUCT-PLAN.md](C:\Users\chris\Documents\New project\PRODUCT-PLAN.md)
-  Produktidee und Ausbaurichtung
-
-- [design-system.md](C:\Users\chris\Documents\New project\design-system.md)
-  visuelle Richtung und Gestaltungsprinzipien
-
-- [research](C:\Users\chris\Documents\New project\research)
-  Sammlung von Recherchematerialien
-
-## Produktpfade im Repo
-
-Im Repo liegen zusaetzliche Bereiche, die fuer den aktuellen Rib-MVP nicht noetig sind, aber fuer spaetere Produktstufen relevant sein koennen:
-
-- [app/(auth)](C:\Users\chris\Documents\New project\app\(auth))
-- [app/(dashboard)](C:\Users\chris\Documents\New project\app\(dashboard))
-- [app/api](C:\Users\chris\Documents\New project\app\api)
-- [supabase](C:\Users\chris\Documents\New project\supabase)
-- [.env.example](C:\Users\chris\Documents\New project\.env.example)
-
-Wichtig:
-
-- Der aktuelle Rib-MVP braucht fuer den Kernworkflow keine Supabase- oder Auth-Einrichtung.
+Es gibt noch einen [supabase](supabase)-Ordner und historische Planungsreste.
+Der aktuelle Rib-MVP braucht fuer den Kernworkflow keine Supabase-, Auth- oder API-Einrichtung.
 - Auth und Supabase koennen spaeter fuer Userverwaltung, gespeicherte Projekte oder Nutzungsdaten sinnvoll werden.
 - `.env.example` beschreibt aktuell nicht den minimalen Start fuer den heutigen Rib-Workflow.
 
@@ -427,14 +433,16 @@ Fuer die Tests wird ein deterministischer Mock-Segmenter verwendet, damit der Fl
 
 Wenn du neu ins Projekt kommst, ist die wichtigste Datei zum Einstieg:
 
-- [app/page.tsx](C:\Users\chris\Documents\New project\app\page.tsx)
+- [docs/AI-START.md](docs/AI-START.md)
+- [app/page.tsx](app/page.tsx)
 
 Wenn du das Verhalten der Kontur verbessern willst:
 
-- [lib/profile-normalization.ts](C:\Users\chris\Documents\New project\lib\profile-normalization.ts)
-- [lib/contour.ts](C:\Users\chris\Documents\New project\lib\contour.ts)
+- [lib/profile-normalization.ts](lib/profile-normalization.ts)
+- [lib/contour-detection.ts](lib/contour-detection.ts)
+- [lib/rib-tool-geometry.ts](lib/rib-tool-geometry.ts)
 
 Wenn du das Erscheinungsbild anpassen willst:
 
-- [app/page.module.css](C:\Users\chris\Documents\New project\app\page.module.css)
-- [app/globals.css](C:\Users\chris\Documents\New project\app\globals.css)
+- [app/page.module.css](app/page.module.css)
+- [app/globals.css](app/globals.css)
