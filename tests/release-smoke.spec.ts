@@ -146,7 +146,7 @@ test("reset clears the active flow after a successful contour pass", async ({ pa
   await page.getByTestId("reset-button").click();
 
   await expect(page.getByTestId("download-button")).toBeDisabled();
-  await expect(page.getByText(/Zurueckgesetzt/i)).toBeVisible();
+  await expect(page.getByText(/Zurückgesetzt/i)).toBeVisible();
   await expect(page.getByTestId("side-left-button")).toBeHidden();
 });
 
