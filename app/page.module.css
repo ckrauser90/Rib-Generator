@@ -1235,6 +1235,61 @@
     cursor: default;
   }
 
+  /* Step indicator */
+  .mobileStepIndicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 5px 16px 2px;
+  }
+  .mobileStepItem {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .mobileStepLine {
+    width: 24px;
+    height: 1.5px;
+    background: var(--line);
+    border-radius: 1px;
+    margin: 0 2px;
+  }
+  .mobileStepLineDone {
+    background: var(--accent);
+  }
+  .mobileStepDot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1.5px solid var(--line);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--bg);
+    flex-shrink: 0;
+  }
+  .mobileStepDotActive {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .mobileStepDotDone {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .mobileStepLabel {
+    font-size: 0.68rem;
+    color: var(--muted);
+    letter-spacing: 0.01em;
+  }
+  .mobileStepLabelActive {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
   .mobileToast {
     position: absolute;
     top: -44px;

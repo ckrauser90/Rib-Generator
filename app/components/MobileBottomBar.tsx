@@ -72,6 +72,13 @@ export function MobileBottomBar({
   const [sheetSection, setSheetSection] = useState<SheetSection>("form");
   const [toast, setToast] = useState<string | null>(null);
 
+  const step = !hasPhoto ? 1 : !hasProfile ? 2 : 3;
+  const steps = [
+    { label: "Foto",   done: hasPhoto,   active: step === 1 },
+    { label: "Profil", done: hasProfile, active: step === 2 },
+    { label: "3D",     done: false,      active: step === 3 },
+  ];
+
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2200);
@@ -90,6 +97,21 @@ export function MobileBottomBar({
   return (
     <div className={styles.mobileBottomBar}>
       {toast && <div className={styles.mobileToast}>{toast}</div>}
+
+      <div className={styles.mobileStepIndicator} aria-hidden>
+        {steps.map((s, i) => (
+          <span key={s.label} className={styles.mobileStepItem}>
+            {i > 0 && <span className={`${styles.mobileStepLine} ${steps[i - 1].done ? styles.mobileStepLineDone : ""}`} />}
+            <span className={`${styles.mobileStepDot} ${s.done ? styles.mobileStepDotDone : s.active ? styles.mobileStepDotActive : ""}`}>
+              {s.done
+                ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><polyline points="2 6 5 9 10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                : null}
+            </span>
+            <span className={`${styles.mobileStepLabel} ${s.active ? styles.mobileStepLabelActive : ""}`}>{s.label}</span>
+          </span>
+        ))}
+      </div>
+
       <div className={styles.mobileTabs}>
         <button
           type="button"
