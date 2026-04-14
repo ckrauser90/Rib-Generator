@@ -125,6 +125,8 @@ export const buildMobileBottomBarProps = ({
   canDownload,
   canFineTune,
   curveSmoothing,
+  hasPhoto,
+  hasProfile,
   heightInput,
   horizontalCorrectionDeg,
   printFriendliness,
@@ -151,11 +153,13 @@ export const buildMobileBottomBarProps = ({
   SharedToolControlsOptions,
   "onHeightKeyDown" | "onThicknessKeyDown" | "onWidthKeyDown"
 > &
-  Pick<MobileBottomBarProps, "mobileSheetOpen" | "mobileTab" | "onTabChange" | "onToggleSheet">): MobileBottomBarProps => ({
+  Pick<MobileBottomBarProps, "hasPhoto" | "hasProfile" | "mobileSheetOpen" | "mobileTab" | "onTabChange" | "onToggleSheet">): MobileBottomBarProps => ({
   bevelStrength,
   canDownload,
   canFineTune,
   curveSmoothing,
+  hasPhoto,
+  hasProfile,
   heightInput,
   horizontalCorrectionDeg,
   mobileSheetOpen,

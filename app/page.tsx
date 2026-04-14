@@ -365,6 +365,8 @@ export default function Home() {
     canDownload,
     canFineTune,
     curveSmoothing,
+    hasPhoto: Boolean(sourceRaster),
+    hasProfile: toolOutline.length > 1,
     heightInput,
     horizontalCorrectionDeg,
     mobileSheetOpen,

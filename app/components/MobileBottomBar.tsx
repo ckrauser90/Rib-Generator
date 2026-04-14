@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useState } from "react";
+import { ChangeEvent, useCallback, useState } from "react";
 import styles from "../page.module.css";
 import { pageText } from "../page-copy";
 
@@ -11,6 +11,8 @@ export type MobileBottomBarProps = {
   canDownload: boolean;
   canFineTune: boolean;
   curveSmoothing: number;
+  hasPhoto: boolean;
+  hasProfile: boolean;
   heightInput: string;
   horizontalCorrectionDeg: number;
   mobileSheetOpen: boolean;
@@ -42,6 +44,8 @@ export function MobileBottomBar({
   canDownload,
   canFineTune,
   curveSmoothing,
+  hasPhoto,
+  hasProfile,
   heightInput,
   horizontalCorrectionDeg,
   mobileSheetOpen,
@@ -66,9 +70,26 @@ export function MobileBottomBar({
   onWidthInputChange,
 }: MobileBottomBarProps) {
   const [sheetSection, setSheetSection] = useState<SheetSection>("form");
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2200);
+  }, []);
+
+  const handleProfilTab = () => {
+    if (!hasPhoto) { showToast("Erst Foto hochladen"); return; }
+    onTabChange("profil");
+  };
+
+  const handle3dTab = () => {
+    if (!hasProfile) { showToast(!hasPhoto ? "Erst Foto hochladen" : "Erst Profil festlegen"); return; }
+    onTabChange("3d");
+  };
 
   return (
     <div className={styles.mobileBottomBar}>
+      {toast && <div className={styles.mobileToast}>{toast}</div>}
       <div className={styles.mobileTabs}>
         <button
           type="button"
@@ -84,8 +105,9 @@ export function MobileBottomBar({
         </button>
         <button
           type="button"
-          className={`${styles.mobileTabBtn} ${mobileTab === "profil" ? styles.mobileTabActive : ""}`}
-          onClick={() => onTabChange("profil")}
+          className={`${styles.mobileTabBtn} ${mobileTab === "profil" ? styles.mobileTabActive : ""} ${!hasPhoto ? styles.mobileTabDisabled : ""}`}
+          onClick={handleProfilTab}
+          aria-disabled={!hasPhoto}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path d="M3 18 C5 12, 9 6, 12 3 C15 6, 19 12, 21 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -95,8 +117,9 @@ export function MobileBottomBar({
         </button>
         <button
           type="button"
-          className={`${styles.mobileTabBtn} ${mobileTab === "3d" ? styles.mobileTabActive : ""}`}
-          onClick={() => onTabChange("3d")}
+          className={`${styles.mobileTabBtn} ${mobileTab === "3d" ? styles.mobileTabActive : ""} ${!hasProfile ? styles.mobileTabDisabled : ""}`}
+          onClick={handle3dTab}
+          aria-disabled={!hasProfile}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

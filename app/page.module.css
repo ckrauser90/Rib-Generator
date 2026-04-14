@@ -1230,6 +1230,26 @@
     border-bottom-color: var(--accent);
   }
   .mobileTabActive svg { opacity: 1; }
+  .mobileTabDisabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .mobileToast {
+    position: absolute;
+    top: -44px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(40, 40, 40, 0.88);
+    color: #fff;
+    font-size: 0.82rem;
+    padding: 7px 16px;
+    border-radius: 20px;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: fadeUp 0.18s ease both;
+    z-index: 200;
+  }
 
   /* Action row */
   .mobileActions {
