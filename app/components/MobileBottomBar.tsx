@@ -143,7 +143,7 @@ export function MobileBottomBar({
         </button>
       </div>
 
-      <div className={`${styles.mobileSheet} ${mobileSheetOpen ? styles.mobileSheetOpen : ""}`}>
+      <div data-testid="mobile-sheet" className={`${styles.mobileSheet} ${mobileSheetOpen ? styles.mobileSheetOpen : ""}`}>
         {/* Section switcher */}
         <div className={styles.mobileSheetTabs}>
           <button

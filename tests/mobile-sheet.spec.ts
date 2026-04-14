@@ -22,7 +22,7 @@ test("mobile sheet opens and closes on toggle", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/?e2eMockSegmenter=1");
 
-  const sheet = page.locator('[class*="mobileSheet"]').first();
+  const sheet = page.getByTestId("mobile-sheet");
   await expect(sheet).not.toHaveClass(/mobileSheetOpen/);
 
   await page.getByTestId("mobile-sheet-toggle").click();

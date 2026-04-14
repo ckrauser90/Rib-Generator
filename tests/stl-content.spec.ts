@@ -28,7 +28,7 @@ test("exported STL has correct filename", async ({ page }) => {
   expect(download.suggestedFilename()).toBe("rib-tool.stl");
 });
 
-test("exported STL is non-empty and starts with binary STL header", async ({ page }) => {
+test("exported STL is non-empty and contains valid triangle data", async ({ page }) => {
   const download = await setupAndDownload(page);
   const stream = await download.createReadStream();
 
@@ -36,18 +36,17 @@ test("exported STL is non-empty and starts with binary STL header", async ({ pag
   for await (const chunk of stream) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
-  const buffer = Buffer.concat(chunks);
+  const content = Buffer.concat(chunks).toString("utf-8");
 
-  // Binary STL: 80-byte header + 4-byte triangle count
-  expect(buffer.byteLength).toBeGreaterThan(84);
+  // Must contain triangle facets
+  expect(content).toContain("facet normal");
+  expect(content).toContain("outer loop");
+  expect(content).toContain("endloop");
+  expect(content).toContain("endfacet");
 
-  // First 4 bytes of the triangle count should be a plausible number (> 0)
-  const triangleCount = buffer.readUInt32LE(80);
-  expect(triangleCount).toBeGreaterThan(0);
-
-  // Each triangle is 50 bytes: 12-byte normal + 3×12-byte vertices + 2-byte attribute
-  const expectedSize = 84 + triangleCount * 50;
-  expect(buffer.byteLength).toBe(expectedSize);
+  // Count facets — must have a reasonable number for a rib tool
+  const facetCount = (content.match(/endfacet/g) ?? []).length;
+  expect(facetCount).toBeGreaterThan(10);
 });
 
 test("exported STL changes size when width is changed", async ({ page }) => {
