@@ -1400,47 +1400,83 @@
     position: relative;
     display: flex;
     align-items: center;
+    /* extend the hover area upward to include the floating bubble */
+    padding-top: 4px;
+    margin-top: -4px;
   }
   .sliderInfoBtn {
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 0.78rem;
-    color: var(--muted);
-    padding: 0 2px;
+    padding: 0;
     line-height: 1;
-    opacity: 0.7;
-    transition: opacity 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
-  .sliderInfoBtn:hover,
-  .sliderInfoBtnActive {
-    opacity: 1;
+  .sliderInfoIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 1.5px solid var(--muted);
+    font-size: 0.65rem;
+    font-style: italic;
+    font-weight: 700;
+    color: var(--muted);
+    line-height: 1;
+    transition: border-color 0.15s, color 0.15s;
+    user-select: none;
+  }
+  .sliderInfoBtn:hover .sliderInfoIcon,
+  .sliderTipWrapperOpen .sliderInfoIcon {
+    border-color: var(--accent);
     color: var(--accent);
   }
+  /* Tooltip bubble — hidden by default, shown on CSS hover (desktop) or open class (mobile) */
   .sliderTipBubble {
     position: absolute;
-    bottom: calc(100% + 8px);
-    right: -8px;
-    background: rgba(40, 40, 40, 0.95);
+    bottom: calc(100% + 6px);
+    right: -6px;
+    background: rgba(40, 40, 40, 0.96);
     color: #fff;
     font-size: 0.73rem;
     font-weight: 400;
     padding: 9px 12px;
     border-radius: 9px;
-    width: 190px;
+    width: 200px;
     z-index: 400;
     line-height: 1.45;
-    cursor: pointer;
-    pointer-events: auto;
+    pointer-events: none;
     box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    /* hidden by default */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s, visibility 0.15s;
   }
   .sliderTipBubble::after {
     content: "";
     position: absolute;
     top: 100%;
-    right: 14px;
+    right: 12px;
     border: 5px solid transparent;
-    border-top-color: rgba(40, 40, 40, 0.95);
+    border-top-color: rgba(40, 40, 40, 0.96);
+  }
+  /* Desktop: show on hover (CSS — reliable, no mouseLeave race) */
+  @media (hover: hover) {
+    .sliderTipWrapper:hover .sliderTipBubble {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+  }
+  /* Mobile: show when React adds the open class */
+  .sliderTipWrapperOpen .sliderTipBubble {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
   }
 
   .mobileToast {

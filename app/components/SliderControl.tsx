@@ -47,32 +47,15 @@ export function SliderControl({
   const [editText, setEditText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const tipVisible = tipId !== undefined ? openTipId === tipId : localTipOpen;
+  // On touch devices the CSS :hover trick doesn't work, so we use React state.
+  const mobileTipOpen = tipId !== undefined ? openTipId === tipId : localTipOpen;
 
-  const openTip = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (tipId !== undefined && onTipOpen) {
-      onTipOpen(tipId);
-    } else {
-      setLocalTipOpen(true);
-    }
-  };
-
-  const closeTip = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (tipId !== undefined && onTipOpen) {
-      onTipOpen(null);
-    } else {
-      setLocalTipOpen(false);
-    }
-  };
-
-  const toggleTip = (e: React.MouseEvent) => {
+  const toggleMobileTip = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (tipVisible) {
-      closeTip(e);
+    if (tipId !== undefined && onTipOpen) {
+      onTipOpen(mobileTipOpen ? null : tipId);
     } else {
-      openTip(e);
+      setLocalTipOpen((v) => !v);
     }
   };
 
@@ -129,25 +112,20 @@ export function SliderControl({
             </strong>
           )}
           {tooltip && (
-            <span
-              className={styles.sliderTipWrapper}
-              onMouseEnter={openTip}
-              onMouseLeave={() => closeTip()}
-            >
+            <span className={`${styles.sliderTipWrapper} ${mobileTipOpen ? styles.sliderTipWrapperOpen : ""}`}>
               <button
                 type="button"
-                className={`${styles.sliderInfoBtn} ${tipVisible ? styles.sliderInfoBtnActive : ""}`}
-                onClick={toggleTip}
+                className={styles.sliderInfoBtn}
+                onClick={toggleMobileTip}
                 aria-label="Info"
-                aria-expanded={tipVisible}
+                aria-expanded={mobileTipOpen}
               >
-                ⓘ
+                <span className={styles.sliderInfoIcon} aria-hidden>i</span>
               </button>
-              {tipVisible && (
-                <span className={styles.sliderTipBubble} onClick={(e) => { e.stopPropagation(); closeTip(); }}>
-                  {tooltip}
-                </span>
-              )}
+              {/* Always in DOM — CSS :hover shows it on desktop, .sliderTipWrapperOpen on mobile */}
+              <span className={styles.sliderTipBubble} role="tooltip">
+                {tooltip}
+              </span>
             </span>
           )}
         </span>
