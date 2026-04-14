@@ -107,6 +107,148 @@
   z-index: 200;
 }
 
+/* ─── SliderControl shared styles (desktop + mobile) ──────────────────────── */
+.sliderLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.sliderValueGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.sliderValueBadge {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: var(--ink);
+}
+.sliderValueBadgeClickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sliderValueBadgeClickable:hover {
+  background: var(--line);
+}
+.sliderEditRow {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.sliderInlineInput {
+  width: 52px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: 1.5px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--ink);
+  padding: 2px 4px;
+  text-align: right;
+  outline: none;
+}
+.sliderEditConfirm {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  padding: 2px 5px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.sliderEditCancel {
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  padding: 2px 5px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.sliderTipWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.sliderInfoBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sliderInfoIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid var(--muted);
+  font-size: 0.65rem;
+  font-style: italic;
+  font-weight: 700;
+  color: var(--muted);
+  line-height: 1;
+  transition: border-color 0.15s, color 0.15s;
+  user-select: none;
+}
+.sliderInfoBtn:hover .sliderInfoIcon,
+.sliderTipWrapperOpen .sliderInfoIcon {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* Tooltip bubble — always in DOM, hidden by default */
+.sliderTipBubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: -6px;
+  background: rgba(40, 40, 40, 0.96);
+  color: #fff;
+  font-size: 0.73rem;
+  font-weight: 400;
+  padding: 9px 12px;
+  border-radius: 9px;
+  width: 200px;
+  z-index: 400;
+  line-height: 1.45;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, visibility 0.15s;
+}
+.sliderTipBubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  right: 12px;
+  border: 5px solid transparent;
+  border-top-color: rgba(40, 40, 40, 0.96);
+}
+/* Show on hover (works on all pointer devices) */
+.sliderTipWrapper:hover .sliderTipBubble {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+/* Show on mobile tap via React class */
+.sliderTipWrapperOpen .sliderTipBubble {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
 .downloadBtn {
   appearance: none;
   display: inline-flex;
@@ -1329,154 +1471,6 @@
   .mobileStepLabelActive {
     color: var(--accent);
     font-weight: 700;
-  }
-
-  /* Shared slider control */
-  .sliderLabelRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-    margin-bottom: 2px;
-  }
-  .sliderValueGroup {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-  }
-  .sliderValueBadge {
-    font-size: 0.82rem;
-    font-weight: 600;
-    padding: 1px 4px;
-    border-radius: 4px;
-    color: var(--ink);
-  }
-  .sliderValueBadgeClickable {
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .sliderValueBadgeClickable:hover {
-    background: var(--line);
-  }
-  .sliderEditRow {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-  }
-  .sliderInlineInput {
-    width: 52px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    border: 1.5px solid var(--accent);
-    border-radius: 4px;
-    background: var(--bg);
-    color: var(--ink);
-    padding: 2px 4px;
-    text-align: right;
-    outline: none;
-  }
-  .sliderEditConfirm {
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    border-radius: 4px;
-    font-size: 0.72rem;
-    padding: 2px 5px;
-    cursor: pointer;
-    line-height: 1.4;
-  }
-  .sliderEditCancel {
-    background: none;
-    color: var(--muted);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    font-size: 0.72rem;
-    padding: 2px 5px;
-    cursor: pointer;
-    line-height: 1.4;
-  }
-  .sliderTipWrapper {
-    position: relative;
-    display: flex;
-    align-items: center;
-    /* extend the hover area upward to include the floating bubble */
-    padding-top: 4px;
-    margin-top: -4px;
-  }
-  .sliderInfoBtn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .sliderInfoIcon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
-    border: 1.5px solid var(--muted);
-    font-size: 0.65rem;
-    font-style: italic;
-    font-weight: 700;
-    color: var(--muted);
-    line-height: 1;
-    transition: border-color 0.15s, color 0.15s;
-    user-select: none;
-  }
-  .sliderInfoBtn:hover .sliderInfoIcon,
-  .sliderTipWrapperOpen .sliderInfoIcon {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  /* Tooltip bubble — hidden by default, shown on CSS hover (desktop) or open class (mobile) */
-  .sliderTipBubble {
-    position: absolute;
-    bottom: calc(100% + 6px);
-    right: -6px;
-    background: rgba(40, 40, 40, 0.96);
-    color: #fff;
-    font-size: 0.73rem;
-    font-weight: 400;
-    padding: 9px 12px;
-    border-radius: 9px;
-    width: 200px;
-    z-index: 400;
-    line-height: 1.45;
-    pointer-events: none;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
-    /* hidden by default */
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.15s, visibility 0.15s;
-  }
-  .sliderTipBubble::after {
-    content: "";
-    position: absolute;
-    top: 100%;
-    right: 12px;
-    border: 5px solid transparent;
-    border-top-color: rgba(40, 40, 40, 0.96);
-  }
-  /* Desktop: show on hover (CSS — reliable, no mouseLeave race) */
-  @media (hover: hover) {
-    .sliderTipWrapper:hover .sliderTipBubble {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
-    }
-  }
-  /* Mobile: show when React adds the open class */
-  .sliderTipWrapperOpen .sliderTipBubble {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
   }
 
   .mobileToast {
