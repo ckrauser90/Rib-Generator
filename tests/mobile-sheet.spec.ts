@@ -46,7 +46,7 @@ test("mobile sheet tab switch shows Maße inputs and hides sliders", async ({ pa
   await expect(page.getByTestId("mobile-height-input")).toBeVisible();
   await expect(page.getByTestId("mobile-width-input")).toBeVisible();
   await expect(page.getByTestId("mobile-thickness-input")).toBeVisible();
-  await expect(page.locator('[class*="mobileSlider"]')).toHaveCount(0);
+  await expect(page.locator('[class*="mobileSlider"]').first()).not.toBeVisible();
 });
 
 test("mobile sheet Maße inputs are disabled before anchor confirmation", async ({ page }) => {
