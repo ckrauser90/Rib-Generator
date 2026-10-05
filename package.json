@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "test:e2e": "playwright test tests/release-smoke.spec.ts tests/mobile-sheet.spec.ts tests/dimension-inputs.spec.ts tests/stl-content.spec.ts",
-    "test:unit": "playwright test -c playwright.unit.config.ts"
+    "test:unit": "playwright test -c playwright.unit.config.ts",
+    "lab:models": "node scripts/lab-fetch-models.mjs",
+    "lab:synthetic": "playwright test -c playwright.lab.config.ts generate-synthetic",
+    "lab:compare": "playwright test -c playwright.lab.config.ts segmentation-compare"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.34",
@@ -24,6 +27,8 @@
     "@types/react": "19.1.2",
     "@types/react-dom": "19.1.2",
     "@types/three": "^0.183.1",
+    "onnxruntime-node": "^1.23.2",
+    "onnxruntime-web": "^1.23.2",
     "typescript": "5.8.3"
   }
 }

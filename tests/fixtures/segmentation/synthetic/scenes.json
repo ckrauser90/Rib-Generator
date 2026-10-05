@@ -1,0 +1,62 @@
+[
+  {
+    "id": "s01-becher-ruhig",
+    "label": "Becher, ruhig, glänzend",
+    "heightMm": 95.6
+  },
+  {
+    "id": "s02-vase-ruhig",
+    "label": "Vase, ruhig, matt",
+    "heightMm": 130.6
+  },
+  {
+    "id": "s03-schale-ruhig",
+    "label": "Schale, ruhig, salbei",
+    "heightMm": 60.6
+  },
+  {
+    "id": "s04-krug-ruhig",
+    "label": "Krug mit Henkel, ruhig",
+    "heightMm": 105.6
+  },
+  {
+    "id": "s05-becher-unruhig",
+    "label": "Becher, unruhiger Hintergrund",
+    "heightMm": 95.6
+  },
+  {
+    "id": "s06-vase-unruhig",
+    "label": "Vase, unruhiger Hintergrund",
+    "heightMm": 130.6
+  },
+  {
+    "id": "s07-schale-unruhig",
+    "label": "Schale, unruhiger Hintergrund",
+    "heightMm": 60.6
+  },
+  {
+    "id": "s08-krug-unruhig",
+    "label": "Krug mit Henkel, unruhig",
+    "heightMm": 105.6
+  },
+  {
+    "id": "s09-becher-weiss",
+    "label": "Becher, weiß auf weiß",
+    "heightMm": 95.6
+  },
+  {
+    "id": "s10-vase-weiss",
+    "label": "Vase, weiß auf weiß",
+    "heightMm": 130.6
+  },
+  {
+    "id": "s11-vase-schraeg",
+    "label": "Vase, 3° schräg, glänzend",
+    "heightMm": 130.6
+  },
+  {
+    "id": "s12-krug-dunkel",
+    "label": "Krug, dunkle Glasur, ruhig",
+    "heightMm": 105.6
+  }
+]

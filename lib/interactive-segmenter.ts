@@ -1,8 +1,20 @@
 import type { RasterSource } from "./perspective";
 
-const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm";
-const MODEL_URL =
+let wasmRoot = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm";
+let modelUrl =
   "https://storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/1/magic_touch.tflite";
+
+/**
+ * Overrides where the WASM runtime and the model are loaded from, e.g. to serve
+ * them from the app itself instead of public CDNs. Must run before the first load.
+ */
+export function configureInteractiveSegmenterAssets(assets: {
+  wasmRoot?: string;
+  modelUrl?: string;
+}) {
+  wasmRoot = assets.wasmRoot ?? wasmRoot;
+  modelUrl = assets.modelUrl ?? modelUrl;
+}
 
 type SegmenterModule = typeof import("@mediapipe/tasks-vision");
 
@@ -86,8 +98,8 @@ export async function loadInteractiveSegmenter() {
   if (!segmenterPromise) {
     segmenterPromise = suppressBenignMediapipeLogs(async () => {
       const { FilesetResolver, InteractiveSegmenter } = await loadModule();
-      const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
-      const segmenter = await InteractiveSegmenter.createFromModelPath(vision, MODEL_URL);
+      const vision = await FilesetResolver.forVisionTasks(wasmRoot);
+      const segmenter = await InteractiveSegmenter.createFromModelPath(vision, modelUrl);
       segmenterInstance = segmenter;
       return segmenter;
     });
