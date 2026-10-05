@@ -17,6 +17,13 @@ Design-Canvas mit allen Entwürfen: https://claude.ai/artifact/KsnrMyon2mTQK5ihq
 - Heutige Regler (Glättung, Druckoptimierung, Fase, Horizont, Breite, Dicke) wandern in einen
   optionalen Pro-/Erweitert-Modus. Qualität des Basis-Ergebnisses ist kein Verkaufsargument.
 
+## Reihenfolge (Stand 2026-10-05)
+
+1. **Vergleichstest Segmentierung zuerst:** BiRefNet vs. MediaPipe `magic_touch` auf den
+   Fotos in `tests/fixtures`, Konturen übereinandergelegt. Danach mit echten Daten entscheiden.
+2. Projekt-Fundament auf Baukasten-Niveau (CI, Deployment, Sicherheit) – Brainstorming läuft.
+3. Easy Flow (Variante A + Lupe) umsetzen.
+
 ## Offen
 
 - Monetarisierung: Registrierung + 1 kostenlose STL, danach bezahlen (Details noch offen).
