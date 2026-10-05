@@ -182,10 +182,10 @@ export const renderReport = (options: {
 <title>Segmentierungs-Vergleich</title>
 <style>
 :root{--bg:#faf8f5;--card:#fff;--text:#2f2a25;--muted:#6b625a;--line:#e6dfd4;--ok:#1f7a45;--bad:#b42318;--open:#8a6d1f;--mp:#c4262e;--br:#1f5fd6;--truth:#12814a}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1b1815;--card:#24201c;--text:#f3ede6;--muted:#b9aea2;--line:#3a332c;--ok:#5cc28a;--bad:#ff8a80;--open:#e2c26b;--mp:#ff7b80;--br:#7aa7ff;--truth:#5cc28a}}
-:root[data-theme="dark"]{--bg:#1b1815;--card:#24201c;--text:#f3ede6;--muted:#b9aea2;--line:#3a332c;--ok:#5cc28a;--bad:#ff8a80;--open:#e2c26b;--mp:#ff7b80;--br:#7aa7ff;--truth:#5cc28a}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1b1815;--card:#24201c;--text:#f3ede6;--muted:#b9aea2;--line:#3a332c;--ok:#5cc28a;--bad:#ff8a80;--open:#e2c26b;--mp:#ff7b80;--br:#7aa7ff;--truth:#5cc28a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1b1815;--card:#24201c;--text:#f3ede6;--muted:#b9aea2;--line:#3a332c;--ok:#5cc28a;--bad:#ff8a80;--open:#e2c26b;--mp:#ff7b80;--br:#7aa7ff;--truth:#5cc28a;color-scheme:dark}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,sans-serif}
-main{max-width:1100px;margin:0 auto;padding:16px}
+main{max-width:1100px;margin:0 auto;padding-inline:16px;padding-block:16px}
 h1{font-size:26px;margin:8px 0}h2{font-size:20px;margin:28px 0 8px}h3{font-size:16px;margin:0 0 8px}
 .meta{color:var(--muted);font-weight:400;font-size:13px}
 .scroll{overflow-x:auto}
