@@ -457,6 +457,8 @@ export const traceEdgeStages = async (input: {
   heightMm: number;
   /** Optional: Sollmaske. Dann läuft sie durch dieselbe Kette, und die Differenz zeigt reines Rauschen. */
   truthDataUrl?: string;
+  /** Optional: weitere Reglerstellungen [Glättung, Druckoptimierung], deren Rib-Kanten mitgeliefert werden. */
+  settings?: [number, number][];
 }) => {
   ensureAssetsConfigured();
   const image = await loadImage(input.imageDataUrl);
@@ -569,6 +571,12 @@ export const traceEdgeStages = async (input: {
     stages,
     noiseMm,
     formLoss,
+    ribsBySetting: (input.settings ?? []).map(([smoothing, friendliness]) => ({
+      smoothing,
+      friendliness,
+      rib: buildDownstream(withImage.rightWorkProfile, withImage.referenceBounds, smoothing, friendliness).rib,
+      leftRib: buildDownstream(withImage.leftWorkProfile, withImage.referenceBounds, smoothing, friendliness).rib,
+    })),
   };
 };
 
