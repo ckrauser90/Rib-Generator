@@ -9,6 +9,7 @@ Last updated: 2026-10-06
 - Labor: `npm run lab:compare`, `obj-compare` (Vergleich mit Original-Rib)
 - Cloudflare: Worker `rib-generator` mit GitHub verbunden, Production branch = dieser Branch, Build command `npm run build:cloudflare` (nach dem Merge auf `main` umstellen, `docs/DEPLOY-CLOUDFLARE.md`)
 - Erkennung: MediaPipe Standard, BiRefNet im Pro-Modus nur zum Testen (R-008)
+- Aufnahme-Hilfen: Foto-Check in Schritt 2 (fest), geführte Kamera als Test-Knopf in Schritt 1 (R-010, entfernbar)
 - Nächster Schritt laut Nutzer: verschiedene Formen drucken, damit testen, dann Formverstärkung/Schwindung kalibrieren
 
 ## Current Stable Baseline

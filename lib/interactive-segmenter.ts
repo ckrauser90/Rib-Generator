@@ -249,6 +249,22 @@ async function runSegmentation(
   };
 }
 
+/**
+ * Schnelle Erkennung für Live-Vorschauen (geführte Aufnahme): ohne Neustart des Modells bei
+ * leerer Maske – der wäre im Sekundentakt viel zu teuer. Für das eigentliche Foto gilt
+ * weiter `segmentRasterFromPoint`.
+ */
+export async function segmentPreviewFromPoint(
+  raster: RasterSource,
+  normalizedPoint: { x: number; y: number },
+  confidenceCutoff: number,
+) {
+  if (isE2eMockEnabled()) {
+    return buildMockSegmentation(raster, normalizedPoint, confidenceCutoff);
+  }
+  return runSegmentation(raster, normalizedPoint, confidenceCutoff);
+}
+
 export async function segmentRasterFromPoint(
   raster: RasterSource,
   normalizedPoint: { x: number; y: number },

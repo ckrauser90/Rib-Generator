@@ -9,6 +9,9 @@
 import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { readTipsDismissed, writeTipsDismissed } from "../../easy-flow";
 import { PhotoTipsSheet } from "./PhotoTipsSheet";
+// Geführte Aufnahme (Test): einzige Verbindung zur App. Zum Verwerfen diesen Import,
+// den Knopf unten und den Ordner guided-camera/ löschen (docs/decisions.md R-010).
+import { GuidedCamera, requestMotionPermission } from "./guided-camera/GuidedCamera";
 import styles from "./easy.module.css";
 
 export type PhotoStepProps = {
@@ -20,6 +23,8 @@ export type PhotoStepProps = {
   onDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
   onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  /** Foto aus der geführten Aufnahme. */
+  onCapturedFile: (file: File) => void;
   onTipsOpenChange: (open: boolean) => void;
 };
 
@@ -32,11 +37,19 @@ export function PhotoStep({
   onDragOver,
   onDrop,
   onFileChange,
+  onCapturedFile,
   onTipsOpenChange,
 }: PhotoStepProps) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const [tipsBeforeCamera, setTipsBeforeCamera] = useState(false);
+  const [guidedOpen, setGuidedOpen] = useState(false);
+
+  const openGuidedCamera = () => {
+    // Der Lagesensor muss auf dem iPhone im selben Tipp freigegeben werden.
+    void requestMotionPermission();
+    setGuidedOpen(true);
+  };
 
   const openCamera = () => {
     if (readTipsDismissed()) {
@@ -98,6 +111,12 @@ export function PhotoStep({
           </svg>
           Aus Galerie wählen
         </button>
+        <button type="button" className={styles.secondaryButton} onClick={openGuidedCamera} data-testid="easy-guided-button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="3" y="3" width="18" height="18" rx="3" /><line x1="12" y1="3" x2="12" y2="21" /><line x1="6" y1="6.5" x2="18" y2="6.5" /><line x1="6" y1="17.5" x2="18" y2="17.5" />
+          </svg>
+          Geführte Aufnahme (Test)
+        </button>
         <button type="button" className={styles.textButton} onClick={() => { setTipsBeforeCamera(false); onTipsOpenChange(true); }}>
           Tipps für ein gutes Foto
         </button>
@@ -123,6 +142,20 @@ export function PhotoStep({
         onChange={onFileChange}
         data-testid="easy-upload-input"
       />
+
+      {guidedOpen && (
+        <GuidedCamera
+          onClose={() => setGuidedOpen(false)}
+          onCapture={(file) => {
+            setGuidedOpen(false);
+            onCapturedFile(file);
+          }}
+          onFallback={() => {
+            setGuidedOpen(false);
+            cameraInputRef.current?.click();
+          }}
+        />
+      )}
 
       <PhotoTipsSheet
         open={tipsOpen}

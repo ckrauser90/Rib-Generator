@@ -332,6 +332,7 @@ export default function Home() {
     handleDragOver,
     handleDrop,
     handleFile,
+    handleImageUpload,
     resetCurrentAnchors,
     retargetPrompt,
     selectSide,
@@ -586,6 +587,9 @@ export default function Home() {
           },
           onFileChange: (event) => {
             void handleFile(event);
+          },
+          onCapturedFile: (file) => {
+            void handleImageUpload(file);
           },
           onTipsOpenChange: setTipsOpen,
         }}

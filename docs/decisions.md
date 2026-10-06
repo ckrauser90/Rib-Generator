@@ -236,3 +236,42 @@ Worker mit Code für die STL-Ausgabe.
 unversionierte jsDelivr-Adresse der MediaPipe-Laufzeit (lieferte 1.0.1 zur gebündelten
 0.10.34). Seitdem wird die Version beim Build eingesetzt, und der Cloudflare-Build liefert
 Laufzeit und Modell selbst aus. Schritt 2 zeigt jetzt Laden und Ladefehler samt Grund an.
+
+## R-010 · 2026-10-06 · Aufnahme-Hilfen: Foto-Check (fest) und geführte Kamera (Test)
+
+**Entscheidung:** Zwei Stufen, angeregt durch „Aufnahme erzwingen statt später reparieren“.
+
+**Stufe 1 – Foto-Check nach jeder Aufnahme** (`lib/photo-check.ts`, Anzeige in Schritt 2):
+Gemessen wird an der erkannten Gefäßkante, nicht im ganzen Bild – sonst hinge das Ergebnis vom
+Motiv ab. Quer zur Kante: Helligkeitssprung (Kontrast) und Breite des Übergangs (Unschärfe).
+Dazu Belichtung, angeschnittenes Gefäß und zu wenige Pixel auf dem Gefäß. Hinweise mit
+konkreter Abhilfe und „Neues Foto“; der Check blockiert nie.
+
+*Kalibrierung* (`tests/lab/photo-check-calibration.spec.ts`): 15 Testfotos im Original und in
+6 verschlechterten Varianten, echte Erkennung. **99 von 105 richtig**, 1 Fehlalarm (Foto war
+schon weich), 5 knapp verpasst. Startwerte: Kantenbreite > 4,5 px (bei 512 px), Sprung < 16
+Graustufen, Gefäß < 300 px oder < 12 % der Bildhöhe, Abstand zum Rand < 0,8 %.
+
+*Verworfen in Stufe 1:*
+- Neigung aus dem Foto: echte Fotos streuten 3–7°, um 6° gedrehte Varianten verschoben den Wert
+  nur um 1–4° (große Ringhenkel, haltende Hand). Gemessen, aber nicht gemeldet.
+- „Gefäß soll 70–80 % der Bildhöhe füllen“ als Prüfung: Die Testfotos füllten 22–60 % und wurden
+  gut erkannt. Entscheidend sind die Pixel auf dem Gefäß, nicht der Anteil.
+- Seitlicher Versatz (`perspectiveRisk`): war bei allen Fotos 0 – nicht aussagekräftig.
+
+**Stufe 2 – geführte Kamera, als Test hinter eigenem Knopf** („Geführte Aufnahme (Test)“):
+Eigene Kamera-Ansicht mit Mittellinie und Zielzone für Rand und Fuß, live: Neigung über den
+Schwerkraftvektor (iPhone fragt einmal um Erlaubnis), Schärfe relativ zum besten Bild der letzten
+3 s, Gefäßgröße per Erkennung auf einem 256-px-Vorschaubild etwa jede Sekunde. Zoom-Knöpfe
+1×/2×/3×, wenn das Gerät sie anbietet (Android Chrome meist, iPhone eher nicht), sonst
+„Kamera wechseln“. Auslöser immer bedienbar („Trotzdem aufnehmen“).
+
+*Zum Verwerfen:* `app/components/easy/guided-camera/`, `lib/guided-camera.ts`,
+`tests/unit/guided-camera.spec.ts`, `tests/guided-camera.spec.ts` löschen und in
+`app/components/easy/PhotoStep.tsx` Import und Knopf entfernen (dort markiert).
+
+**Offen / zu testen am echten Handy:** Bildqualität des Video-Standbilds gegenüber dem
+Kamera-Foto (Konturgenauigkeit), Tempo der Live-Erkennung, Zoom auf dem iPhone, Grenzwerte
+(Neigung 2°/5°, Füllgrad 60–85 %).
+
+Bild: `docs/aufnahme-hilfen.png`.
