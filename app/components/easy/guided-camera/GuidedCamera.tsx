@@ -29,8 +29,16 @@ import {
 } from "../../../../lib/guided-camera";
 import styles from "./guided-camera.module.css";
 
+/** Zustand beim Auslösen – für den Testmodus (app/test-log.ts), sonst ungenutzt. */
+export type GuidedCaptureInfo = {
+  autoCaptured: boolean;
+  tilt: { rollDeg: number; pitchDeg: number } | null;
+  placement: { top: number; bottom: number } | null;
+  instruction: string;
+};
+
 type GuidedCameraProps = {
-  onCapture: (file: File) => void;
+  onCapture: (file: File, info: GuidedCaptureInfo) => void;
   onClose: () => void;
   /** Normale Handy-Kamera statt der geführten Aufnahme (z. B. ohne Kamerazugriff). */
   onFallback: () => void;
@@ -292,8 +300,10 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
   }, [updateBand]);
 
   const guidance = evaluateGuidance({ tilt, sharpnessRatio, placement, band });
+  const latestRef = useRef({ tilt, placement, title: guidance.title });
+  latestRef.current = { tilt, placement, title: guidance.title };
 
-  const capture = useCallback(async () => {
+  const capture = useCallback(async (autoCaptured: boolean) => {
     const video = videoRef.current;
     if (!video || video.videoWidth === 0 || capturingRef.current) return;
     capturingRef.current = true;
@@ -307,7 +317,13 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
       return;
     }
     stopStream();
-    onCapture(new File([blob], "gefuehrte-aufnahme.jpg", { type: "image/jpeg" }));
+    const latest = latestRef.current;
+    onCapture(new File([blob], "gefuehrte-aufnahme.jpg", { type: "image/jpeg" }), {
+      autoCaptured,
+      tilt: latest.tilt?.portrait ? { rollDeg: latest.tilt.rollDeg, pitchDeg: latest.tilt.pitchDeg } : null,
+      placement: latest.placement ? { top: latest.placement.top, bottom: latest.placement.bottom } : null,
+      instruction: latest.title,
+    });
   }, [onCapture, stopStream]);
 
   // Selbstauslöser: Kreis füllt sich, solange alles passt; dann Foto.
@@ -319,7 +335,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
       holdSinceRef.current = state.since;
       setProgress(state.progress);
       if (state.progress >= 1) {
-        void capture();
+        void capture(true);
         return;
       }
       if (ready) frame = requestAnimationFrame(step);
@@ -440,7 +456,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
             type="button"
             className={styles.shutter}
             data-ready={guidance.ready || undefined}
-            onClick={() => void capture()}
+            onClick={() => void capture(false)}
             disabled={Boolean(error)}
             aria-label={guidance.ready ? "Aufnehmen" : "Trotzdem aufnehmen"}
             data-testid="guided-shutter"

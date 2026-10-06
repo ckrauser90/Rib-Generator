@@ -1,3 +1,4 @@
+import fs from "fs";
 import { expect, test } from "@playwright/test";
 
 // Chromium liefert mit diesen Schaltern eine künstliche Kamera (Testbild) ohne Rückfrage.
@@ -54,4 +55,27 @@ test("guided capture can be closed without a photo", async ({ page }) => {
   await page.getByTestId("guided-close").click();
   await expect(page.getByTestId("guided-camera")).toBeHidden();
   await expect(page.getByTestId("easy-flow")).toHaveAttribute("data-step", "foto");
+});
+
+test("in test mode the guided capture is recorded with its state at the shutter", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?e2eMockSegmenter=1&test=1");
+  await page.getByTestId("easy-guided-button").click();
+  await expect
+    .poll(() => page.getByTestId("guided-video").evaluate((video: HTMLVideoElement) => video.readyState), { timeout: 15_000 })
+    .toBeGreaterThanOrEqual(2);
+  const camera = page.getByTestId("guided-camera");
+  if (await camera.isVisible()) await page.getByTestId("guided-shutter").click().catch(() => undefined);
+  await expect(page.getByTestId("easy-flow")).toHaveAttribute("data-step", "kontur");
+  // Zurück zum Foto = dieser Versuch brauchte ein neues Foto.
+  await page.getByTestId("easy-back-button").click();
+  await expect(page.getByTestId("test-mode-count")).toHaveText("1");
+
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("test-mode-export").click()]);
+  const data = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
+  const [attempt] = data.attempts;
+  expect(attempt).toMatchObject({ mode: "gefuehrt", outcome: "neues-foto" });
+  expect(typeof attempt.guided.autoCaptured).toBe("boolean");
+  expect(typeof attempt.guided.instruction).toBe("string");
+  expect(attempt.durationMs).toBeGreaterThan(0);
 });

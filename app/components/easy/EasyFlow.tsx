@@ -12,6 +12,8 @@ import { ContourStep, type ContourStepProps } from "./ContourStep";
 import { DoneStep, type DoneStepProps } from "./DoneStep";
 import { EasyStepper } from "./EasyStepper";
 import { PhotoStep, type PhotoStepProps } from "./PhotoStep";
+import { TestModeBar } from "./TestModeBar";
+import type { TestLog } from "../../test-log";
 import styles from "./easy.module.css";
 
 type EasyFlowProps = {
@@ -21,9 +23,11 @@ type EasyFlowProps = {
   photo: PhotoStepProps;
   onBack: () => void;
   onOpenPro: () => void;
+  /** Nur im Testmodus (`?test=1`). */
+  testLog?: TestLog;
 };
 
-export function EasyFlow({ step, contour, done, photo, onBack, onOpenPro }: EasyFlowProps) {
+export function EasyFlow({ step, contour, done, photo, onBack, onOpenPro, testLog }: EasyFlowProps) {
   return (
     <main className={styles.easy} data-testid="easy-flow" data-step={step}>
       <header className={styles.header}>
@@ -49,6 +53,8 @@ export function EasyFlow({ step, contour, done, photo, onBack, onOpenPro }: Easy
           </button>
         </div>
       </header>
+
+      {testLog?.enabled && <TestModeBar log={testLog} />}
 
       <EasyStepper step={step} />
 

@@ -11,7 +11,8 @@ import { readTipsDismissed, writeTipsDismissed } from "../../easy-flow";
 import { PhotoTipsSheet } from "./PhotoTipsSheet";
 // Geführte Aufnahme (Test): einzige Verbindung zur App. Zum Verwerfen diesen Import,
 // den Knopf unten und den Ordner guided-camera/ löschen (docs/decisions.md R-010).
-import { GuidedCamera, requestMotionPermission } from "./guided-camera/GuidedCamera";
+import { GuidedCamera, requestMotionPermission, type GuidedCaptureInfo } from "./guided-camera/GuidedCamera";
+import type { CaptureMode } from "../../test-log";
 import styles from "./easy.module.css";
 
 export type PhotoStepProps = {
@@ -26,6 +27,10 @@ export type PhotoStepProps = {
   /** Foto aus der geführten Aufnahme. */
   onCapturedFile: (file: File) => void;
   onTipsOpenChange: (open: boolean) => void;
+  /** Testmodus (app/test-log.ts): Knopf für eine Aufnahme gedrückt … */
+  onCaptureStart?: (mode: CaptureMode) => void;
+  /** … und Foto angekommen, mit dem Weg, auf dem es kam. */
+  onPhotoArrived?: (file: File, mode: CaptureMode, guided: GuidedCaptureInfo | null) => void;
 };
 
 export function PhotoStep({
@@ -39,6 +44,8 @@ export function PhotoStep({
   onFileChange,
   onCapturedFile,
   onTipsOpenChange,
+  onCaptureStart,
+  onPhotoArrived,
 }: PhotoStepProps) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -48,12 +55,35 @@ export function PhotoStep({
   const openGuidedCamera = () => {
     // Der Lagesensor muss auf dem iPhone im selben Tipp freigegeben werden.
     void requestMotionPermission();
+    onCaptureStart?.("gefuehrt");
     setGuidedOpen(true);
+  };
+
+  const clickCameraInput = () => {
+    onCaptureStart?.("kamera");
+    cameraInputRef.current?.click();
+  };
+
+  const openGallery = () => {
+    onCaptureStart?.("galerie");
+    galleryInputRef.current?.click();
+  };
+
+  const fileChangeFrom = (mode: CaptureMode) => (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) onPhotoArrived?.(file, mode, null);
+    onFileChange(event);
+  };
+
+  const drop = (event: DragEvent<HTMLDivElement>) => {
+    const file = event.dataTransfer?.files?.[0];
+    if (file) onPhotoArrived?.(file, "ablegen", null);
+    onDrop(event);
   };
 
   const openCamera = () => {
     if (readTipsDismissed()) {
-      cameraInputRef.current?.click();
+      clickCameraInput();
       return;
     }
     setTipsBeforeCamera(true);
@@ -70,7 +100,7 @@ export function PhotoStep({
     const openCameraNext = tipsBeforeCamera;
     closeTips();
     // Muss im selben Klick passieren, sonst blockiert der Browser die Dateiauswahl.
-    if (openCameraNext) cameraInputRef.current?.click();
+    if (openCameraNext) clickCameraInput();
   };
 
   return (
@@ -85,7 +115,7 @@ export function PhotoStep({
         data-drag-active={dragActive || undefined}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
-        onDrop={onDrop}
+        onDrop={drop}
       >
         <div className={styles.dropZone}>
           <svg width="90" height="120" viewBox="0 0 200 260" fill="none" aria-hidden>
@@ -103,7 +133,7 @@ export function PhotoStep({
           </svg>
           Foto aufnehmen
         </button>
-        <button type="button" className={styles.secondaryButton} onClick={() => galleryInputRef.current?.click()}>
+        <button type="button" className={styles.secondaryButton} onClick={openGallery}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <circle cx="8.5" cy="8.5" r="1.5" />
@@ -131,7 +161,7 @@ export function PhotoStep({
         accept="image/*"
         capture="environment"
         hidden
-        onChange={onFileChange}
+        onChange={fileChangeFrom("kamera")}
         data-testid="easy-camera-input"
       />
       <input
@@ -139,20 +169,21 @@ export function PhotoStep({
         type="file"
         accept="image/*"
         hidden
-        onChange={onFileChange}
+        onChange={fileChangeFrom("galerie")}
         data-testid="easy-upload-input"
       />
 
       {guidedOpen && (
         <GuidedCamera
           onClose={() => setGuidedOpen(false)}
-          onCapture={(file) => {
+          onCapture={(file, info) => {
             setGuidedOpen(false);
+            onPhotoArrived?.(file, "gefuehrt", info);
             onCapturedFile(file);
           }}
           onFallback={() => {
             setGuidedOpen(false);
-            cameraInputRef.current?.click();
+            clickCameraInput();
           }}
         />
       )}

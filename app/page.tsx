@@ -35,6 +35,7 @@ import { useToolDimensionInputs } from "./tool-dimension-inputs";
 import { DEFAULT_SHRINKAGE_PERCENT, applyShrinkage } from "./shrinkage";
 import { DEFAULT_SHAPE_BOOST } from "./shape-boost";
 import { readModeFromSearch, type AppMode, type EasyStep } from "./easy-flow";
+import { readTestMode, useTestLog } from "./test-log";
 import { resetInteractiveSegmenter } from "../lib/interactive-segmenter";
 import type { PhotoCheckResult } from "../lib/photo-check";
 import { useEasyAutoDetect, useEasyAutoSide } from "./easy-flow-effects";
@@ -60,6 +61,10 @@ export default function Home() {
   const [resizeTick, setResizeTick] = useState(0);
   const [segmenter, setSegmenter] = useState<SegmenterKind>(DEFAULT_SEGMENTER);
   const [photoCheck, setPhotoCheck] = useState<PhotoCheckResult | null>(null);
+  // Testmodus (`?test=1`): protokolliert Aufnahme-Versuche zur Auswertung (R-012).
+  const [testMode, setTestMode] = useState(false);
+  const testLog = useTestLog(testMode);
+  const correctionTapsRef = useRef(0);
   const changeSegmenter = useCallback((next: SegmenterKind) => {
     setSegmenter(next);
     writeStoredSegmenter(next);
@@ -507,6 +512,7 @@ export default function Home() {
   // ── Einfacher Ablauf ──
   useEffect(() => {
     setMode(readModeFromSearch(window.location.search));
+    setTestMode(readTestMode(window.location.search));
     setSegmenter(resolveSegmenterChoice(window.location.search, readStoredSegmenter()));
   }, []);
 
@@ -516,7 +522,14 @@ export default function Home() {
     setEasyStep("kontur");
     setCorrectionMode(false);
     setSideChosenByHand(false);
+    correctionTapsRef.current = 0;
   }, [sourceRaster]);
+
+  const { annotate: annotateTest } = testLog;
+  useEffect(() => {
+    if (!photoCheck) return;
+    annotateTest({ photoCheck: { issues: photoCheck.issues.map((issue) => issue.id), metrics: photoCheck.metrics } });
+  }, [annotateTest, photoCheck]);
 
   // Der eingepasste Canvas muss neu gezeichnet werden, wenn sich der Platz ändert.
   useEffect(() => {
@@ -549,6 +562,7 @@ export default function Home() {
   const handleEasyCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
     if (!correctionMode) return;
     if (retargetPrompt(event)) {
+      correctionTapsRef.current += 1;
       setCorrectionMode(false);
       setSideChosenByHand(false);
     }
@@ -562,6 +576,18 @@ export default function Home() {
   };
 
   const createEasyRib = () => {
+    testLog.annotate({
+      details: {
+        side: workProfileSide,
+        sideChosenByHand,
+        anchorsEdited: anchorEditMode,
+        correctionTaps: correctionTapsRef.current,
+        heightMm: toolHeightMm,
+        shrinkagePercent,
+        segmenter,
+      },
+    });
+    testLog.finish("rib-erstellt");
     if (anchorEditMode) applyAnchorEditing();
     else confirmAutomaticAnchors();
     setCorrectionMode(false);
@@ -573,8 +599,12 @@ export default function Home() {
     return (
       <EasyFlow
         step={easyStep}
-        onBack={() => setEasyStep(easyStep === "fertig" ? "kontur" : "foto")}
+        onBack={() => {
+          if (easyStep === "kontur") testLog.finish("neues-foto");
+          setEasyStep(easyStep === "fertig" ? "kontur" : "foto");
+        }}
         onOpenPro={() => switchMode("pro")}
+        testLog={testLog}
         photo={{
           dragActive,
           segmenterState,
@@ -592,6 +622,10 @@ export default function Home() {
             void handleImageUpload(file);
           },
           onTipsOpenChange: setTipsOpen,
+          onCaptureStart: testLog.start,
+          onPhotoArrived: (file, captureMode, guided) => {
+            void testLog.attachPhoto(file, captureMode, guided);
+          },
         }}
         contour={{
           canvasRef,
@@ -613,7 +647,10 @@ export default function Home() {
           onHeightChange: setToolHeightMm,
           onShrinkageChange: setShrinkagePercent,
           onToggleSide: toggleEasySide,
-          onNewPhoto: () => setEasyStep("foto"),
+          onNewPhoto: () => {
+            testLog.finish("neues-foto");
+            setEasyStep("foto");
+          },
           photoCheck: segmenting ? null : photoCheck,
           onRetryLoad: () => {
             resetInteractiveSegmenter();
@@ -638,7 +675,10 @@ export default function Home() {
           toolHoles,
           toolOutline,
           workProfileSide,
-          onDownload: handleDownload,
+          onDownload: () => {
+            testLog.annotate({ stlExported: true });
+            handleDownload();
+          },
           onNewPhoto: () => setEasyStep("foto"),
           onOpenPro: () => switchMode("pro"),
         }}

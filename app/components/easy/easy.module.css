@@ -69,6 +69,37 @@
 
 .proLink:hover { color: var(--easy-text); border-color: var(--sage-light); }
 
+/* ── Testmodus (?test=1) ── */
+.testBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px dashed var(--sage-light);
+  background: var(--easy-ground);
+  font-size: 13px;
+  color: var(--easy-muted);
+}
+
+.testBarActions { display: flex; gap: 6px; }
+
+.testBarActions button {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  border: 1px solid var(--easy-line);
+  background: var(--easy-surface);
+  color: var(--easy-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.testBarActions button:disabled { opacity: 0.5; cursor: default; }
+
 /* ── Schrittanzeige ── */
 .stepper {
   list-style: none;

@@ -299,3 +299,28 @@ D3 Zielpunkt) auf der Design-Fläche; gewählt: D3 mit dem einen Satz aus D2.
 
 Bilder: `docs/gefuehrte-aufnahme-korrigieren.png`, `docs/gefuehrte-aufnahme-passt.png`.
 Entwürfe: https://claude.ai/artifact/KsnrMyon2mTQK5ihqjLqMM (Reihe D).
+
+## R-012 · 2026-10-06 · Testmodus: Aufnahme-Versuche protokollieren und exportieren
+
+**Anlass:** Hypothese des Nutzers: Die geführte Aufnahme verbessert die Rib nicht; eine freie
+Kamera mit späterem Ausrichten könnte genügen. Das soll mit echten Personen geprüft werden,
+und die Auswertung soll auf Daten beruhen, nicht auf dem Eindruck.
+
+**Entscheidung:** `?test=1` schaltet einen Testmodus ein (`app/test-log.ts`, Leiste
+`app/components/easy/TestModeBar.tsx`). Je Versuch wird festgehalten:
+- Aufnahmeweg (`kamera`, `galerie`, `gefuehrt`, `ablegen`) und die Zeit vom Knopfdruck bis
+  zum Foto in der App;
+- das Foto selbst, verkleinert auf 2048 px (JPEG) – damit lässt sich jede Aufnahme später im
+  Labor gegen die Original-Rib vermessen;
+- Foto-Check (Befunde und Messwerte), bei der geführten Aufnahme Neigung, Lage im Rahmen,
+  zuletzt angezeigter Satz und ob der Selbstauslöser ausgelöst hat;
+- Ausgang: `rib-erstellt`, `neues-foto` (zurück aus Schritt 2), `abgebrochen` (nächste
+  Aufnahme ohne Foto davor), `offen`; dazu STL geladen, Seite, von Hand gewählt, Punkte
+  verschoben, Korrektur-Tipps, Höhe, Schwindung, Erkennung.
+
+Die Daten bleiben im Browser (IndexedDB, übersteht Neuladen), bis „Exportieren“ eine
+JSON-Datei mit Zusammenfassung je Aufnahmeweg erzeugt. Ohne `?test=1` wird nichts erfasst.
+
+**Verworfen:** Versand an einen Server (es gibt keinen; Fotos fremder Küchen gehören nicht
+ungefragt ins Netz). Nur Kennzahlen ohne Fotos (dann ließe sich die Rib-Qualität nicht
+nachmessen – genau die ist die Frage).
