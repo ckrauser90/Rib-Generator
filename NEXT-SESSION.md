@@ -7,6 +7,8 @@ Last updated: 2026-10-06
 - Easy Flow ist Standard, bisherige Oberfläche = Pro-Modus (`docs/decisions.md` R-007)
 - Rib-Kante: Glättung entlang der Bogenlänge, Kerbenschutz, Schwindung, Formverstärkung (R-003 … R-006)
 - Labor: `npm run lab:compare`, `obj-compare` (Vergleich mit Original-Rib)
+- Cloudflare: Worker `rib-generator` mit GitHub verbunden, Production branch = dieser Branch, Build command `npm run build:cloudflare` (nach dem Merge auf `main` umstellen, `docs/DEPLOY-CLOUDFLARE.md`)
+- Erkennung: MediaPipe Standard, BiRefNet im Pro-Modus nur zum Testen (R-008)
 - Nächster Schritt laut Nutzer: verschiedene Formen drucken, damit testen, dann Formverstärkung/Schwindung kalibrieren
 
 ## Current Stable Baseline
