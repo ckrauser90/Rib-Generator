@@ -9,7 +9,11 @@ import type {
   ToolOutlineResult,
   WorkProfileSide,
 } from "./contour-base";
-import { average, clamp, lerp, median, smoothSeries } from "./contour-base";
+import { clamp, lerp, smoothSeries } from "./contour-base";
+import { smoothCurveByArcLength } from "./curve-fitting";
+
+/** Größte erlaubte Abweichung der geglätteten Rib-Kante von der erkannten Kante. */
+export const RIB_EDGE_TOLERANCE_MM = 0.4;
 const getBounds = (points: Point[]) => {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -44,248 +48,6 @@ const ensureOrientation = (points: Point[], clockwise: boolean) => {
   return points.slice().reverse();
 };
 
-
-const perpendicularDistanceToSegment = (point: Point, start: Point, end: Point) => {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-
-  if (Math.abs(dx) < 1e-8 && Math.abs(dy) < 1e-8) {
-    return Math.hypot(point.x - start.x, point.y - start.y);
-  }
-
-  const t = clamp(
-    ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy),
-    0,
-    1,
-  );
-  const projectedX = start.x + dx * t;
-  const projectedY = start.y + dy * t;
-  return Math.hypot(point.x - projectedX, point.y - projectedY);
-};
-
-const simplifyPolylineRdp = (points: Point[], epsilon: number): Point[] => {
-  if (points.length < 3) {
-    return points.slice();
-  }
-
-  let maxDistance = 0;
-  let splitIndex = 0;
-
-  for (let index = 1; index < points.length - 1; index += 1) {
-    const distance = perpendicularDistanceToSegment(
-      points[index],
-      points[0],
-      points[points.length - 1],
-    );
-    if (distance > maxDistance) {
-      maxDistance = distance;
-      splitIndex = index;
-    }
-  }
-
-  if (maxDistance <= epsilon) {
-    return [points[0], points[points.length - 1]];
-  }
-
-  const left = simplifyPolylineRdp(points.slice(0, splitIndex + 1), epsilon);
-  const right = simplifyPolylineRdp(points.slice(splitIndex), epsilon);
-  return [...left.slice(0, -1), ...right];
-};
-
-const buildPchipSlopes = (xs: number[], ys: number[]) => {
-  const count = xs.length;
-  const h = new Array<number>(count - 1);
-  const delta = new Array<number>(count - 1);
-
-  for (let index = 0; index < count - 1; index += 1) {
-    h[index] = xs[index + 1] - xs[index];
-    delta[index] = h[index] === 0 ? 0 : (ys[index + 1] - ys[index]) / h[index];
-  }
-
-  const slopes = new Array<number>(count).fill(0);
-
-  if (count === 2) {
-    slopes[0] = delta[0];
-    slopes[1] = delta[0];
-    return slopes;
-  }
-
-  for (let index = 1; index < count - 1; index += 1) {
-    if (
-      delta[index - 1] === 0 ||
-      delta[index] === 0 ||
-      Math.sign(delta[index - 1]) !== Math.sign(delta[index])
-    ) {
-      slopes[index] = 0;
-      continue;
-    }
-
-    const w1 = 2 * h[index] + h[index - 1];
-    const w2 = h[index] + 2 * h[index - 1];
-    slopes[index] = (w1 + w2) / (w1 / delta[index - 1] + w2 / delta[index]);
-  }
-
-  const startSlope =
-    ((2 * h[0] + h[1]) * delta[0] - h[0] * delta[1]) / Math.max(1e-8, h[0] + h[1]);
-  slopes[0] =
-    Math.sign(startSlope) !== Math.sign(delta[0])
-      ? 0
-      : Math.sign(delta[0]) !== Math.sign(delta[1]) && Math.abs(startSlope) > Math.abs(delta[0] * 3)
-        ? delta[0] * 3
-        : startSlope;
-
-  const endSlope =
-    ((2 * h[count - 2] + h[count - 3]) * delta[count - 2] - h[count - 2] * delta[count - 3]) /
-    Math.max(1e-8, h[count - 2] + h[count - 3]);
-  slopes[count - 1] =
-    Math.sign(endSlope) !== Math.sign(delta[count - 2])
-      ? 0
-      : Math.sign(delta[count - 2]) !== Math.sign(delta[count - 3]) &&
-          Math.abs(endSlope) > Math.abs(delta[count - 2] * 3)
-        ? delta[count - 2] * 3
-        : endSlope;
-
-  return slopes;
-};
-
-const evaluatePchip = (xs: number[], ys: number[], slopes: number[], x: number) => {
-  const lastIndex = xs.length - 1;
-
-  if (x <= xs[0]) {
-    return ys[0];
-  }
-
-  if (x >= xs[lastIndex]) {
-    return ys[lastIndex];
-  }
-
-  let interval = 0;
-  while (interval < lastIndex - 1 && xs[interval + 1] < x) {
-    interval += 1;
-  }
-
-  const h = xs[interval + 1] - xs[interval];
-  const t = h === 0 ? 0 : (x - xs[interval]) / h;
-  const t2 = t * t;
-  const t3 = t2 * t;
-  const h00 = 2 * t3 - 3 * t2 + 1;
-  const h10 = t3 - 2 * t2 + t;
-  const h01 = -2 * t3 + 3 * t2;
-  const h11 = t3 - t2;
-
-  return (
-    h00 * ys[interval] +
-    h10 * h * slopes[interval] +
-    h01 * ys[interval + 1] +
-    h11 * h * slopes[interval + 1]
-  );
-};
-
-const refitProfileWithPchip = (points: Point[], targetCount: number) => {
-  if (points.length < 3) {
-    return points.slice();
-  }
-
-  const ordered = points
-    .slice()
-    .sort((left, right) => left.y - right.y)
-    .filter((point, index, source) => index === 0 || Math.abs(point.y - source[index - 1].y) > 1e-6);
-
-  if (ordered.length < 3) {
-    return ordered;
-  }
-
-  const ys = ordered.map((point) => point.y);
-  const xs = ordered.map((point) => point.x);
-  const slopes = buildPchipSlopes(ys, xs);
-  const count = Math.max(ordered.length, targetCount);
-
-  return Array.from({ length: count }, (_, index) => {
-    const t = index / Math.max(1, count - 1);
-    const y = lerp(ys[0], ys[ys.length - 1], t);
-    return {
-      x: evaluatePchip(ys, xs, slopes, y),
-      y,
-    };
-  });
-};
-
-const suppressProfileSpikes = (points: Point[]) => {
-  if (points.length < 9) {
-    return points.slice();
-  }
-
-  let current = points.map((point) => ({ ...point }));
-
-  for (let pass = 0; pass < 2; pass += 1) {
-    const next = current.map((point) => ({ ...point }));
-
-    for (let index = 3; index < current.length - 3; index += 1) {
-      const neighborhood = current.slice(index - 3, index + 4).map((point) => point.x);
-      const localMedian = median(neighborhood);
-      const predicted = (current[index - 1].x + current[index + 1].x) / 2;
-      const localStep = average([
-        Math.abs(current[index - 2].x - current[index - 3].x),
-        Math.abs(current[index - 1].x - current[index - 2].x),
-        Math.abs(current[index].x - current[index - 1].x),
-        Math.abs(current[index + 1].x - current[index].x),
-        Math.abs(current[index + 2].x - current[index + 1].x),
-      ]);
-      const edgeZone =
-        index < current.length * 0.16 || index > current.length * 0.84;
-      const threshold = Math.max(0.7, localStep * (edgeZone ? 1.15 : 1.75));
-      const medianDeviation = Math.abs(current[index].x - localMedian);
-      const predictedDeviation = Math.abs(current[index].x - predicted);
-
-      if (medianDeviation > threshold && predictedDeviation > threshold * 0.9) {
-        next[index].x = predicted * 0.72 + localMedian * 0.28;
-      }
-    }
-
-    current = next;
-  }
-
-  return current;
-};
-
-const removeMicroKinks = (points: Point[]) => {
-  if (points.length < 11) {
-    return points.slice();
-  }
-
-  let current = points.map((point) => ({ ...point }));
-
-  for (let pass = 0; pass < 2; pass += 1) {
-    const next = current.map((point) => ({ ...point }));
-
-    for (let index = 2; index < current.length - 2; index += 1) {
-      const window = current.slice(index - 2, index + 3);
-      const xValues = window.map((point) => point.x);
-      const localMedian = median(xValues);
-      const interpolatedX = (current[index - 1].x + current[index + 1].x) / 2;
-      const localStep = average([
-        Math.abs(current[index - 2].x - current[index - 1].x),
-        Math.abs(current[index - 1].x - current[index].x),
-        Math.abs(current[index].x - current[index + 1].x),
-        Math.abs(current[index + 1].x - current[index + 2].x),
-      ]);
-      const deviationFromMedian = Math.abs(current[index].x - localMedian);
-      const deviationFromLine = Math.abs(current[index].x - interpolatedX);
-      const shortReversal =
-        Math.sign(current[index].x - current[index - 1].x) !==
-        Math.sign(current[index + 1].x - current[index].x);
-      const threshold = Math.max(0.42, localStep * 1.2);
-
-      if (shortReversal && deviationFromMedian > threshold && deviationFromLine > threshold * 0.8) {
-        next[index].x = interpolatedX * 0.78 + localMedian * 0.22;
-      }
-    }
-
-    current = next;
-  }
-
-  return current;
-};
 
 const getNearestPointIndexByY = (points: Point[], targetY: number) => {
   let bestIndex = 0;
@@ -688,13 +450,9 @@ export const buildRibToolOutline = (
   const minimumBackMaterialMm = clamp(totalWidthMm * 0.24, 13, 19);
   const maxAllowedDepthMm = Math.max(8, totalWidthMm - minimumBackMaterialMm);
   const depthScale = sourceMaxDepthMm > maxAllowedDepthMm ? maxAllowedDepthMm / sourceMaxDepthMm : 1;
-  const macroDepthsMm = smoothSeries(sourceDepthsMm, 8);
-  const mappedDepthsMm = sourceDepthsMm.map((depth, index) => {
-    const detail = depth - macroDepthsMm[index];
-    const preservedDepth = macroDepthsMm[index] + detail * 1.08;
-    return clamp(preservedDepth * depthScale, 0, maxAllowedDepthMm);
-  });
-  const cavityDepthMm = Math.max(0, ...mappedDepthsMm);
+  const mappedDepthsMm = sourceDepthsMm.map((depth) =>
+    clamp(depth * depthScale, 0, maxAllowedDepthMm),
+  );
 
   const profile = workProfile.map((point, index) => {
     return {
@@ -714,28 +472,24 @@ export const buildRibToolOutline = (
         },
       }
     : null;
-  const stabilizedProfile = suppressProfileSpikes(profile);
+  // Die Arbeitskante als glatte Kurve in mm (lib/curve-fitting.ts). Früher wurden
+  // hier Eckpunkte ausgewählt (RDP) und eine Kurve exakt durch sie gelegt (PCHIP);
+  // dabei landeten gerade Ausreißer als Eckpunkte, und die Kurve wurde an jedem
+  // Hoch- und Tiefpunkt flach – sichtbare Dellen und Plateaus am Rib.
+  // Druckoptimierung steuert die Glättungslänge entlang der Kante:
+  // 0 → 3 mm (sehr formtreu), 58 (Standard) → gut 8 mm, 100 → 12 mm (sehr ruhig).
+  // Lippe und Fuß bleiben erhalten, wo die Kurve über mehr als 2 mm Länge mehr als
+  // RIB_EDGE_TOLERANCE_MM von der erkannten Kante abweichen würde.
   const friendlinessFactor = clamp(printFriendliness / 100, 0, 1);
-  const simplifyToleranceMm = clamp(
-    (0.18 + cavityDepthMm * 0.014) * lerp(0.72, 3.2, friendlinessFactor),
-    0.24,
-    2.8,
-  );
-  const simplifiedProfile = simplifyPolylineRdp(stabilizedProfile, simplifyToleranceMm);
-  const targetProfileCount = clamp(
-    Math.max(
-      Math.round(totalHeight / lerp(1.25, 4.0, friendlinessFactor)),
-      Math.round(simplifiedProfile.length * lerp(3.4, 1.4, friendlinessFactor)),
-    ),
-    24,
-    132,
-  );
   const topY = 0;
   const bottomY = totalHeight;
   const outerLeftX = 0;
-  const denseProfile = removeMicroKinks(
-    suppressProfileSpikes(refitProfileWithPchip(simplifiedProfile, Math.round(targetProfileCount))),
-  );
+  const denseProfile = smoothCurveByArcLength(profile, {
+    periodMm: lerp(3, 12, friendlinessFactor),
+    tolerance: RIB_EDGE_TOLERANCE_MM,
+    featureLengthMm: 2,
+    sampleStep: 0.5,
+  });
   const provisionalSupportProfile = buildSupportSideProfile(denseProfile, totalWidthMm, []);
   const holePlan = buildGripHoles(totalWidthMm, totalHeight, denseProfile, provisionalSupportProfile);
   const finalProfile = denseProfile.map((point) => ({

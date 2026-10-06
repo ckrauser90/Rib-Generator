@@ -67,7 +67,8 @@ test("edgeRoughness is near zero for a smooth curve and catches bumps", () => {
     x: 10 + 3 * Math.sin(index / 60),
     y: index * 0.5,
   }));
-  const bumpy = smooth.map((point, index) => ({ ...point, x: point.x + 0.15 * Math.sin(index / 2) }));
+  // Höcker mit gut 3 mm Wellenlänge – deutlich kürzer als das 8-mm-Fenster der Großform.
+  const bumpy = smooth.map((point, index) => ({ ...point, x: point.x + 0.15 * Math.sin(index) }));
 
   const clean = edgeRoughness(smooth)!;
   const rough = edgeRoughness(bumpy)!;
@@ -75,4 +76,6 @@ test("edgeRoughness is near zero for a smooth curve and catches bumps", () => {
   expect(clean.bumpsPer10Mm).toBe(0);
   expect(rough.wavinessRmsMm).toBeGreaterThan(0.08);
   expect(rough.bumpsPer10Mm).toBeGreaterThan(2);
+  expect(rough.visibleBumpsPer10Mm).toBeGreaterThan(2);
+  expect(clean.visibleBumpsPer10Mm).toBe(0);
 });

@@ -1,4 +1,5 @@
 import { type Point } from "../lib/contour";
+import { whittakerLambdaForPeriod, whittakerSmooth } from "../lib/curve-fitting";
 import { smoothWorkProfileCurve } from "../lib/profile-normalization";
 
 const DISPLAY_PROFILE_MAX_DRIFT_PX = 0.9;
@@ -6,21 +7,45 @@ const DISPLAY_PROFILE_MAX_DRIFT_PX = 0.9;
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-export const getGeometrySmoothingConfig = (smoothingStrength: number) => ({
-  windowRadius: 2 + Math.round(smoothingStrength / 14),
-  blend: Math.min(0.05 + (smoothingStrength / 100) * 0.7, 0.75),
-});
+const smoothstep = (t: number) => {
+  const clamped = clamp(t, 0, 1);
+  return clamped * clamped * (3 - 2 * clamped);
+};
 
+/**
+ * Geometrieprofil für Rib und STL: die erkannte Kante, geglättet nach dem Regler
+ * „Glättung“. Die Stärke ist relativ zur Profilhöhe festgelegt, damit sie nicht von
+ * der Fotoauflösung abhängt: 0 entfernt nur Wellen unter 0,5 % der Höhe (Pixelreste),
+ * 34 (Standard) Wellen unter gut 2 %, 100 Wellen unter 6 %. Anders als früher wird
+ * das Ergebnis nicht wieder mit der Rohkante gemischt – sonst blieben die Zacken.
+ * Anfang und Ende sind stärker gewichtet, damit Rand und Fuß an ihrer Stelle bleiben.
+ * Die Rohkante selbst bleibt unverändert die Quelle (siehe CLAUDE.md).
+ */
 export const buildGeometryWorkProfile = (profile: Point[], smoothingStrength: number) => {
-  if (profile.length < 2) {
+  if (profile.length < 7) {
     return profile.slice();
   }
 
-  const { windowRadius, blend } = getGeometrySmoothingConfig(smoothingStrength);
-  return smoothWorkProfileCurve(profile, {
-    windowRadius,
-    blend,
+  const heightPx = Math.abs(profile[profile.length - 1].y - profile[0].y);
+  if (heightPx < 1) {
+    return profile.slice();
+  }
+
+  const samplesPerPx = (profile.length - 1) / heightPx;
+  const periodFraction = 0.005 + clamp(smoothingStrength / 100, 0, 1) * 0.055;
+  const periodSamples = Math.max(2, periodFraction * heightPx * samplesPerPx);
+  const edgeZone = Math.max(2, Math.round(periodSamples / 2));
+  const weights = profile.map((_, index) => {
+    const distanceToEdge = Math.min(index, profile.length - 1 - index);
+    return 1 + (1 - smoothstep(distanceToEdge / edgeZone)) * 5.5;
   });
+  const smoothedXs = whittakerSmooth(
+    profile.map((point) => point.x),
+    whittakerLambdaForPeriod(periodSamples),
+    weights,
+  );
+
+  return profile.map((point, index) => ({ x: smoothedXs[index], y: point.y }));
 };
 
 export const buildDisplayWorkProfile = (profile: Point[], smoothingStrength: number) => {

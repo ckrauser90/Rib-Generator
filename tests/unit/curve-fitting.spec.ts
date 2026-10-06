@@ -1,0 +1,99 @@
+import { expect, test } from "@playwright/test";
+import {
+  smoothCurveByArcLength,
+  whittakerLambdaForPeriod,
+  whittakerSmooth,
+} from "../../lib/curve-fitting";
+import type { Point } from "../../lib/contour";
+import { edgeRoughness } from "../../lab/segmentation/metrics";
+
+// Deterministic pseudo noise so the tests never flake.
+const noise = (index: number) => Math.sin(index * 12.9898) * 43758.5453 % 1;
+
+test("whittakerSmooth keeps straight lines exactly and removes zig-zag", () => {
+  const line = Array.from({ length: 50 }, (_, index) => 3 + index * 0.4);
+  const smoothedLine = whittakerSmooth(line, 1e4);
+  smoothedLine.forEach((value, index) => expect(value).toBeCloseTo(line[index], 6));
+
+  const zigzag = line.map((value, index) => value + (index % 2 === 0 ? 0.5 : -0.5));
+  const smoothedZigzag = whittakerSmooth(zigzag, whittakerLambdaForPeriod(8));
+  const maxError = Math.max(...smoothedZigzag.slice(5, -5).map((value, index) => Math.abs(value - line[index + 5])));
+  expect(maxError).toBeLessThan(0.05);
+});
+
+test("whittakerSmooth with tiny lambda returns the input", () => {
+  const values = [1, 4, 2, 8, 5, 7];
+  whittakerSmooth(values, 1e-9).forEach((value, index) => expect(value).toBeCloseTo(values[index], 6));
+  expect(whittakerSmooth([1, 2], 10)).toEqual([1, 2]);
+});
+
+const ribOptions = { periodMm: 8, tolerance: 0.4, featureLengthMm: 1, sampleStep: 0.5 };
+
+const maxDistanceTo = (points: Point[], reference: (y: number) => number) =>
+  Math.max(...points.map((point) => Math.abs(point.x - reference(point.y))));
+
+test("smoothCurveByArcLength follows a vessel-like curve and ignores pixel noise", () => {
+  // 100 mm Profil, 0,1 mm Abtastung wie bei einem Handyfoto, ±0,2 mm Rauschen.
+  const truth = (y: number) => 20 + 6 * Math.sin(y / 18) + 0.02 * y;
+  const noisy = Array.from({ length: 1000 }, (_, index) => {
+    const y = index * 0.1;
+    return { x: truth(y) + noise(index) * 0.2, y };
+  });
+
+  const smoothed = smoothCurveByArcLength(noisy, ribOptions);
+
+  expect(maxDistanceTo(smoothed, truth)).toBeLessThan(0.15);
+  expect(edgeRoughness(smoothed)!.visibleBumpsPer10Mm).toBe(0);
+  expect(smoothed[0].y).toBeCloseTo(0, 1);
+  expect(smoothed[smoothed.length - 1].y).toBeCloseTo(99.9, 1);
+});
+
+test("smoothCurveByArcLength removes mask wobble of a few millimetres", () => {
+  // Wellen der Maskenkante: 0,3 mm Ausschlag, 3 mm Wellenlänge.
+  const truth = (y: number) => 25 + 0.05 * y;
+  const wobbly = Array.from({ length: 800 }, (_, index) => {
+    const y = index * 0.1;
+    return { x: truth(y) + 0.3 * Math.sin((2 * Math.PI * y) / 3), y };
+  });
+
+  const smoothed = smoothCurveByArcLength(wobbly, ribOptions);
+
+  expect(edgeRoughness(smoothed)!.wavinessRmsMm).toBeLessThan(0.03);
+  expect(maxDistanceTo(smoothed.slice(10, -10), truth)).toBeLessThan(0.1);
+});
+
+test("smoothCurveByArcLength keeps a rim lip", () => {
+  // Gerade Wand mit einer 3 mm Lippe in den obersten 4 mm.
+  const shape = (y: number) => 30 + (y < 4 ? 3 * (1 - y / 4) ** 2 : 0);
+  const points = Array.from({ length: 600 }, (_, index) => ({ x: shape(index * 0.1), y: index * 0.1 }));
+
+  const smoothed = smoothCurveByArcLength(points, ribOptions);
+
+  expect(maxDistanceTo(smoothed, shape)).toBeLessThan(0.5);
+  expect(smoothed[0].x).toBeCloseTo(33, 1);
+});
+
+test("smoothCurveByArcLength stays calm on a nearly flat bowl rim", () => {
+  // Erst 20 mm fast waagrecht (wie der Schalenrand von der Seite), dann steil nach unten.
+  const points: Point[] = [];
+  for (let index = 0; index <= 200; index += 1) points.push({ x: 40 - index * 0.1, y: index * 0.005 });
+  for (let index = 1; index <= 300; index += 1) points.push({ x: 20 - index * 0.02, y: 1 + index * 0.1 });
+
+  const smoothed = smoothCurveByArcLength(points, ribOptions);
+
+  for (let index = 1; index < smoothed.length; index += 1) {
+    expect(smoothed[index].y).toBeGreaterThanOrEqual(smoothed[index - 1].y);
+  }
+  const xs = smoothed.map((point) => point.x);
+  expect(Math.max(...xs)).toBeLessThanOrEqual(40.01);
+  expect(Math.min(...xs)).toBeGreaterThanOrEqual(13.99);
+});
+
+test("smoothCurveByArcLength passes short profiles through unchanged", () => {
+  const points = [
+    { x: 4, y: 0 },
+    { x: 5, y: 10 },
+    { x: 6, y: 20 },
+  ];
+  expect(smoothCurveByArcLength(points, ribOptions)).toEqual(points);
+});

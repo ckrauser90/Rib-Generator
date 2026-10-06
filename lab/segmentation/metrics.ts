@@ -183,15 +183,19 @@ export const resampleByY = (profile: Point[], step: number): Point[] => {
 export type EdgeRoughness = {
   /** Mittlere zweite Differenz bei 0,5 mm Abtastung (mm) – feine Zacken und Treppen. */
   jitterMm: number;
-  /** RMS-Abstand zur Großform (gleitendes Mittel ±4 mm) – sichtbare Wellen. */
+  /** RMS-Abstand zur lokalen Großform (quadratisch, ±4 mm) – sichtbare Wellen. */
   wavinessRmsMm: number;
-  /** Höcker pro 10 mm Kantenlänge: lokale Ausschläge > 0,03 mm gegenüber der Großform. */
+  /** Höcker pro 10 mm: lokale Ausschläge > 0,03 mm gegenüber der Großform. */
   bumpsPer10Mm: number;
+  /** Deutliche Höcker pro 10 mm: Ausschläge > 0,1 mm – die fühlt man am Rib. */
+  visibleBumpsPer10Mm: number;
 };
 
 /**
  * Rauheit einer Kante in mm. Erwartet ein Profil, dessen Koordinaten schon in mm sind.
- * Eine glatte Töpferkurve hat hier Werte nahe 0 und kaum Höcker.
+ * Die Großform ist eine lokale Parabel über ±4 mm (Savitzky-Golay). Anders als ein
+ * gleitendes Mittel folgt sie echten Krümmungen wie einem Bauch, sodass nur Wellen
+ * und Höcker übrig bleiben, die kürzer als etwa 8 mm sind.
  */
 export const edgeRoughness = (profileMm: Point[]): EdgeRoughness | null => {
   const step = 0.5;
@@ -204,29 +208,36 @@ export const edgeRoughness = (profileMm: Point[]): EdgeRoughness | null => {
   }
 
   const radius = Math.round(4 / step);
-  const residual = samples.map((point, index) => {
-    const from = Math.max(0, index - radius);
-    const to = Math.min(samples.length - 1, index + radius);
-    let sum = 0;
-    for (let inner = from; inner <= to; inner += 1) sum += samples[inner].x;
-    return point.x - sum / (to - from + 1);
-  });
-  // Die Enden haben kein symmetrisches Fenster und verfälschen die Großform – nicht mitzählen.
-  const core = residual.slice(radius, residual.length - radius);
+  const denominator = (2 * radius + 1) * (4 * radius * radius + 4 * radius - 3);
+  const coefficient = (offset: number) =>
+    (3 * (3 * radius * radius + 3 * radius - 1) - 15 * offset * offset) / denominator;
+  // Die Enden haben kein symmetrisches Fenster – nicht mitzählen.
+  const core: number[] = [];
+  for (let index = radius; index < samples.length - radius; index += 1) {
+    let shape = 0;
+    for (let offset = -radius; offset <= radius; offset += 1) {
+      shape += coefficient(offset) * samples[index + offset].x;
+    }
+    core.push(samples[index].x - shape);
+  }
   if (core.length < 5) return null;
   const rms = Math.sqrt(core.reduce((sum, value) => sum + value * value, 0) / core.length);
 
-  let bumps = 0;
-  for (let index = 1; index < core.length - 1; index += 1) {
-    const isPeak = core[index] > core[index - 1] && core[index] >= core[index + 1];
-    const isValley = core[index] < core[index - 1] && core[index] <= core[index + 1];
-    if ((isPeak || isValley) && Math.abs(core[index]) > 0.03) bumps += 1;
-  }
+  const countBumps = (threshold: number) => {
+    let bumps = 0;
+    for (let index = 1; index < core.length - 1; index += 1) {
+      const isPeak = core[index] > core[index - 1] && core[index] >= core[index + 1];
+      const isValley = core[index] < core[index - 1] && core[index] <= core[index + 1];
+      if ((isPeak || isValley) && Math.abs(core[index]) > threshold) bumps += 1;
+    }
+    return bumps;
+  };
   const lengthMm = core.length * step;
 
   return {
     jitterMm: jitter / (samples.length - 2),
     wavinessRmsMm: rms,
-    bumpsPer10Mm: (bumps / lengthMm) * 10,
+    bumpsPer10Mm: (countBumps(0.03) / lengthMm) * 10,
+    visibleBumpsPer10Mm: (countBumps(0.1) / lengthMm) * 10,
   };
 };
