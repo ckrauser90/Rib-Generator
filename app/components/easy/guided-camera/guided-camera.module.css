@@ -50,14 +50,14 @@
   align-items: center;
   justify-content: center;
   padding: 0 12px;
-  container-type: size;
 }
 
 /* Bühne im Seitenverhältnis des Videos: Linien liegen genau dort, wo das Foto sie hat. */
 .stage {
   position: relative;
-  width: min(100cqw, calc(100cqh * var(--ar, 0.75)));
-  aspect-ratio: var(--ar, 0.75);
+  /* Größe setzt GuidedCamera aus dem gemessenen Platz; dies ist nur der Startwert. */
+  width: 100%;
+  height: 100%;
   border-radius: 16px;
   overflow: hidden;
   background: #000;
@@ -193,3 +193,21 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+.tapToStart {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-height: 52px;
+  padding: 0 22px;
+  border-radius: 26px;
+  border: none;
+  background: #FFF9F0;
+  color: #2F241B;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.diagnostic { margin: 0; font-size: 11px; color: #8F8476; }

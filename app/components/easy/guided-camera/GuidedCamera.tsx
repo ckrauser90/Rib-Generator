@@ -60,6 +60,11 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [videoSize, setVideoSize] = useState<{ width: number; height: number } | null>(null);
+  const stageAreaRef = useRef<HTMLDivElement>(null);
+  const [areaSize, setAreaSize] = useState<{ width: number; height: number } | null>(null);
+  // iPhone: Abspielen kann ohne Tipp abgelehnt werden – dann Knopf „Kamera starten“.
+  const [needsTap, setNeedsTap] = useState(false);
+  const [videoInfo, setVideoInfo] = useState("Video: wartet auf Kamera …");
   const [tilt, setTilt] = useState<{ rollDeg: number; pitchDeg: number } | null>(null);
   const [sharpnessRatio, setSharpnessRatio] = useState<number | null>(null);
   const [placement, setPlacement] = useState<{ fill: number; touchesEdge: boolean } | null>(null);
@@ -99,8 +104,22 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
         streamRef.current = stream;
         const video = videoRef.current;
         if (video) {
+          // Als echte Attribute setzen: WebKit (iPhone, auch Brave/Chrome dort) spielt ein
+          // Kameravideo nur stumm und inline ab; React setzt `muted` nur als Eigenschaft.
+          video.setAttribute("playsinline", "");
+          video.setAttribute("webkit-playsinline", "");
+          video.setAttribute("muted", "");
+          video.setAttribute("autoplay", "");
+          video.muted = true;
           video.srcObject = stream;
-          await video.play().catch(() => undefined);
+          // Nicht abwarten: Auf dem iPhone bleibt play() teils hängen, bis Bilder kommen.
+          video.play().then(
+            () => setNeedsTap(false),
+            () => setNeedsTap(true),
+          );
+          window.setTimeout(() => {
+            if (videoRef.current?.paused) setNeedsTap(true);
+          }, 2000);
         }
         const track = stream.getVideoTracks()[0];
         const capabilities = (track.getCapabilities?.() ?? {}) as MediaTrackCapabilities & {
@@ -135,6 +154,38 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
   }, [cameraIndex, stopStream]);
 
   useEffect(() => () => stopStream(), [stopStream]);
+
+  // Platz für das Kamerabild messen (statt CSS-Containereinheiten, die ältere iPhones nicht kennen).
+  useEffect(() => {
+    const area = stageAreaRef.current;
+    if (!area) return;
+    const measure = () => setAreaSize({ width: area.clientWidth, height: area.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(area);
+    return () => observer.disconnect();
+  }, [error]);
+
+  // Kurze Diagnose im Test: Kommt überhaupt ein Bild an?
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const video = videoRef.current;
+      if (!video) return;
+      setVideoInfo(
+        video.videoWidth > 0
+          ? `Video ${video.videoWidth}×${video.videoHeight} · ${video.paused ? "pausiert" : "läuft"}`
+          : `Video: noch kein Bild (Status ${video.readyState})`,
+      );
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const startPlayback = () => {
+    void videoRef.current?.play().then(
+      () => setNeedsTap(false),
+      () => setNeedsTap(true),
+    );
+  };
 
   // Lagesensor: Schwerkraftvektor, leicht geglättet.
   useEffect(() => {
@@ -205,6 +256,15 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
 
   const guidance = evaluateGuidance({ tilt, sharpnessRatio, placement });
 
+  // Bühne so groß wie möglich im Seitenverhältnis des Videos (Linien liegen dann genau
+  // dort, wo sie im Foto liegen). Vor den ersten Bildern: Hochformat 3:4.
+  const aspect = videoSize ? videoSize.width / videoSize.height : 3 / 4;
+  const stageStyle: CSSProperties | undefined = areaSize
+    ? areaSize.width / areaSize.height > aspect
+      ? { width: Math.round(areaSize.height * aspect), height: areaSize.height }
+      : { width: areaSize.width, height: Math.round(areaSize.width / aspect) }
+    : undefined;
+
   const applyZoom = async (value: number) => {
     const track = streamRef.current?.getVideoTracks()[0];
     if (!track || !zoom) return;
@@ -265,21 +325,25 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
           </button>
         </div>
       ) : (
-        <div className={styles.stageArea}>
-          <div
-            className={styles.stage}
-            style={videoSize ? ({ "--ar": videoSize.width / videoSize.height } as CSSProperties) : undefined}
-          >
+        <div className={styles.stageArea} ref={stageAreaRef}>
+          <div className={styles.stage} style={stageStyle}>
             <video
               ref={videoRef}
               className={styles.video}
               playsInline
               muted
+              autoPlay
               onLoadedMetadata={(event) =>
                 setVideoSize({ width: event.currentTarget.videoWidth, height: event.currentTarget.videoHeight })
               }
+              onPlaying={() => setNeedsTap(false)}
               data-testid="guided-video"
             />
+            {needsTap && (
+              <button type="button" className={styles.tapToStart} onClick={startPlayback} data-testid="guided-tap-start">
+                Kamera starten
+              </button>
+            )}
             <div className={styles.guides} data-size={guidance.size} aria-hidden>
               <span className={styles.centerLine} />
               <span className={styles.rimLine}><span>Rand</span></span>
@@ -342,6 +406,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
           </div>
         </div>
         <p className={styles.shutterLabel}>{guidance.ready ? "Aufnehmen" : "Trotzdem aufnehmen"}</p>
+        <p className={styles.diagnostic} data-testid="guided-diagnostic">{videoInfo}</p>
       </div>
     </div>
   );
