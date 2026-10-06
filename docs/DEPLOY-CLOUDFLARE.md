@@ -31,6 +31,14 @@ Lokal und in den E2E-Tests bleibt der normale Build (`npm run build`, `npm run s
    - Preview command: `npx wrangler preview` (Standard)
 4. **Deploy.** Danach läuft die App unter `https://rib-generator.<dein-subdomain>.workers.dev`.
 
+### Produktionsbranch nachträglich ändern
+
+Beim Import nimmt Cloudflare den Standard-Branch des Repos (`main`). Umstellen:
+**Workers & Pages → rib-generator → Settings → Build → Branch control → Production branch**
+(Dropdown). Das Umstellen startet keinen Build – erst der nächste Push auf den gewählten
+Branch baut und veröffentlicht. Ein Build auf `main` schlägt fehl, solange dort
+`npm run build:cloudflare` noch nicht existiert.
+
 ## Vorschau je Branch
 
 Jeder Push auf einen anderen Branch als den Produktionsbranch baut eine **Preview** mit eigener
