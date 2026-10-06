@@ -482,8 +482,13 @@ export const traceEdgeStages = async (input: {
 
   // Gleiche Kette wie in der App ab dem Arbeitsprofil: Glättung 34, Start/Ende automatisch,
   // Druckoptimierung 58. Der Rib wird so skaliert, dass 1 mm am Rib 1 mm am Gefäß entspricht.
-  const buildDownstream = (workProfile: Point[], referenceBounds: { minY: number; maxY: number }) => {
-    const geometry = buildGeometryWorkProfile(workProfile, 34);
+  const buildDownstream = (
+    workProfile: Point[],
+    referenceBounds: { minY: number; maxY: number },
+    curveSmoothing = 34,
+    printFriendliness = 58,
+  ) => {
+    const geometry = buildGeometryWorkProfile(workProfile, curveSmoothing);
     const { confirmedAnchors } = resolveToolAnchors({
       currentAnchorOverride: null,
       displayedAnchorOverride: null,
@@ -499,7 +504,7 @@ export const traceEdgeStages = async (input: {
       currentAnchorsConfirmed: true,
       displayedAnchorOverride: null,
       imageSize: { width: mask.width, height: mask.height },
-      printFriendliness: 58,
+      printFriendliness,
       profile: geometry,
       referenceBounds,
       toolHeightMm: Math.max(20, trimmedHeightPx * mmPerPx),
@@ -520,6 +525,9 @@ export const traceEdgeStages = async (input: {
 
   // Rauschen = Abstand jeder Stufe zur selben Stufe, gerechnet aus der Sollmaske.
   let noiseMm: Record<EdgeStage["id"], number | null> | null = null;
+  // Formtreue: Rib aus dem Foto bei verschiedenen Reglerstellungen gegen die exakte Form
+  // (Sollmaske, Glättung 0, Druckoptimierung 0). Mittel und Maximum in mm.
+  let formLoss: { setting: string; mean: number | null; max: number | null }[] | null = null;
   if (input.truthDataUrl) {
     const truthImage = await loadImage(input.truthDataUrl);
     const truthMask = truthMaskFromImage(truthImage);
@@ -536,6 +544,19 @@ export const traceEdgeStages = async (input: {
       "app-geometrie": toMm(truthDownstream.geometry),
       rib: truthDownstream.rib,
     };
+    const exactRib = buildDownstream(truthResult.rightWorkProfile, truthResult.referenceBounds, 0, 0).rib;
+    formLoss = (
+      [
+        ["Glättung 0 / Druck 0", 0, 0],
+        ["Glättung 0 / Druck 30", 0, 30],
+        ["Glättung 34 / Druck 58 (Standard)", 34, 58],
+        ["Glättung 34 / Druck 100", 34, 100],
+      ] as const
+    ).map(([setting, smoothing, friendliness]) => {
+      const rib = buildDownstream(withImage.rightWorkProfile, withImage.referenceBounds, smoothing, friendliness).rib;
+      const stats = polylineDeviation(rib, exactRib);
+      return { setting, mean: stats?.mean ?? null, max: stats?.max ?? null };
+    });
     noiseMm = Object.fromEntries(
       stages.map((stage) => [stage.id, polylineDeviation(stage.profileMm, truthStages[stage.id])?.mean ?? null]),
     ) as Record<EdgeStage["id"], number | null>;
@@ -547,6 +568,7 @@ export const traceEdgeStages = async (input: {
     mmPerPx,
     stages,
     noiseMm,
+    formLoss,
   };
 };
 

@@ -46,6 +46,12 @@ test("measure edge roughness per pipeline stage", async ({ page }) => {
       truthDataUrl: input.truth ? `data:image/png;base64,${readFileSync(input.truth).toString("base64")}` : undefined,
     });
     results.push({ id: input.id, ...trace });
+    if (trace.formLoss) {
+      console.log(
+        `   Formtreue ${input.id}: ` +
+          trace.formLoss.map((entry) => `${entry.setting}: Ø ${entry.mean?.toFixed(2)} / max ${entry.max?.toFixed(2)} mm`).join(" | "),
+      );
+    }
     const r = trace.stages.map((stage) => stage.roughness);
     console.log(
       `${input.id.padEnd(24)} | ${r.map((x) => fmt(x?.jitterMm)).join(" ")} | ${r
