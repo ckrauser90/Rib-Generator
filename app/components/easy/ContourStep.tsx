@@ -37,6 +37,9 @@ export type ContourStepProps = {
   onToggleSide: () => void;
   /** Hinweis, wenn nicht die Standard-Erkennung läuft (app/segmenter-choice.ts). */
   segmenterNote: string | null;
+  /** Ladezustand von MediaPipe; vor „ready“ startet keine Erkennung. */
+  segmenterState: "loading" | "ready" | "error";
+  onRetryLoad: () => void;
 };
 
 export function ContourStep({
@@ -60,6 +63,8 @@ export function ContourStep({
   onShrinkageChange,
   onToggleSide,
   segmenterNote,
+  segmenterState,
+  onRetryLoad,
 }: ContourStepProps) {
   const [heightText, setHeightText] = useState(String(heightMm));
   useEffect(() => setHeightText(String(heightMm)), [heightMm]);
@@ -70,13 +75,18 @@ export function ContourStep({
     else setHeightText(String(heightMm));
   };
 
-  const chip = segmenting
-    ? { tone: "busy", text: "Kontur wird erkannt …" }
-    : correctionMode
-      ? { tone: "busy", text: "Tippe mitten ins Gefäß" }
-      : contourReady
-        ? { tone: "ok", text: "Kontur erkannt" }
-        : { tone: statusIsError ? "error" : "busy", text: statusIsError ? "Nicht erkannt" : "Warte auf Erkennung …" };
+  const loadFailed = segmenterState === "error" && !contourReady;
+  const chip = loadFailed
+    ? { tone: "error", text: "Erkennung nicht geladen" }
+    : segmenterState === "loading" && !contourReady
+      ? { tone: "busy", text: "Erkennung wird geladen …" }
+      : segmenting
+        ? { tone: "busy", text: "Kontur wird erkannt …" }
+        : correctionMode
+          ? { tone: "busy", text: "Tippe mitten ins Gefäß" }
+          : contourReady
+            ? { tone: "ok", text: "Kontur erkannt" }
+            : { tone: statusIsError ? "error" : "busy", text: statusIsError ? "Nicht erkannt" : "Warte auf Erkennung …" };
 
   return (
     <>
@@ -119,7 +129,12 @@ export function ContourStep({
       </div>
 
       <div className={styles.controls}>
-        {statusIsError && !segmenting && <p className={styles.errorNote}>{status}</p>}
+        {(statusIsError || loadFailed) && !segmenting && <p className={styles.errorNote} data-testid="easy-error">{status}</p>}
+        {loadFailed && (
+          <button type="button" className={styles.secondaryButton} onClick={onRetryLoad} data-testid="easy-retry-load">
+            Erneut versuchen
+          </button>
+        )}
         {segmenting && segmenterNote && <p className={styles.note} role="status">{status}</p>}
         {segmenterNote && <p className={styles.note} data-testid="easy-segmenter-note">{segmenterNote}</p>}
         <button

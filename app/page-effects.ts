@@ -77,9 +77,12 @@ type UseToolGeometryEffectOptions = {
 };
 
 export const useSegmenterLifecycle = ({
+  attempt = 0,
   setSegmenterState,
   setStatus,
 }: {
+  /** Erhöhen lädt MediaPipe neu („Erneut versuchen“ im einfachen Ablauf). */
+  attempt?: number;
   setSegmenterState: (nextState: "loading" | "ready" | "error") => void;
   setStatus: (nextStatus: string) => void;
 }) => {
@@ -92,16 +95,18 @@ export const useSegmenterLifecycle = ({
         setSegmenterState("ready");
         setStatus(pageText.readyStatus);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (cancelled) return;
         setSegmenterState("error");
-        setStatus(pageText.segmenterLoadError);
+        // Der Grund gehört in die Meldung: Ohne ihn ist ein Fehler am Handy nicht zu finden.
+        const reason = error instanceof Error ? error.message : String(error);
+        setStatus(`${pageText.segmenterLoadError} (${reason})`);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [setSegmenterState, setStatus]);
+  }, [attempt, setSegmenterState, setStatus]);
 };
 
 export const useImageUrlCleanup = (imageUrl: string | null) => {

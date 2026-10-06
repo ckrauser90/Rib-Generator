@@ -1,8 +1,19 @@
 import type { RasterSource } from "./perspective";
 
-let wasmRoot = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm";
-let modelUrl =
-  "https://storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/1/magic_touch.tflite";
+// Woher Laufzeit und Modell kommen. Die WASM-Laufzeit MUSS zur gebündelten JS-Version
+// passen: Ohne Versionsnummer liefert jsDelivr die neueste (seit Okt. 2026 1.x) und das
+// Laden scheitert still. next.config.ts setzt die installierte Version beim Build ein.
+// Der Cloudflare-Build liefert beides selbst aus (scripts/build-static.mjs) und setzt
+// NEXT_PUBLIC_MEDIAPIPE_ASSET_BASE, z. B. `/mediapipe`.
+const MEDIAPIPE_VERSION = process.env.NEXT_PUBLIC_MEDIAPIPE_VERSION ?? "0.10.34";
+const ASSET_BASE = process.env.NEXT_PUBLIC_MEDIAPIPE_ASSET_BASE;
+
+let wasmRoot = ASSET_BASE
+  ? `${ASSET_BASE}/wasm`
+  : `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`;
+let modelUrl = ASSET_BASE
+  ? `${ASSET_BASE}/magic_touch.tflite`
+  : "https://storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/1/magic_touch.tflite";
 
 /**
  * Overrides where the WASM runtime and the model are loaded from, e.g. to serve

@@ -11,7 +11,7 @@ ausgeliefert – derselbe Weg wie im Webbaukasten (E-025). Kostenlos im Free-Pla
 | Datei | Zweck |
 |---|---|
 | `wrangler.jsonc` | Worker `rib-generator`, liefert den Ordner `out/` aus |
-| `scripts/build-static.mjs` | `npm run build:cloudflare` = `next build` als statischer Export nach `out/` |
+| `scripts/build-static.mjs` | `npm run build:cloudflare`: kopiert MediaPipe-Laufzeit und -Modell nach `public/mediapipe/`, dann `next build` als statischer Export nach `out/` |
 | `public/_headers` | Sicherheits-Header |
 
 Lokal und in den E2E-Tests bleibt der normale Build (`npm run build`, `npm run start`).
@@ -58,5 +58,8 @@ in den PR. Abschalten unter Settings → Build → Branch control.
   mitgebündelte onnxruntime-WASM-Datei mit 24,3 MiB (zur Laufzeit kommt sie von jsDelivr).
   Wird sie bei einem onnxruntime-Update größer, bricht der Deploy ab – dann die Datei per
   `.assetsignore` ausschließen.
-- Modelle liegen deshalb nicht im Deployment: MediaPipe kommt von Google/jsDelivr,
-  BiRefNet von Hugging Face. Die App braucht beim ersten Laden Internet.
+- MediaPipe (WASM ~11 MB, Modell ~6 MB) wird mit ausgeliefert. Grund: Ohne Versionsnummer
+  lieferte jsDelivr die neueste Laufzeit (1.x) zur gebündelten 0.10.34 – die Erkennung startete
+  dann nie (06.10.2026, am Handy aufgefallen). Ohne Cloudflare-Build lädt die App die Laufzeit
+  von jsDelivr, jetzt immer in der installierten Version (`next.config.ts`).
+- BiRefNet (224 MB) passt nicht ins Deployment und kommt von Hugging Face.

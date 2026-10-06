@@ -35,6 +35,7 @@ import { useToolDimensionInputs } from "./tool-dimension-inputs";
 import { DEFAULT_SHRINKAGE_PERCENT, applyShrinkage } from "./shrinkage";
 import { DEFAULT_SHAPE_BOOST } from "./shape-boost";
 import { readModeFromSearch, type AppMode, type EasyStep } from "./easy-flow";
+import { resetInteractiveSegmenter } from "../lib/interactive-segmenter";
 import { useEasyAutoDetect, useEasyAutoSide } from "./easy-flow-effects";
 import {
   DEFAULT_SEGMENTER,
@@ -236,7 +237,8 @@ export default function Home() {
     workProfileSide,
   });
 
-  useSegmenterLifecycle({ setSegmenterState, setStatus });
+  const [segmenterLoadAttempt, setSegmenterLoadAttempt] = useState(0);
+  useSegmenterLifecycle({ attempt: segmenterLoadAttempt, setSegmenterState, setStatus });
   useImageUrlCleanup(imageUrl);
   const easyActiveSegment = useMemo(
     () => (mode === "easy" && imageAnchors ? trimProfileBetweenAnchors(displayWorkProfile, imageAnchors) : undefined),
@@ -604,6 +606,12 @@ export default function Home() {
           onHeightChange: setToolHeightMm,
           onShrinkageChange: setShrinkagePercent,
           onToggleSide: toggleEasySide,
+          onRetryLoad: () => {
+            resetInteractiveSegmenter();
+            setSegmenterState("loading");
+            setSegmenterLoadAttempt((attempt) => attempt + 1);
+          },
+          segmenterState,
           segmenterNote:
             segmenter === DEFAULT_SEGMENTER
               ? null

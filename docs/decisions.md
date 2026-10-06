@@ -231,3 +231,8 @@ empfohlene Weg, Webbaukasten nutzt Workers), eigener Server.
 
 **Folgen:** Bezahlschranke (Monetarisierung) braucht später einen Server-Teil, z. B. denselben
 Worker mit Code für die STL-Ausgabe.
+
+**Nachtrag (06.10.):** Erster Test am Handy: Die Erkennung startete nicht. Ursache war die
+unversionierte jsDelivr-Adresse der MediaPipe-Laufzeit (lieferte 1.0.1 zur gebündelten
+0.10.34). Seitdem wird die Version beim Build eingesetzt, und der Cloudflare-Build liefert
+Laufzeit und Modell selbst aus. Schritt 2 zeigt jetzt Laden und Ladefehler samt Grund an.

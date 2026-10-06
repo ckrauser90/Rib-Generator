@@ -11,5 +11,6 @@ tsconfig.tsbuildinfo
 # Segmentierungs-Labor: große Modelle und kopierte Laufzeit-Dateien (npm run lab:models)
 .lab-models
 public/lab-assets
+public/mediapipe
 reports/segmentation
 /out
