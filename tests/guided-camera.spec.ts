@@ -9,22 +9,43 @@ test.use({
   },
 });
 
-test("guided capture shows live status and hands the photo to step 2", async ({ page }) => {
+test("guided capture guides with one sentence and hands the photo to step 2", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/?e2eMockSegmenter=1");
   await page.getByTestId("easy-guided-button").click();
   await expect(page.getByTestId("guided-camera")).toBeVisible();
 
-  // Das Video läuft und die Live-Prüfung meldet Werte (Größe über die Erkennung).
+  // Das Video läuft, und nach der ersten Erkennung steht ein konkreter Satz da.
   await expect
     .poll(() => page.getByTestId("guided-video").evaluate((video: HTMLVideoElement) => video.readyState), { timeout: 15_000 })
     .toBeGreaterThanOrEqual(2);
-  await expect(page.getByTestId("guided-status")).toContainText("%", { timeout: 15_000 });
+  await expect(page.getByTestId("guided-instruction")).not.toContainText("Gefäß in den Rahmen", { timeout: 15_000 });
 
-  await page.getByTestId("guided-shutter").click();
-  await expect(page.getByTestId("guided-camera")).toBeHidden();
+  // Passt alles, löst die Aufnahme selbst aus; sonst von Hand.
+  const camera = page.getByTestId("guided-camera");
+  if (await camera.isVisible()) await page.getByTestId("guided-shutter").click().catch(() => undefined);
+  await expect(camera).toBeHidden();
   await expect(page.getByTestId("easy-flow")).toHaveAttribute("data-step", "kontur");
   await expect(page.getByTestId("easy-contour-status")).toHaveText("Kontur erkannt");
+});
+
+test("the target dot follows the motion sensor and the sentence names the direction", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?e2eMockSegmenter=1");
+  await page.getByTestId("easy-guided-button").click();
+  // Handy um 6° im Uhrzeigersinn gedreht (Android-Konvention: Gegenkraft, aufrecht y = +g).
+  await page.evaluate(() => {
+    const radians = (6 * Math.PI) / 180;
+    window.setInterval(() => {
+      const event = new Event("devicemotion") as Event & { accelerationIncludingGravity?: unknown };
+      event.accelerationIncludingGravity = { x: -9.81 * Math.sin(radians), y: 9.81 * Math.cos(radians), z: 0 };
+      window.dispatchEvent(event);
+    }, 40);
+  });
+  await expect(page.getByTestId("guided-dot")).toBeVisible();
+  await expect(page.getByTestId("guided-instruction")).toContainText(/nach links drehen|Etwas zurück|Näher heran/, { timeout: 15_000 });
+  const transform = await page.getByTestId("guided-dot").evaluate((dot) => (dot as HTMLElement).style.transform);
+  expect(transform).toMatch(/translate\((\d+(\.\d+)?)px/);
 });
 
 test("guided capture can be closed without a photo", async ({ page }) => {

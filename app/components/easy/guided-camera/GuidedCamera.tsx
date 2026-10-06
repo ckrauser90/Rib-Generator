@@ -1,13 +1,13 @@
 "use client";
 
-// Geführte Aufnahme (Test): eigene Kamera-Ansicht mit Hilfslinien und Live-Prüfung.
+// Geführte Aufnahme (Test): Kamera im Vollbild mit Sucherrahmen und Zielpunkt (Entwurf D3).
 //
-// Zweck: Fehler bei der Aufnahme verhindern statt später reparieren (docs/decisions.md R-010).
-// Über dem Kamerabild liegen Mittellinie und die Zielzone für Rand und Fuß (Gefäß soll
-// 60–85 % der Bildhöhe füllen). Live bewertet werden: Handy gerade (Lagesensor), Bild
-// scharf (relativ zum schärfsten Bild der letzten Sekunden) und Gefäßgröße (Erkennung auf
-// einem kleinen Vorschaubild, ca. jede Sekunde). Der Auslöser ist immer bedienbar; bei Grün
-// heißt er „Aufnehmen“, sonst „Trotzdem aufnehmen“.
+// Zweck: Fehler bei der Aufnahme verhindern statt später reparieren (docs/decisions.md R-011).
+// Das Kamerabild füllt den Bildschirm. Ein Sucherrahmen zeigt, wo das Gefäß stehen soll; ein
+// Punkt zeigt, wohin das Handy kippt – er muss in den Kreis. Darunter steht genau ein Satz:
+// der wichtigste nächste Handgriff, mit Richtung (aus Entwurf D2). Passt alles eine gute
+// Sekunde lang, füllt sich der Kreis und das Foto wird von selbst aufgenommen; der Auslöser
+// bleibt jederzeit bedienbar.
 //
 // Abgrenzung: Alles dafür liegt in diesem Ordner und in lib/guided-camera.ts. Die App hängt
 // nur über den Knopf in PhotoStep daran. Zum Verwerfen: Ordner, lib-Datei und den Knopf löschen.
@@ -15,11 +15,17 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { segmentPreviewFromPoint } from "../../../../lib/interactive-segmenter";
 import {
+  DEFAULT_BAND,
+  GUIDANCE_LIMITS,
   evaluateGuidance,
+  holdProgress,
   laplacianVariance,
   measureMaskPlacement,
+  targetDotOffset,
   tiltFromGravity,
-  type GuidanceState,
+  type Band,
+  type Placement,
+  type Tilt,
 } from "../../../../lib/guided-camera";
 import styles from "./guided-camera.module.css";
 
@@ -52,30 +58,48 @@ export const requestMotionPermission = async () => {
 
 const SHARPNESS_WINDOW_MS = 3000;
 const ANALYSIS_INTERVAL_MS = 400;
-
-const stateLabel: Record<GuidanceState, string> = { ok: "ok", warn: "prüfen", unknown: "–" };
+/** Radien im Zielbereich (px): Kreis = Grenzwert, äußerer Kreis = dreifacher Grenzwert. */
+const RING_RADIUS = 34;
+const OUTER_RADIUS = RING_RADIUS * 3;
+const PROGRESS_CIRCUMFERENCE = 2 * Math.PI * (RING_RADIUS + 7);
 
 export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraProps) {
+  const layerRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const holdSinceRef = useRef<number | null>(null);
+  const capturingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const [videoSize, setVideoSize] = useState<{ width: number; height: number } | null>(null);
-  const stageAreaRef = useRef<HTMLDivElement>(null);
-  const [areaSize, setAreaSize] = useState<{ width: number; height: number } | null>(null);
-  // iPhone: Abspielen kann ohne Tipp abgelehnt werden – dann Knopf „Kamera starten“.
   const [needsTap, setNeedsTap] = useState(false);
   const [videoInfo, setVideoInfo] = useState("Video: wartet auf Kamera …");
-  const [tilt, setTilt] = useState<{ rollDeg: number; pitchDeg: number } | null>(null);
+  const [band, setBand] = useState<Band>(DEFAULT_BAND);
+  const [tilt, setTilt] = useState<Tilt | null>(null);
   const [sharpnessRatio, setSharpnessRatio] = useState<number | null>(null);
-  const [placement, setPlacement] = useState<{ fill: number; touchesEdge: boolean } | null>(null);
+  const [placement, setPlacement] = useState<Placement | null>(null);
   const [zoom, setZoom] = useState<ZoomRange | null>(null);
   const [cameraIds, setCameraIds] = useState<string[]>([]);
   const [cameraIndex, setCameraIndex] = useState<number | null>(null);
-  const [capturing, setCapturing] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+  }, []);
+
+  const applyZoom = useCallback(async (value: number, range: ZoomRange | null = null) => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    const current = range;
+    if (!track) return;
+    try {
+      await track.applyConstraints({ advanced: [{ zoom: value } as MediaTrackConstraintSet] });
+      setZoom((previous) => {
+        const base = current ?? previous;
+        return base ? { ...base, value } : base;
+      });
+    } catch {
+      // Zoom nicht änderbar – dann bleibt es beim aktuellen Wert.
+    }
   }, []);
 
   // Kamera starten (und bei Kamerawechsel neu starten).
@@ -126,11 +150,13 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
           zoom?: { min: number; max: number };
         };
         const settings = track.getSettings() as MediaTrackSettings & { zoom?: number };
-        setZoom(
+        const range =
           capabilities.zoom && capabilities.zoom.max > capabilities.zoom.min
             ? { min: capabilities.zoom.min, max: capabilities.zoom.max, value: settings.zoom ?? capabilities.zoom.min }
-            : null,
-        );
+            : null;
+        setZoom(range);
+        // 2× als Start: Mit der Weitwinkel-Hauptkamera müsste man zu nah heran (verzerrt).
+        if (range && range.min <= 2 && range.max >= 2) void applyZoom(2, range);
         if (cameraIds.length === 0) {
           const devices = await navigator.mediaDevices.enumerateDevices();
           const videoInputs = devices.filter((device) => device.kind === "videoinput");
@@ -151,20 +177,30 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
       cancelled = true;
     };
     // cameraIds nur beim ersten Start füllen; ein Wechsel läuft über cameraIndex.
-  }, [cameraIndex, stopStream]);
+  }, [applyZoom, cameraIndex, stopStream]);
 
   useEffect(() => () => stopStream(), [stopStream]);
 
-  // Platz für das Kamerabild messen (statt CSS-Containereinheiten, die ältere iPhones nicht kennen).
+  // Sucherrahmen in Bildkoordinaten umrechnen: Das Video füllt den Bildschirm (object-fit:
+  // cover) und ist dabei beschnitten; die Erkennung misst aber im ganzen Bild.
+  const updateBand = useCallback(() => {
+    const layer = layerRef.current;
+    const frame = frameRef.current;
+    const video = videoRef.current;
+    if (!layer || !frame || !video || video.videoWidth === 0) return;
+    const layerRect = layer.getBoundingClientRect();
+    const frameRect = frame.getBoundingClientRect();
+    const scale = Math.max(layerRect.width / video.videoWidth, layerRect.height / video.videoHeight);
+    const shownHeight = video.videoHeight * scale;
+    const offsetY = (layerRect.height - shownHeight) / 2;
+    const toImage = (screenY: number) => (screenY - layerRect.top - offsetY) / shownHeight;
+    setBand({ top: toImage(frameRect.top), bottom: toImage(frameRect.bottom) });
+  }, []);
+
   useEffect(() => {
-    const area = stageAreaRef.current;
-    if (!area) return;
-    const measure = () => setAreaSize({ width: area.clientWidth, height: area.clientHeight });
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(area);
-    return () => observer.disconnect();
-  }, [error]);
+    window.addEventListener("resize", updateBand);
+    return () => window.removeEventListener("resize", updateBand);
+  }, [updateBand]);
 
   // Kurze Diagnose im Test: Kommt überhaupt ein Bild an?
   useEffect(() => {
@@ -199,7 +235,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
         ? { x: smoothed.x * 0.8 + current.x * 0.2, y: smoothed.y * 0.8 + current.y * 0.2, z: smoothed.z * 0.8 + current.z * 0.2 }
         : current;
       const now = performance.now();
-      if (now - lastUpdate > 100) {
+      if (now - lastUpdate > 80) {
         lastUpdate = now;
         setTilt(tiltFromGravity(smoothed.x, smoothed.y, smoothed.z));
       }
@@ -208,7 +244,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
     return () => window.removeEventListener("devicemotion", onMotion);
   }, []);
 
-  // Schärfe und Gefäßgröße aus dem laufenden Bild.
+  // Schärfe und Gefäßlage aus dem laufenden Bild.
   useEffect(() => {
     const small = document.createElement("canvas");
     const context = small.getContext("2d", { willReadFrequently: true });
@@ -236,9 +272,10 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
       const best = Math.max(...history.map((entry) => entry.value));
       setSharpnessRatio(history.length >= 3 && best > 0 ? history[history.length - 1].value / best : null);
 
-      // Größe: alle zwei Durchläufe, nie zwei Erkennungen gleichzeitig.
+      // Lage: alle zwei Durchläufe, nie zwei Erkennungen gleichzeitig.
       if (tick % 2 === 0 && !segmenting) {
         segmenting = true;
+        updateBand();
         const preview = document.createElement("canvas");
         preview.width = 256;
         preview.height = Math.round((256 * video.videoHeight) / video.videoWidth);
@@ -252,71 +289,57 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
       }
     }, ANALYSIS_INTERVAL_MS);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [updateBand]);
 
-  const guidance = evaluateGuidance({ tilt, sharpnessRatio, placement });
+  const guidance = evaluateGuidance({ tilt, sharpnessRatio, placement, band });
 
-  // Bühne so groß wie möglich im Seitenverhältnis des Videos (Linien liegen dann genau
-  // dort, wo sie im Foto liegen). Vor den ersten Bildern: Hochformat 3:4.
-  const aspect = videoSize ? videoSize.width / videoSize.height : 3 / 4;
-  const stageStyle: CSSProperties | undefined = areaSize
-    ? areaSize.width / areaSize.height > aspect
-      ? { width: Math.round(areaSize.height * aspect), height: areaSize.height }
-      : { width: areaSize.width, height: Math.round(areaSize.width / aspect) }
-    : undefined;
-
-  const applyZoom = async (value: number) => {
-    const track = streamRef.current?.getVideoTracks()[0];
-    if (!track || !zoom) return;
-    try {
-      await track.applyConstraints({ advanced: [{ zoom: value } as MediaTrackConstraintSet] });
-      setZoom({ ...zoom, value });
-    } catch {
-      // Zoom nicht änderbar – dann bleibt es beim aktuellen Wert.
-    }
-  };
-
-  const capture = async () => {
+  const capture = useCallback(async () => {
     const video = videoRef.current;
-    if (!video || video.videoWidth === 0 || capturing) return;
-    setCapturing(true);
+    if (!video || video.videoWidth === 0 || capturingRef.current) return;
+    capturingRef.current = true;
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext("2d")?.drawImage(video, 0, 0);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
     if (!blob) {
-      setCapturing(false);
+      capturingRef.current = false;
       return;
     }
     stopStream();
     onCapture(new File([blob], "gefuehrte-aufnahme.jpg", { type: "image/jpeg" }));
-  };
+  }, [onCapture, stopStream]);
+
+  // Selbstauslöser: Kreis füllt sich, solange alles passt; dann Foto.
+  const ready = guidance.ready;
+  useEffect(() => {
+    let frame = 0;
+    const step = () => {
+      const state = holdProgress(holdSinceRef.current, ready, performance.now(), GUIDANCE_LIMITS.holdMs);
+      holdSinceRef.current = state.since;
+      setProgress(state.progress);
+      if (state.progress >= 1) {
+        void capture();
+        return;
+      }
+      if (ready) frame = requestAnimationFrame(step);
+    };
+    step();
+    return () => cancelAnimationFrame(frame);
+  }, [capture, ready]);
 
   const close = () => {
     stopStream();
     onClose();
   };
 
-  const pill = (label: string, state: GuidanceState, detail?: string) => (
-    <span className={styles.pill} data-state={state}>
-      {label}
-      <span className={styles.pillDetail}>{detail ?? stateLabel[state]}</span>
-    </span>
-  );
+  const dot = targetDotOffset(tilt);
+  const tiltOk = guidance.tilt !== "warn";
+  const sizeLabel =
+    guidance.sizeAdvice === "zurueck" ? "Etwas zurück" : guidance.sizeAdvice === "naeher" ? "Näher heran" : null;
 
   return (
-    <div className={styles.layer} role="dialog" aria-modal="true" aria-label="Geführte Aufnahme" data-testid="guided-camera">
-      <div className={styles.topBar}>
-        <button type="button" className={styles.iconButton} onClick={close} aria-label="Schließen" data-testid="guided-close">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-        <span className={styles.title}>Geführte Aufnahme <span className={styles.badge}>Test</span></span>
-        <span className={styles.spacer} />
-      </div>
-
+    <div ref={layerRef} className={styles.layer} role="dialog" aria-modal="true" aria-label="Geführte Aufnahme" data-testid="guided-camera">
       {error ? (
         <div className={styles.errorBox} role="alert">
           <p>{error}</p>
@@ -325,69 +348,100 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
           </button>
         </div>
       ) : (
-        <div className={styles.stageArea} ref={stageAreaRef}>
-          <div className={styles.stage} style={stageStyle}>
-            <video
-              ref={videoRef}
-              className={styles.video}
-              playsInline
-              muted
-              autoPlay
-              onLoadedMetadata={(event) =>
-                setVideoSize({ width: event.currentTarget.videoWidth, height: event.currentTarget.videoHeight })
-              }
-              onPlaying={() => setNeedsTap(false)}
-              data-testid="guided-video"
-            />
-            {needsTap && (
-              <button type="button" className={styles.tapToStart} onClick={startPlayback} data-testid="guided-tap-start">
-                Kamera starten
-              </button>
-            )}
-            <div className={styles.guides} data-size={guidance.size} aria-hidden>
-              <span className={styles.centerLine} />
-              <span className={styles.rimLine}><span>Rand</span></span>
-              <span className={styles.footLine}><span>Fuß</span></span>
+        <>
+          <video
+            ref={videoRef}
+            className={styles.video}
+            playsInline
+            muted
+            autoPlay
+            onLoadedMetadata={updateBand}
+            onPlaying={() => setNeedsTap(false)}
+            data-testid="guided-video"
+          />
+
+          <div ref={frameRef} className={styles.frame} data-state={guidance.size} aria-hidden>
+            <span className={styles.cornerTopLeft} />
+            <span className={styles.cornerTopRight} />
+            <span className={styles.cornerBottomLeft} />
+            <span className={styles.cornerBottomRight} />
+            {sizeLabel && <span className={styles.frameLabel}>{sizeLabel}</span>}
+
+            <div className={styles.target} data-tilt={tilt ? (tiltOk ? "ok" : "warn") : "unknown"}>
+              <span className={styles.targetArea} style={{ width: OUTER_RADIUS * 2, height: OUTER_RADIUS * 2 }} />
+              <svg className={styles.targetRing} width={(RING_RADIUS + 12) * 2} height={(RING_RADIUS + 12) * 2} viewBox={`0 0 ${(RING_RADIUS + 12) * 2} ${(RING_RADIUS + 12) * 2}`}>
+                <circle cx={RING_RADIUS + 12} cy={RING_RADIUS + 12} r={RING_RADIUS} className={styles.ringStroke} />
+                {progress > 0 && (
+                  <circle
+                    cx={RING_RADIUS + 12}
+                    cy={RING_RADIUS + 12}
+                    r={RING_RADIUS + 7}
+                    className={styles.progressStroke}
+                    strokeDasharray={`${PROGRESS_CIRCUMFERENCE * progress} ${PROGRESS_CIRCUMFERENCE}`}
+                    transform={`rotate(-90 ${RING_RADIUS + 12} ${RING_RADIUS + 12})`}
+                    data-testid="guided-progress"
+                  />
+                )}
+              </svg>
+              {tilt && (
+                <span
+                  className={styles.dot}
+                  style={{ transform: `translate(${dot.x * RING_RADIUS}px, ${dot.y * RING_RADIUS}px)` } as CSSProperties}
+                  data-testid="guided-dot"
+                />
+              )}
             </div>
           </div>
-        </div>
+
+          {needsTap && (
+            <button type="button" className={styles.tapToStart} onClick={startPlayback} data-testid="guided-tap-start">
+              Kamera starten
+            </button>
+          )}
+        </>
       )}
 
-      <div className={styles.bottomBar}>
-        <div className={styles.pills} data-testid="guided-status">
-          {pill("Gerade", guidance.tilt, tilt ? `${Math.max(tilt.rollDeg, tilt.pitchDeg).toFixed(1).replace(".", ",")}°` : undefined)}
-          {pill("Scharf", guidance.sharpness)}
-          {pill("Größe", guidance.size, placement ? `${Math.round(placement.fill * 100)} %` : undefined)}
-        </div>
-        <p className={styles.hint} aria-live="polite">
-          {guidance.hint ?? (guidance.ready ? "Passt – jetzt aufnehmen." : "Gefäß zwischen die Linien, Handy aufrecht auf halber Gefäßhöhe.")}
-        </p>
-        <div className={styles.controls}>
-          <div className={styles.sideControls}>
-            {zoom && (
-              <div className={styles.zoomGroup} role="group" aria-label="Zoom">
-                {[1, 2, 3]
-                  .filter((value) => value >= zoom.min && value <= zoom.max)
-                  .map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={styles.zoomButton}
-                      aria-pressed={Math.abs(zoom.value - value) < 0.05}
-                      onClick={() => void applyZoom(value)}
-                    >
-                      {value}×
-                    </button>
-                  ))}
-              </div>
-            )}
+      <div className={styles.topBar}>
+        <button type="button" className={styles.iconButton} onClick={close} aria-label="Schließen" data-testid="guided-close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+        <span className={styles.title}>Geführte Aufnahme <span className={styles.badge}>Test</span></span>
+        {zoom ? (
+          <div className={styles.zoomGroup} role="group" aria-label="Zoom">
+            {[1, 2, 3]
+              .filter((value) => value >= zoom.min && value <= zoom.max)
+              .map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={styles.zoomButton}
+                  aria-pressed={Math.abs(zoom.value - value) < 0.05}
+                  onClick={() => void applyZoom(value)}
+                >
+                  {value}×
+                </button>
+              ))}
           </div>
+        ) : (
+          <span className={styles.spacer} />
+        )}
+      </div>
+
+      <div className={styles.bottomBar}>
+        <div className={styles.instruction} aria-live="polite" data-testid="guided-instruction">
+          <strong>{guidance.title}</strong>
+          <span>{guidance.detail}</span>
+        </div>
+        <div className={styles.controls}>
+          <span />
           <button
             type="button"
             className={styles.shutter}
             data-ready={guidance.ready || undefined}
             onClick={() => void capture()}
-            disabled={Boolean(error) || capturing}
+            disabled={Boolean(error)}
             aria-label={guidance.ready ? "Aufnehmen" : "Trotzdem aufnehmen"}
             data-testid="guided-shutter"
           >
@@ -399,13 +453,15 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
                 type="button"
                 className={styles.switchButton}
                 onClick={() => setCameraIndex(((cameraIndex ?? 0) + 1) % cameraIds.length)}
+                aria-label="Kamera wechseln"
               >
-                Kamera wechseln
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M20 7h-3l-2-3H9L7 7H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1z" /><path d="M9 13a3 3 0 0 1 5-2.2M15 13a3 3 0 0 1-5 2.2" /><polyline points="14 9 14.5 11 12.5 11.3" />
+                </svg>
               </button>
             )}
           </div>
         </div>
-        <p className={styles.shutterLabel}>{guidance.ready ? "Aufnehmen" : "Trotzdem aufnehmen"}</p>
         <p className={styles.diagnostic} data-testid="guided-diagnostic">{videoInfo}</p>
       </div>
     </div>

@@ -260,7 +260,7 @@ Graustufen, Gefäß < 300 px oder < 12 % der Bildhöhe, Abstand zum Rand < 0,8 %
 - Seitlicher Versatz (`perspectiveRisk`): war bei allen Fotos 0 – nicht aussagekräftig.
 
 **Stufe 2 – geführte Kamera, als Test hinter eigenem Knopf** („Geführte Aufnahme (Test)“):
-Eigene Kamera-Ansicht mit Mittellinie und Zielzone für Rand und Fuß, live: Neigung über den
+Eigene Kamera-Ansicht (seit R-011 nach Entwurf D3: Vollbild, Sucherrahmen, Zielpunkt), live: Neigung über den
 Schwerkraftvektor (iPhone fragt einmal um Erlaubnis), Schärfe relativ zum besten Bild der letzten
 3 s, Gefäßgröße per Erkennung auf einem 256-px-Vorschaubild etwa jede Sekunde. Zoom-Knöpfe
 1×/2×/3×, wenn das Gerät sie anbietet (Android Chrome meist, iPhone eher nicht), sonst
@@ -275,3 +275,27 @@ Kamera-Foto (Konturgenauigkeit), Tempo der Live-Erkennung, Zoom auf dem iPhone, 
 (Neigung 2°/5°, Füllgrad 60–85 %).
 
 Bild: `docs/aufnahme-hilfen.png`.
+
+## R-011 · 2026-10-06 · Geführte Aufnahme nach Entwurf D3 (Zielpunkt) mit einem Satz aus D2
+
+**Anlass:** Erster Test am iPhone: Vorschau zu klein („frickelig“), Rand-/Fuß-Linien unklar,
+Neigung nur als Gradzahl ohne Richtung. Drei Entwürfe (D1 Wasserwaage, D2 Pfeil-Hinweis,
+D3 Zielpunkt) auf der Design-Fläche; gewählt: D3 mit dem einen Satz aus D2.
+
+**Umsetzung:**
+- Kamerabild im Vollbild, Bedienung darübergelegt; Sucherrahmen mit vier Ecken statt Linien.
+  Der Rahmen wird in Bildkoordinaten umgerechnet (Video beschnitten, Erkennung misst im ganzen
+  Bild). Gefäß soll ≥ 72 % der Rahmenhöhe füllen und mittig stehen.
+- Zielpunkt: zeigt, wohin das Handy kippt (rechts gedreht → Punkt rechts, Kamera blickt nach
+  unten → Punkt unten). Kreisrand = Grenzwert (Drehung 2°, Kippen 5°).
+- Neigung mit Richtung: Das Vorzeichen der Hochachse verrät die Konvention (Android aufrecht
+  y ≈ +9,8, iPhone ≈ −9,8); danach gelten Richtungen gleich. *Annahme:* Das iPhone kehrt alle
+  drei Achsen um – am Gerät zu bestätigen (Punkt muss mitlaufen, nicht entgegen).
+- Genau ein Satz, wichtigster Handgriff zuerst: Abstand → Drehen → Kippen → Näher/Zoom →
+  Höhe → Ruhig halten → „Halten …“.
+- Selbstauslöser: passt alles 1,2 s ohne Unterbrechung, füllt sich der Ring und das Foto wird
+  aufgenommen. Der Auslöser bleibt jederzeit bedienbar.
+- 2× Zoom als Start, wo der Browser Zoom anbietet.
+
+Bilder: `docs/gefuehrte-aufnahme-korrigieren.png`, `docs/gefuehrte-aufnahme-passt.png`.
+Entwürfe: https://claude.ai/artifact/KsnrMyon2mTQK5ihqjLqMM (Reihe D).

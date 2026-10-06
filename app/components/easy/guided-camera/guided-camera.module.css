@@ -1,29 +1,46 @@
-/* Geführte Aufnahme (Test) – Vollbild über dem einfachen Ablauf.
-   Dunkle Fläche, damit das Kamerabild wirkt; Linien und Status in den Farben des Ablaufs. */
+/* Geführte Aufnahme (Test, Entwurf D3) – Kamera im Vollbild, Bedienung darübergelegt.
+   Bernstein = noch korrigieren, Grün = passt. Farben passend zum einfachen Ablauf. */
 
 .layer {
+  --warn: #F1B27E;
+  --ok: #8FCB78;
+  --ink: #FFF9F0;
+  --shade: rgba(20, 17, 15, 0.72);
+
   position: fixed;
   inset: 0;
   z-index: 60;
-  display: flex;
-  flex-direction: column;
-  background: #14110F;
-  color: #FFF9F0;
+  overflow: hidden;
+  background: #000;
+  color: var(--ink);
 }
 
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ── Kopfzeile ── */
 .topBar {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: max(14px, env(safe-area-inset-top));
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: max(12px, env(safe-area-inset-top)) 16px 8px;
+  gap: 10px;
 }
 
 .iconButton {
   width: 44px;
   height: 44px;
+  flex-shrink: 0;
   border-radius: 22px;
   border: none;
-  background: rgba(255, 249, 240, 0.12);
+  background: var(--shade);
   color: inherit;
   display: inline-flex;
   align-items: center;
@@ -31,108 +48,138 @@
   cursor: pointer;
 }
 
-.title { flex: 1; text-align: center; font-weight: 600; font-size: 15px; }
-.spacer { width: 44px; }
-
-.badge {
-  margin-left: 6px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: rgba(255, 249, 240, 0.16);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.stageArea {
+.title {
   flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 15px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
-/* Bühne im Seitenverhältnis des Videos: Linien liegen genau dort, wo das Foto sie hat. */
-.stage {
-  position: relative;
-  /* Größe setzt GuidedCamera aus dem gemessenen Platz; dies ist nur der Startwert. */
-  width: 100%;
-  height: 100%;
-  border-radius: 16px;
-  overflow: hidden;
-  background: #000;
+.badge { margin-left: 6px; padding: 2px 8px; border-radius: 10px; background: var(--shade); font-size: 12px; }
+.spacer { width: 44px; flex-shrink: 0; }
+
+.zoomGroup { display: flex; gap: 2px; padding: 4px; border-radius: 22px; background: var(--shade); flex-shrink: 0; }
+
+.zoomButton {
+  min-width: 40px;
+  min-height: 36px;
+  border-radius: 18px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
+.zoomButton[aria-pressed="true"] { background: var(--ink); color: #2F241B; }
 
-.guides { position: absolute; inset: 0; pointer-events: none; --guide: rgba(255, 249, 240, 0.85); }
-.guides[data-size="ok"] { --guide: #9CC48A; }
-.guides[data-size="warn"] { --guide: #F1B27E; }
+/* ── Sucherrahmen: Gefäß soll ihn von oben bis unten füllen ── */
+.frame {
+  --corner: var(--ink);
+  position: absolute;
+  left: 9%;
+  right: 9%;
+  top: calc(max(14px, env(safe-area-inset-top)) + 96px);
+  bottom: calc(max(20px, env(safe-area-inset-bottom)) + 214px);
+  pointer-events: none;
+}
 
-.centerLine {
+.frame[data-state="ok"] { --corner: var(--ok); }
+.frame[data-state="warn"] { --corner: var(--warn); }
+
+.cornerTopLeft,
+.cornerTopRight,
+.cornerBottomLeft,
+.cornerBottomRight {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border: 0 solid var(--corner);
+}
+
+.cornerTopLeft { left: 0; top: 0; border-left-width: 4px; border-top-width: 4px; border-top-left-radius: 14px; }
+.cornerTopRight { right: 0; top: 0; border-right-width: 4px; border-top-width: 4px; border-top-right-radius: 14px; }
+.cornerBottomLeft { left: 0; bottom: 0; border-left-width: 4px; border-bottom-width: 4px; border-bottom-left-radius: 14px; }
+.cornerBottomRight { right: 0; bottom: 0; border-right-width: 4px; border-bottom-width: 4px; border-bottom-right-radius: 14px; }
+
+.frameLabel {
   position: absolute;
   left: 50%;
-  top: 6%;
-  bottom: 6%;
-  border-left: 1.5px dashed var(--guide);
+  top: -40px;
+  transform: translateX(-50%);
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 15px;
+  background: var(--shade);
+  color: var(--warn);
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
 }
 
-.rimLine,
-.footLine {
+/* ── Zielpunkt: Punkt in den Kreis bringen ── */
+.target { --tilt: var(--warn); position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+.target[data-tilt="ok"] { --tilt: var(--ok); }
+.target[data-tilt="unknown"] { --tilt: var(--ink); }
+
+.targetArea {
   position: absolute;
-  left: 8%;
-  right: 8%;
-  border-top: 2px solid var(--guide);
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(20, 17, 15, 0.22);
+  border: 1.5px solid rgba(255, 249, 240, 0.35);
+  box-sizing: border-box;
 }
 
-.rimLine { top: 12%; }
-.footLine { top: 88%; }
+.targetRing { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); overflow: visible; }
+.ringStroke { fill: none; stroke: var(--ink); stroke-width: 4; }
+.target[data-tilt="ok"] .ringStroke { stroke: var(--ok); }
+.progressStroke { fill: none; stroke: var(--ok); stroke-width: 6; stroke-linecap: round; }
 
-.rimLine span,
-.footLine span {
+.dot {
   position: absolute;
-  right: 0;
-  top: -22px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--guide);
+  left: -14px;
+  top: -14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--tilt);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--tilt) 30%, transparent), 0 1px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 90ms linear;
 }
 
+/* ── Unten: ein Satz, Auslöser ── */
 .bottomBar {
-  padding: 10px 16px max(16px, env(safe-area-inset-bottom));
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px 20px max(18px, env(safe-area-inset-bottom));
+  border-radius: 26px 26px 0 0;
+  background: rgba(20, 17, 15, 0.78);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
-.pills { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 15px;
-  background: rgba(255, 249, 240, 0.12);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.pill[data-state="ok"] { background: rgba(124, 170, 104, 0.35); }
-.pill[data-state="warn"] { background: rgba(215, 129, 76, 0.4); }
-.pillDetail { font-weight: 500; opacity: 0.85; }
-
-.hint { margin: 0; min-height: 40px; max-width: 26rem; text-align: center; font-size: 14px; line-height: 1.4; color: #E8DFD3; }
+.instruction { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; min-height: 52px; }
+.instruction strong { font-size: 19px; font-weight: 700; }
+.instruction span { font-size: 14px; line-height: 1.4; color: #D9CFC2; max-width: 22rem; }
 
 .controls {
   width: 100%;
-  max-width: 26rem;
+  max-width: 24rem;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 12px;
 }
 
 .sideControls { display: flex; justify-content: center; }
@@ -141,38 +188,50 @@
   width: 76px;
   height: 76px;
   border-radius: 38px;
-  border: 4px solid #FFF9F0;
+  border: 4px solid var(--ink);
   background: transparent;
   padding: 5px;
   cursor: pointer;
 }
 
 .shutter span { display: block; width: 100%; height: 100%; border-radius: 50%; background: #C8BFB0; }
-.shutter[data-ready] span { background: #7CAA68; }
+.shutter[data-ready] span { background: var(--ok); }
 .shutter:disabled { opacity: 0.4; cursor: not-allowed; }
-.shutterLabel { margin: 0; font-size: 13px; color: #C4B8A5; }
 
-.zoomGroup { display: flex; gap: 4px; padding: 4px; border-radius: 22px; background: rgba(255, 249, 240, 0.12); }
-
-.zoomButton,
 .switchButton {
-  min-width: 44px;
-  min-height: 36px;
-  border-radius: 18px;
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
   border: none;
-  background: transparent;
+  background: rgba(255, 249, 240, 0.14);
   color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.diagnostic { margin: 0; font-size: 11px; color: #8F8476; }
+
+.tapToStart {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  min-height: 52px;
+  padding: 0 22px;
+  border-radius: 26px;
+  border: none;
+  background: var(--ink);
+  color: #2F241B;
   font: inherit;
-  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
 
-.zoomButton[aria-pressed="true"] { background: #FFF9F0; color: #2F241B; }
-.switchButton { padding: 0 12px; background: rgba(255, 249, 240, 0.12); }
-
 .errorBox {
-  flex: 1;
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -187,27 +246,9 @@
   padding: 0 20px;
   border-radius: 16px;
   border: none;
-  background: #FFF9F0;
+  background: var(--ink);
   color: #2F241B;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
 }
-
-.tapToStart {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  min-height: 52px;
-  padding: 0 22px;
-  border-radius: 26px;
-  border: none;
-  background: #FFF9F0;
-  color: #2F241B;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.diagnostic { margin: 0; font-size: 11px; color: #8F8476; }
