@@ -6,7 +6,7 @@
 // größer gebaut, wie der Ton schwindet (app/shrinkage.ts). Die Zeile darunter
 // zeigt beide Maße, damit klar ist, warum die Rib größer ist als eingegeben.
 // Zusammenspiel: wird in DesktopRibbon und im Maße-Bereich von MobileBottomBar
-// verwendet; der Wert lebt in app/page.tsx.
+// verwendet, außerdem im einfachen Ablauf (EasyFlow); der Wert lebt in app/page.tsx.
 
 import { useEffect, useId, useState } from "react";
 import styles from "../page.module.css";
@@ -23,11 +23,13 @@ export type ShrinkageControlProps = {
   targetHeightMm: number;
   variant: "desktop" | "mobile";
   onChange: (percent: number) => void;
+  /** Eigener Präfix für Test-IDs, wenn die Eingabe ein drittes Mal vorkommt (einfacher Ablauf). */
+  testIdPrefix?: string;
 };
 
 const CUSTOM = "custom";
 
-export function ShrinkageControl({ percent, targetHeightMm, variant, onChange }: ShrinkageControlProps) {
+export function ShrinkageControl({ percent, targetHeightMm, variant, onChange, testIdPrefix: testIdPrefixOverride }: ShrinkageControlProps) {
   const id = useId();
   const [text, setText] = useState(String(percent));
   const preset = findShrinkagePreset(percent);
@@ -45,7 +47,7 @@ export function ShrinkageControl({ percent, targetHeightMm, variant, onChange }:
     }
   };
 
-  const testIdPrefix = variant === "mobile" ? "mobile-shrinkage" : "shrinkage";
+  const testIdPrefix = testIdPrefixOverride ?? (variant === "mobile" ? "mobile-shrinkage" : "shrinkage");
 
   return (
     <div className={variant === "mobile" ? styles.shrinkageControlMobile : styles.shrinkageControl}>

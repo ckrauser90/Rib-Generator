@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 const fixturePath = path.join(__dirname, "fixtures", "sample-cup.svg");
 
 async function uploadFixture(page: Page) {
-  await page.goto("/?e2eMockSegmenter=1");
+  await page.goto("/?e2eMockSegmenter=1&modus=pro");
   await page.locator('[data-testid="upload-input"]').setInputFiles(fixturePath);
   await expect(page.locator("main")).toContainText(/geladen/i);
 }

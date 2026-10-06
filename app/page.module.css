@@ -1781,3 +1781,42 @@
 .shrinkageControlMobile .shrinkageHint {
   white-space: normal;
 }
+
+/* ─── Wechsel zurück in den einfachen Ablauf (Pro-Modus) ─── */
+.modeSwitch {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  border: 1px solid var(--cream-dark);
+  background: var(--linen);
+  color: var(--bark-light);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modeSwitch:hover { color: var(--bark); border-color: var(--sage-light); }
+
+.mobileModeSwitch { display: none; }
+
+@media (max-width: 767px) {
+  .mobileModeSwitch {
+    display: flex;
+    align-items: center;
+    position: fixed;
+    top: 10px;
+    left: 12px;
+    z-index: 55;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 16px;
+    border: 1px solid var(--cream-dark);
+    background: rgba(250, 248, 245, 0.94);
+    color: var(--bark-light);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+}

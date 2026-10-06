@@ -29,6 +29,12 @@ type UsePreviewCanvasEffectOptions = {
   mobileTab: MobileTab;
   promptPoint: Point | null;
   sourceRaster: RasterSource | null;
+  /** Einfacher Ablauf: Bild einpassen, Abschnitt hervorheben, Klickpunkt ausblenden. */
+  activeSegment?: Point[];
+  fitToParent?: boolean;
+  showPromptPoint?: boolean;
+  /** Ändert sich, wenn ein anderer Canvas sichtbar wird (Modus, Schritt). */
+  redrawKey?: string;
 };
 
 type UseSegmentationEffectOptions = {
@@ -118,23 +124,33 @@ export const usePreviewCanvasEffect = ({
   mobileTab,
   promptPoint,
   sourceRaster,
+  activeSegment,
+  fitToParent = false,
+  showPromptPoint = true,
+  redrawKey,
 }: UsePreviewCanvasEffectOptions) => {
   useEffect(() => {
     if (!sourceRaster || !canvasRef.current) return;
 
     drawPreview(canvasRef.current, {
       activeHandle: draggingAnchor,
+      activeSegment,
       anchors: imageAnchors,
       contour: displayContour,
+      fitToParent,
       image: sourceRaster,
       lensPoint,
       promptPoint,
       pulseAnchors: !draggingAnchor,
-      showPromptPoint: true,
+      showPromptPoint,
       workProfile: displayWorkProfile,
     });
   }, [
+    activeSegment,
     canvasRef,
+    fitToParent,
+    redrawKey,
+    showPromptPoint,
     displayContour,
     displayWorkProfile,
     draggingAnchor,

@@ -5,7 +5,7 @@ const fixturePath = path.join(__dirname, "fixtures", "sample-cup.svg");
 
 async function setupConfirmedFlow(page: Page) {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/?e2eMockSegmenter=1");
+  await page.goto("/?e2eMockSegmenter=1&modus=pro");
   await page.locator('[data-testid="upload-input-mobile"]').setInputFiles(fixturePath);
   await expect(page.locator("main")).toContainText(/geladen/i);
   await page.getByTestId("marker-set-button").dispatchEvent("click");
@@ -20,7 +20,7 @@ async function setupConfirmedFlow(page: Page) {
 
 test("mobile sheet opens and closes on toggle", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/?e2eMockSegmenter=1");
+  await page.goto("/?e2eMockSegmenter=1&modus=pro");
 
   const sheet = page.getByTestId("mobile-sheet");
   await expect(sheet).not.toHaveClass(/mobileSheetOpen/);
@@ -53,7 +53,7 @@ test("mobile sheet tab switch shows Maße inputs and hides sliders", async ({ pa
 
 test("mobile sheet Maße inputs are disabled before anchor confirmation", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/?e2eMockSegmenter=1");
+  await page.goto("/?e2eMockSegmenter=1&modus=pro");
   await page.getByTestId("mobile-sheet-toggle").click();
   await page.getByTestId("mobile-sheet-tab-masse").click();
 

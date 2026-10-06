@@ -222,6 +222,18 @@ export const usePageHandlers = ({
     setStatus(pageText.segmentationInProgress);
   };
 
+  // Einfacher Ablauf: „Falsch erkannt? Tippe ins Gefäß“ setzt den Klickpunkt neu,
+  // auch wenn Start/Ende gerade gezogen wurden (dann gilt die alte Kontur nicht mehr).
+  const retargetPrompt = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current || !sourceRaster || segmenterState !== "ready") return false;
+    resetAnchorWorkflow();
+    setMarkerConfirmed(true);
+    clearToolGeometry(toolWidthMm);
+    setPromptPoint(mapGestureToImagePoint(event, canvasRef.current, sourceRaster));
+    setStatus(pageText.segmentationInProgress);
+    return true;
+  };
+
   const activateMarkerPlacement = () => {
     setMarkerPlacementMode(true);
   };
@@ -522,6 +534,7 @@ export const usePageHandlers = ({
     handleImageUpload,
     resetCurrentAnchors,
     resetSelection,
+    retargetPrompt,
     selectSide,
   };
 };

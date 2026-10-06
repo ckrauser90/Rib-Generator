@@ -18,6 +18,10 @@ type DrawPreviewOptions = {
   pulseAnchors: boolean;
   showPromptPoint: boolean;
   workProfile: Point[];
+  /** Abschnitt zwischen Start und Ende, kräftig hervorgehoben (einfacher Ablauf). */
+  activeSegment?: Point[];
+  /** Bild in Breite und Höhe des Elternelements einpassen statt nur in die Breite. */
+  fitToParent?: boolean;
 };
 
 export const loadImageFromUrl = (url: string) =>
@@ -201,16 +205,23 @@ export const drawPreview = (
     pulseAnchors,
     showPromptPoint,
     workProfile,
+    activeSegment,
+    fitToParent = false,
   }: DrawPreviewOptions,
 ) => {
   const { width: imageWidth, height: imageHeight } = getRasterSize(image);
   const ratio = imageWidth / imageHeight;
   const parentWidth = canvas.parentElement?.clientWidth ?? canvas.clientWidth;
+  const parentHeight = canvas.parentElement?.clientHeight ?? 0;
 
   if (parentWidth < 2) return;
 
-  const width = Math.max(1, parentWidth);
-  const height = Math.max(220, Math.round(width / ratio));
+  // Eingepasst: das ganze Bild sichtbar, Maßstab aus der knapperen Richtung.
+  const fitScale = fitToParent && parentHeight > 1
+    ? Math.min(parentWidth / imageWidth, parentHeight / imageHeight)
+    : 0;
+  const width = fitScale > 0 ? Math.max(1, Math.round(imageWidth * fitScale)) : Math.max(1, parentWidth);
+  const height = fitScale > 0 ? Math.max(1, Math.round(imageHeight * fitScale)) : Math.max(220, Math.round(width / ratio));
   canvas.width = width;
   canvas.height = height;
 
@@ -246,6 +257,28 @@ export const drawPreview = (
       if (index === 0) context.moveTo(x, y);
       else context.lineTo(x, y);
     });
+    context.stroke();
+  }
+
+  if (activeSegment && activeSegment.length > 1) {
+    const traceSegment = () => {
+      context.beginPath();
+      activeSegment.forEach((point, index) => {
+        const x = (point.x / imageWidth) * width;
+        const y = (point.y / imageHeight) * height;
+        if (index === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      });
+    };
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = "rgba(250, 248, 245, 0.75)";
+    context.lineWidth = 7;
+    traceSegment();
+    context.stroke();
+    context.strokeStyle = "#5C6E52";
+    context.lineWidth = 3.6;
+    traceSegment();
     context.stroke();
   }
 

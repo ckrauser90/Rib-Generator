@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import type { Point, ToolHole, WorkProfileSide } from "../lib/contour";
 import type { RasterSource } from "../lib/perspective";
-import type { AnchorHandle } from "./anchor-utils";
+import { trimProfileBetweenAnchors, type AnchorHandle } from "./anchor-utils";
 import {
   createEmptyAnchorConfirmationState,
   createEmptyAnchorOverrideState,
 } from "./anchor-edit-workflow";
 import { DesktopRibbon } from "./components/DesktopRibbon";
+import { EasyFlow } from "./components/easy/EasyFlow";
 import { MobileBottomBar, type MobileTab } from "./components/MobileBottomBar";
 import { PhotoPanel } from "./components/PhotoPanel";
 import { Preview3DPanel } from "./components/Preview3DPanel";
@@ -33,10 +34,20 @@ import styles from "./page.module.css";
 import { useToolDimensionInputs } from "./tool-dimension-inputs";
 import { DEFAULT_SHRINKAGE_PERCENT, applyShrinkage } from "./shrinkage";
 import { DEFAULT_SHAPE_BOOST } from "./shape-boost";
+import { readModeFromSearch, type AppMode, type EasyStep } from "./easy-flow";
+import { useEasyAutoDetect, useEasyAutoSide } from "./easy-flow-effects";
 
 const DEFAULT_TOOL_WIDTH_MM = 65;
 
 export default function Home() {
+  // Einfacher Ablauf ist der Standard; `?modus=pro` oder der Knopf öffnet die
+  // bisherige Oberfläche. Beide arbeiten auf demselben Zustand (docs/decisions.md R-001).
+  const [mode, setMode] = useState<AppMode>("easy");
+  const [easyStep, setEasyStep] = useState<EasyStep>("foto");
+  const [tipsOpen, setTipsOpen] = useState(false);
+  const [correctionMode, setCorrectionMode] = useState(false);
+  const [sideChosenByHand, setSideChosenByHand] = useState(false);
+  const [resizeTick, setResizeTick] = useState(0);
   const [sourceRaster, setSourceRaster] = useState<RasterSource | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [promptPoint, setPromptPoint] = useState<Point | null>(null);
@@ -214,16 +225,40 @@ export default function Home() {
 
   useSegmenterLifecycle({ setSegmenterState, setStatus });
   useImageUrlCleanup(imageUrl);
+  const easyActiveSegment = useMemo(
+    () => (mode === "easy" && imageAnchors ? trimProfileBetweenAnchors(displayWorkProfile, imageAnchors) : undefined),
+    [displayWorkProfile, imageAnchors, mode],
+  );
   usePreviewCanvasEffect({
+    activeSegment: easyActiveSegment,
     canvasRef,
     displayContour,
     displayWorkProfile,
     draggingAnchor,
+    fitToParent: mode === "easy",
     imageAnchors,
     lensPoint,
     mobileTab,
     promptPoint,
+    redrawKey: `${mode}-${easyStep}-${resizeTick}`,
+    showPromptPoint: mode === "pro",
     sourceRaster,
+  });
+  useEasyAutoDetect({
+    mode,
+    promptPoint,
+    segmenterState,
+    setMarkerConfirmed,
+    setPromptPoint,
+    setStatus,
+    sourceRaster,
+  });
+  useEasyAutoSide({
+    leftWorkProfile,
+    mode,
+    rightWorkProfile,
+    setWorkProfileSide,
+    sideChosenByHand,
   });
   useSegmentationEffect({
     anchorEditMode,
@@ -279,6 +314,7 @@ export default function Home() {
     handleDrop,
     handleFile,
     resetCurrentAnchors,
+    retargetPrompt,
     selectSide,
   } = usePageHandlers({
     anchorEditMode,
@@ -444,6 +480,132 @@ export default function Home() {
     onSelectSide: selectSide,
   });
 
+  // ── Einfacher Ablauf ──
+  useEffect(() => {
+    setMode(readModeFromSearch(window.location.search));
+  }, []);
+
+  // Neues Foto geladen: weiter zu Start/Ende, Seite wieder automatisch wählen.
+  useEffect(() => {
+    if (!sourceRaster) return;
+    setEasyStep("kontur");
+    setCorrectionMode(false);
+    setSideChosenByHand(false);
+  }, [sourceRaster]);
+
+  // Der eingepasste Canvas muss neu gezeichnet werden, wenn sich der Platz ändert.
+  useEffect(() => {
+    let frame = 0;
+    const onResize = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setResizeTick((tick) => tick + 1));
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  const switchMode = useCallback((nextMode: AppMode) => {
+    setMode(nextMode);
+    setTipsOpen(false);
+    setCorrectionMode(false);
+    try {
+      const url = new URL(window.location.href);
+      if (nextMode === "pro") url.searchParams.set("modus", "pro");
+      else url.searchParams.delete("modus");
+      window.history.replaceState(null, "", url);
+    } catch {
+      // Adresse nicht änderbar (z. B. eingebettet): Der Modus gilt dann nur bis zum Neuladen.
+    }
+  }, []);
+
+  const handleEasyCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (!correctionMode) return;
+    if (retargetPrompt(event)) {
+      setCorrectionMode(false);
+      setSideChosenByHand(false);
+    }
+  };
+
+  const toggleEasySide = () => {
+    // Gezogene, noch nicht übernommene Punkte der bisherigen Seite bleiben erhalten.
+    if (anchorEditMode) applyAnchorEditing();
+    setWorkProfileSide(workProfileSide === "left" ? "right" : "left");
+    setSideChosenByHand(true);
+  };
+
+  const createEasyRib = () => {
+    if (anchorEditMode) applyAnchorEditing();
+    else confirmAutomaticAnchors();
+    setCorrectionMode(false);
+    setEasyStep("fertig");
+  };
+
+  if (mode === "easy") {
+    const contourReady = workProfile.length > 1;
+    return (
+      <EasyFlow
+        step={easyStep}
+        onBack={() => setEasyStep(easyStep === "fertig" ? "kontur" : "foto")}
+        onOpenPro={() => switchMode("pro")}
+        photo={{
+          dragActive,
+          segmenterState,
+          status,
+          tipsOpen,
+          onDragLeave: handleDragLeave,
+          onDragOver: handleDragOver,
+          onDrop: (event) => {
+            void handleDrop(event);
+          },
+          onFileChange: (event) => {
+            void handleFile(event);
+          },
+          onTipsOpenChange: setTipsOpen,
+        }}
+        contour={{
+          canvasRef,
+          contourReady,
+          correctionMode,
+          dragging: Boolean(draggingAnchor),
+          heightMm: toolHeightMm,
+          segmenting,
+          shrinkagePercent,
+          status,
+          statusIsError: !segmenting && !contourReady && Boolean(promptPoint) && feedbackTone === "error",
+          workProfileSide,
+          onCanvasClick: handleEasyCanvasClick,
+          onCanvasPointerDown: handleCanvasPointerDown,
+          onCanvasPointerMove: handleCanvasPointerMove,
+          onCanvasPointerUp: finishAnchorDrag,
+          onCorrectionModeChange: setCorrectionMode,
+          onCreateRib: createEasyRib,
+          onHeightChange: setToolHeightMm,
+          onShrinkageChange: setShrinkagePercent,
+          onToggleSide: toggleEasySide,
+        }}
+        done={{
+          bevelStrength,
+          blockedReason: toolOutline.length > 1 ? geometryValidation.errors[0]?.message ?? null : null,
+          canDownload,
+          ribHeightMm,
+          ribWidthMm: resolvedToolWidthMm,
+          shrinkagePercent,
+          targetHeightMm: toolHeightMm,
+          thicknessMm,
+          toolHoles,
+          toolOutline,
+          workProfileSide,
+          onDownload: handleDownload,
+          onNewPhoto: () => setEasyStep("foto"),
+          onOpenPro: () => switchMode("pro"),
+        }}
+      />
+    );
+  }
+
   const statusMessage = segmenting ? "Bild wird analysiert..." : status;
 
   return (
@@ -456,7 +618,14 @@ export default function Home() {
           data-state={segmenting ? "loading" : feedbackTone}
         />
         <p className={styles.statusText}>{statusMessage}</p>
+        <button type="button" className={styles.modeSwitch} onClick={() => switchMode("easy")} data-testid="easy-mode-button">
+          Einfacher Modus
+        </button>
       </div>
+
+      <button type="button" className={styles.mobileModeSwitch} onClick={() => switchMode("easy")}>
+        Einfach
+      </button>
 
       <button
         type="button"
