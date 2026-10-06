@@ -298,6 +298,44 @@
   color: var(--easy-text);
 }
 
+/* Foto-Check (Schritt 2) */
+.checkOk {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #3F5236;
+}
+
+.checkCard {
+  border-radius: 16px;
+  background: #FBF3EC;
+  border: 1px solid #EBD3C2;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.checkTitle {
+  margin: 0;
+  font-family: 'Karla', system-ui, sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #8B4722;
+}
+
+.checkList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.checkList li { display: flex; flex-direction: column; gap: 2px; font-size: 14px; line-height: 1.4; }
+.checkList li span { color: var(--easy-muted); }
+
+.checkActions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.checkActions .secondaryButton { min-height: 44px; padding: 0 16px; font-size: 15px; }
+
 /* ── Schritt 3 ── */
 .previewFrame {
   position: relative;

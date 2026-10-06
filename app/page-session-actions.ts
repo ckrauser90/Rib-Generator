@@ -12,6 +12,7 @@ import {
   type DetectedGeometryState,
 } from "./detected-geometry-workflow";
 import { getResetSelectionStatus } from "./page-copy";
+import type { PhotoCheckResult } from "../lib/photo-check";
 import {
   createEmptyToolGeometryState,
   type ToolGeometryState,
@@ -38,6 +39,7 @@ type UsePageSessionActionsOptions = {
   >;
   setMarkerConfirmed: Dispatch<SetStateAction<boolean>>;
   setMarkerPlacementMode: Dispatch<SetStateAction<boolean>>;
+  setPhotoCheck: Dispatch<SetStateAction<PhotoCheckResult | null>>;
   setProfileImageSize: Dispatch<
     SetStateAction<{ width: number; height: number } | null>
   >;
@@ -80,6 +82,7 @@ export const usePageSessionActions = ({
   setManualAnchorOverrides,
   setMarkerConfirmed,
   setMarkerPlacementMode,
+  setPhotoCheck,
   setProfileImageSize,
   setPromptPoint,
   setReferenceBounds,
@@ -120,6 +123,7 @@ export const usePageSessionActions = ({
   const applyDetectedGeometryState = useCallback((nextState: DetectedGeometryState) => {
     setContour(nextState.contour);
     setLeftWorkProfile(nextState.leftWorkProfile);
+    setPhotoCheck(nextState.photoCheck);
     setRightWorkProfile(nextState.rightWorkProfile);
     setReferenceBounds(nextState.referenceBounds);
     setProfileImageSize(nextState.profileImageSize);
@@ -129,6 +133,7 @@ export const usePageSessionActions = ({
     applyToolGeometryState,
     setContour,
     setLeftWorkProfile,
+    setPhotoCheck,
     setProfileImageSize,
     setReferenceBounds,
     setRightWorkProfile,

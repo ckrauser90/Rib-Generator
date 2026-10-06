@@ -4,6 +4,8 @@ import { segmentRasterWithBiRefNet } from "../lib/segmenters/birefnet";
 import { deriveNormalizedProfileFromMask } from "../lib/profile-normalization";
 import { getRasterSize, type RasterSource } from "../lib/perspective";
 import { getContourReadyStatus } from "./page-copy";
+import { runPhotoCheck } from "./photo-check-workflow";
+import type { PhotoCheckResult } from "../lib/photo-check";
 import { buildGeometryWorkProfile } from "./profile-geometry";
 import {
   type ToolGeometryState,
@@ -38,6 +40,8 @@ export type SegmentationWorkflowResult = {
   status: string;
   toolGeometryState: ToolGeometryState;
   usableColumns: number;
+  /** Hinweise zur Aufnahme; `null`, wenn der Check selbst scheiterte (blockiert nie). */
+  photoCheck: PhotoCheckResult | null;
 };
 
 const getContourImageData = (
@@ -167,7 +171,21 @@ export const runSegmentationWorkflow = async ({
     workProfileSide,
   });
 
+  let photoCheck: PhotoCheckResult | null = null;
+  try {
+    photoCheck = runPhotoCheck({
+      imageData: contourImageData,
+      contour: contourResult.contour,
+      left: contourResult.leftWorkProfile,
+      right: contourResult.rightWorkProfile,
+      bottomCrop: cropBottomRatio,
+    });
+  } catch {
+    photoCheck = null;
+  }
+
   return {
+    photoCheck,
     contour: contourResult.contour,
     leftWorkProfile: contourResult.leftWorkProfile,
     profileImageSize: {

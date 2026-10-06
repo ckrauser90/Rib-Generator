@@ -19,6 +19,7 @@ import { buildGeometryWorkProfile } from "../../app/profile-geometry";
 import { buildPreparedToolProfile, resolveToolAnchors } from "../../app/tool-profile-workflow";
 import { buildPreparedToolGeometryState } from "../../app/tool-geometry-workflow";
 import { prepareStlExport } from "../../app/export-workflow";
+import { runPhotoCheck } from "../../app/photo-check-workflow";
 import { createExtrudedStl, validateToolGeometry } from "../../lib/contour";
 import type { Point } from "../../lib/contour";
 import {
@@ -659,7 +660,101 @@ export const buildRibFromPhoto = async (input: {
   return { toolProfile: state.toolProfile, toolOutline: state.toolOutline, stl, blocked: prepared.kind === "blocked" ? prepared.status : null };
 };
 
+// ── Foto-Check kalibrieren (tests/lab/photo-check-calibration.spec.ts) ──
+
+export type PhotoVariant =
+  | "original"
+  | "leicht-unscharf"
+  | "unscharf"
+  | "angeschnitten"
+  | "klein"
+  | "gekippt"
+  | "dunkel"
+  | "kontrastarm";
+
+/** Verschlechtert ein Foto gezielt, so wie es Nutzer unabsichtlich tun. */
+const degradePhoto = (image: HTMLImageElement, variant: PhotoVariant) => {
+  const width = image.naturalWidth;
+  const height = image.naturalHeight;
+  const longSide = Math.max(width, height);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d", { willReadFrequently: true })!;
+  // Hintergrundfarbe aus der Bildecke, damit Ränder nicht als Kante auffallen.
+  const probe = toCanvas(image, 8, 8).imageData.data;
+  const background = `rgb(${probe[0]}, ${probe[1]}, ${probe[2]})`;
+  canvas.width = width;
+  canvas.height = height;
+  switch (variant) {
+    case "leicht-unscharf":
+    case "unscharf":
+      context.filter = `blur(${(longSide / (variant === "unscharf" ? 220 : 600)).toFixed(1)}px)`;
+      context.drawImage(image, 0, 0);
+      break;
+    case "dunkel":
+      context.filter = "brightness(0.22)";
+      context.drawImage(image, 0, 0);
+      break;
+    case "kontrastarm":
+      context.filter = "contrast(0.18)";
+      context.drawImage(image, 0, 0);
+      break;
+    case "angeschnitten":
+      canvas.height = Math.round(height * 0.62);
+      context.drawImage(image, 0, height - canvas.height, width, canvas.height, 0, 0, width, canvas.height);
+      break;
+    case "klein":
+      // Aus größerer Entfernung bzw. mit geringer Auflösung: weniger Pixel auf dem Gefäß.
+      // (Ein verkleinertes Foto auf einfarbigem Rand würde selbst als Rechteck erkannt.)
+      canvas.width = Math.round(width * 0.28);
+      canvas.height = Math.round(height * 0.28);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      break;
+    case "gekippt":
+      context.fillStyle = background;
+      context.fillRect(0, 0, width, height);
+      context.translate(width / 2, height / 2);
+      context.rotate((6 * Math.PI) / 180);
+      context.drawImage(image, -width / 2, -height / 2);
+      break;
+    default:
+      context.drawImage(image, 0, 0);
+  }
+  return canvas;
+};
+
+export const photoCheckLab = async (input: { imageDataUrl: string; variant: PhotoVariant }) => {
+  ensureAssetsConfigured();
+  const image = await loadImage(input.imageDataUrl);
+  const canvas = degradePhoto(image, input.variant);
+  await loadInteractiveSegmenter();
+  const mask = await segmentRasterFromPoint(canvas, { x: 0.5, y: 0.5 }, MEDIAPIPE_THRESHOLD);
+  const scaled = document.createElement("canvas");
+  scaled.width = mask.width;
+  scaled.height = mask.height;
+  const scaledContext = scaled.getContext("2d", { willReadFrequently: true })!;
+  scaledContext.drawImage(canvas, 0, 0, mask.width, mask.height);
+  const imageData = scaledContext.getImageData(0, 0, mask.width, mask.height);
+  const result = deriveNormalizedProfileFromMask(
+    mask.binaryMask,
+    mask.width,
+    mask.height,
+    { ...DETECTION_OPTIONS, seedPoint: { x: mask.width / 2, y: mask.height / 2 } },
+    imageData,
+    mask.confidence,
+  );
+  if (result.contour.length < 8) return { ok: false as const };
+  const check = runPhotoCheck({
+    imageData,
+    contour: result.contour,
+    left: result.leftWorkProfile,
+    right: result.rightWorkProfile,
+    bottomCrop: DETECTION_OPTIONS.cropBottomRatio,
+  });
+  return { ok: true as const, issues: check.issues.map((issue) => issue.id), metrics: check.metrics };
+};
+
 export const ribLab = {
+  photoCheckLab,
   buildRibFromPhoto,
   traceEdgeStages,
   analyze,

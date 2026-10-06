@@ -29,6 +29,18 @@ test("easy flow goes from photo to STL in three steps", async ({ page }) => {
   expect(download.suggestedFilename()).toBe("rib-tool.stl");
 });
 
+test("the photo check reports after detection and offers a new photo", async ({ page }) => {
+  await uploadAndWaitForContour(page);
+  const check = page.getByTestId("photo-check");
+  await expect(check).toBeVisible();
+  // Das Ergebnis hängt vom Testbild ab; entscheidend ist, dass es erscheint und nie blockiert.
+  await expect(page.getByTestId("easy-create-button")).toBeEnabled();
+  if ((await check.getAttribute("data-state")) === "hinweise") {
+    await page.getByTestId("photo-check-new-photo").click();
+    await expect(page.getByTestId("easy-flow")).toHaveAttribute("data-step", "foto");
+  }
+});
+
 test("vessel height and shrinkage set the rib height", async ({ page }) => {
   await uploadAndWaitForContour(page);
   const input = page.getByTestId("easy-height-input");

@@ -36,6 +36,7 @@ import { DEFAULT_SHRINKAGE_PERCENT, applyShrinkage } from "./shrinkage";
 import { DEFAULT_SHAPE_BOOST } from "./shape-boost";
 import { readModeFromSearch, type AppMode, type EasyStep } from "./easy-flow";
 import { resetInteractiveSegmenter } from "../lib/interactive-segmenter";
+import type { PhotoCheckResult } from "../lib/photo-check";
 import { useEasyAutoDetect, useEasyAutoSide } from "./easy-flow-effects";
 import {
   DEFAULT_SEGMENTER,
@@ -58,6 +59,7 @@ export default function Home() {
   const [sideChosenByHand, setSideChosenByHand] = useState(false);
   const [resizeTick, setResizeTick] = useState(0);
   const [segmenter, setSegmenter] = useState<SegmenterKind>(DEFAULT_SEGMENTER);
+  const [photoCheck, setPhotoCheck] = useState<PhotoCheckResult | null>(null);
   const changeSegmenter = useCallback((next: SegmenterKind) => {
     setSegmenter(next);
     writeStoredSegmenter(next);
@@ -177,6 +179,7 @@ export default function Home() {
     setManualAnchorOverrides,
     setMarkerConfirmed,
     setMarkerPlacementMode,
+    setPhotoCheck,
     setProfileImageSize,
     setPromptPoint,
     setReferenceBounds,
@@ -606,6 +609,8 @@ export default function Home() {
           onHeightChange: setToolHeightMm,
           onShrinkageChange: setShrinkagePercent,
           onToggleSide: toggleEasySide,
+          onNewPhoto: () => setEasyStep("foto"),
+          photoCheck: segmenting ? null : photoCheck,
           onRetryLoad: () => {
             resetInteractiveSegmenter();
             setSegmenterState("loading");

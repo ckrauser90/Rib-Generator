@@ -13,6 +13,8 @@ import { useEffect, useState } from "react";
 import type { WorkProfileSide } from "../../../lib/contour";
 import { clampVesselHeightMm } from "../../easy-flow";
 import { ShrinkageControl } from "../ShrinkageControl";
+import type { PhotoCheckResult } from "../../../lib/photo-check";
+import { PhotoCheckCard } from "./PhotoCheckCard";
 import styles from "./easy.module.css";
 
 export type ContourStepProps = {
@@ -40,6 +42,9 @@ export type ContourStepProps = {
   /** Ladezustand von MediaPipe; vor „ready“ startet keine Erkennung. */
   segmenterState: "loading" | "ready" | "error";
   onRetryLoad: () => void;
+  /** Hinweise zur Aufnahme nach der Erkennung (lib/photo-check.ts). */
+  photoCheck: PhotoCheckResult | null;
+  onNewPhoto: () => void;
 };
 
 export function ContourStep({
@@ -65,6 +70,8 @@ export function ContourStep({
   segmenterNote,
   segmenterState,
   onRetryLoad,
+  photoCheck,
+  onNewPhoto,
 }: ContourStepProps) {
   const [heightText, setHeightText] = useState(String(heightMm));
   useEffect(() => setHeightText(String(heightMm)), [heightMm]);
@@ -129,6 +136,7 @@ export function ContourStep({
       </div>
 
       <div className={styles.controls}>
+        {contourReady && !correctionMode && <PhotoCheckCard result={photoCheck} onNewPhoto={onNewPhoto} />}
         {(statusIsError || loadFailed) && !segmenting && <p className={styles.errorNote} data-testid="easy-error">{status}</p>}
         {loadFailed && (
           <button type="button" className={styles.secondaryButton} onClick={onRetryLoad} data-testid="easy-retry-load">

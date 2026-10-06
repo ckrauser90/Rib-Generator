@@ -1,4 +1,5 @@
 import type { Point } from "../lib/contour";
+import type { PhotoCheckResult } from "../lib/photo-check";
 import type { SegmentationWorkflowResult } from "./segmentation-workflow";
 import {
   createEmptyToolGeometryState,
@@ -8,6 +9,7 @@ import {
 export type DetectedGeometryState = {
   contour: Point[];
   leftWorkProfile: Point[];
+  photoCheck: PhotoCheckResult | null;
   profileImageSize: { height: number; width: number } | null;
   referenceBounds: { minY: number; maxY: number } | null;
   rightWorkProfile: Point[];
@@ -20,6 +22,7 @@ export const createEmptyDetectedGeometryState = (
 ): DetectedGeometryState => ({
   contour: [],
   leftWorkProfile: [],
+  photoCheck: null,
   profileImageSize: null,
   referenceBounds: null,
   rightWorkProfile: [],
@@ -32,6 +35,7 @@ export const mapSegmentationResultToDetectedGeometryState = (
 ): DetectedGeometryState => ({
   contour: result.contour,
   leftWorkProfile: result.leftWorkProfile,
+  photoCheck: result.photoCheck,
   profileImageSize: result.profileImageSize,
   referenceBounds: result.referenceBounds,
   rightWorkProfile: result.rightWorkProfile,

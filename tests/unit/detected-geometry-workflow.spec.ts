@@ -8,6 +8,7 @@ test("createEmptyDetectedGeometryState resets both detected profiles and tool ge
   expect(createEmptyDetectedGeometryState(72)).toEqual({
     contour: [],
     leftWorkProfile: [],
+    photoCheck: null,
     profileImageSize: null,
     referenceBounds: null,
     rightWorkProfile: [],
@@ -27,6 +28,7 @@ test("mapSegmentationResultToDetectedGeometryState preserves the workflow result
   const result = {
     contour: [{ x: 1, y: 2 }],
     leftWorkProfile: [{ x: 3, y: 4 }],
+    photoCheck: null,
     profileImageSize: { width: 500, height: 800 },
     referenceBounds: { minY: 10, maxY: 90 },
     rightWorkProfile: [{ x: 5, y: 6 }],
@@ -45,6 +47,7 @@ test("mapSegmentationResultToDetectedGeometryState preserves the workflow result
   expect(mapSegmentationResultToDetectedGeometryState(result)).toEqual({
     contour: result.contour,
     leftWorkProfile: result.leftWorkProfile,
+    photoCheck: null,
     profileImageSize: result.profileImageSize,
     referenceBounds: result.referenceBounds,
     rightWorkProfile: result.rightWorkProfile,
