@@ -1709,3 +1709,75 @@
     color: var(--terracotta);
   }
 }
+
+/* ─── Schwindungsausgleich (ShrinkageControl) ─── */
+.shrinkageControl {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.shrinkageControlMobile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.shrinkageRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.shrinkageSelect {
+  min-width: 0;
+  padding: 0.42rem 0.4rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--cream-dark);
+  background: var(--linen);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+}
+.shrinkageInput {
+  width: 3.4rem;
+  padding: 0.42rem 0.45rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--cream-dark);
+  background: var(--linen);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.shrinkageSelect:focus,
+.shrinkageInput:focus {
+  outline: 2px solid rgba(122, 142, 110, 0.3);
+  border-color: var(--accent-soft);
+}
+.shrinkageUnit {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.shrinkageHint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.shrinkageControlMobile .shrinkageSelect,
+.shrinkageControlMobile .shrinkageInput {
+  padding: 10px 8px;
+  border-radius: 10px;
+  font-size: 1rem;
+}
+.shrinkageControlMobile .shrinkageSelect {
+  flex: 1;
+}
+.shrinkageControlMobile .shrinkageInput {
+  width: 4.5rem;
+}
+.shrinkageControlMobile .shrinkageHint {
+  white-space: normal;
+}

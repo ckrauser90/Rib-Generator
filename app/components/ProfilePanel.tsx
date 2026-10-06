@@ -2,6 +2,7 @@
 
 import styles from "../page.module.css";
 import { pageText } from "../page-copy";
+import { formatMm } from "../shrinkage";
 import type { ProfileAnchors, ToolHole, Point } from "../../lib/contour";
 
 type OutlineBounds = {
@@ -94,7 +95,7 @@ export function ProfilePanel({
                 textAnchor="middle"
                 dominantBaseline="middle"
                 transform={`rotate(-90,${rx - fs * 0.6},${rym})`}
-              >{toolHeightMm} mm</text>
+              >{formatMm(toolHeightMm)}</text>
 
               <line x1={bx1} y1={by} x2={bx2} y2={by} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />
               <line x1={bx1} y1={by - cap} x2={bx1} y2={by + cap} stroke={col} strokeWidth={sw} vectorEffect="non-scaling-stroke" />

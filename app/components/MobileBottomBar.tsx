@@ -3,6 +3,7 @@
 import { ChangeEvent, useCallback, useEffect, useState } from "react";
 import styles from "../page.module.css";
 import { pageText } from "../page-copy";
+import { ShrinkageControl } from "./ShrinkageControl";
 import { SliderControl } from "./SliderControl";
 
 export type MobileTab = "foto" | "profil" | "3d";
@@ -19,6 +20,8 @@ export type MobileBottomBarProps = {
   mobileSheetOpen: boolean;
   mobileTab: MobileTab;
   printFriendliness: number;
+  shrinkagePercent: number;
+  targetHeightMm: number;
   thicknessInput: string;
   widthInput: string;
   onBevelStrengthChange: (value: number) => void;
@@ -30,6 +33,7 @@ export type MobileBottomBarProps = {
   onHorizontalCorrectionChange: (value: number) => void;
   onPrintFriendlinessChange: (value: number) => void;
   onReset: () => void;
+  onShrinkageChange: (percent: number) => void;
   onTabChange: (tab: MobileTab) => void;
   onThicknessBlur: (value: string) => void;
   onThicknessInputChange: (value: string) => void;
@@ -52,6 +56,8 @@ export function MobileBottomBar({
   mobileSheetOpen,
   mobileTab,
   printFriendliness,
+  shrinkagePercent,
+  targetHeightMm,
   thicknessInput,
   widthInput,
   onBevelStrengthChange,
@@ -63,6 +69,7 @@ export function MobileBottomBar({
   onHorizontalCorrectionChange,
   onPrintFriendlinessChange,
   onReset,
+  onShrinkageChange,
   onTabChange,
   onThicknessBlur,
   onThicknessInputChange,
@@ -204,12 +211,12 @@ export function MobileBottomBar({
         {sheetSection === "form" && (
           <div className={styles.mobileSheetContent}>
             <SliderControl
-              label="Glättung" value={curveSmoothing} min={0} max={100} step={1} defaultValue={34}
+              label="Glättung" value={curveSmoothing} min={0} max={100} step={1} defaultValue={10}
               tooltip="Glättet die erkannte Kontur. Höhere Werte erzeugen weichere Kurven."
               disabled={!canFineTune} onChange={onCurveSmoothingChange}
               tipId="smooth" openTipId={openTipId} onTipOpen={setOpenTipId} />
             <SliderControl
-              label="Druckoptimierung" value={printFriendliness} min={0} max={100} step={1} defaultValue={58}
+              label="Druckoptimierung" value={printFriendliness} min={0} max={100} step={1} defaultValue={40}
               tooltip="Optimiert das Profil für den 3D-Druck. Vermeidet Überhänge und dünne Stellen."
               disabled={!canFineTune} onChange={onPrintFriendlinessChange}
               tipId="print" openTipId={openTipId} onTipOpen={setOpenTipId} />
@@ -231,7 +238,7 @@ export function MobileBottomBar({
           <div className={styles.mobileSheetContent}>
             <div className={styles.mobileDimRow}>
               <label className={styles.mobileDimGroup}>
-                <span className={styles.mobileSliderLabel}>Höhe (mm)</span>
+                <span className={styles.mobileSliderLabel}>Höhe gebrannt</span>
                 <input type="number" className={styles.mobileNumInputLarge} min="60" max="180" step="1"
                   data-testid="mobile-height-input"
                   value={heightInput}
@@ -258,6 +265,12 @@ export function MobileBottomBar({
                   disabled={!canFineTune} />
               </label>
             </div>
+            <ShrinkageControl
+              percent={shrinkagePercent}
+              targetHeightMm={targetHeightMm}
+              variant="mobile"
+              onChange={onShrinkageChange}
+            />
             <button type="button" className={styles.mobileResetBtn} onClick={onReset}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path d="M3 12a9 9 0 109-9M3 12V6m0 6H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

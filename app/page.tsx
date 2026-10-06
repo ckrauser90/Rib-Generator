@@ -31,6 +31,7 @@ import { usePageSessionActions } from "./page-session-actions";
 import { usePageViewModel } from "./page-view-model";
 import styles from "./page.module.css";
 import { useToolDimensionInputs } from "./tool-dimension-inputs";
+import { DEFAULT_SHRINKAGE_PERCENT, applyShrinkage } from "./shrinkage";
 
 const DEFAULT_TOOL_WIDTH_MM = 65;
 
@@ -64,10 +65,11 @@ export default function Home() {
   );
   const [toolAutoWidened, setToolAutoWidened] = useState(false);
   const [workProfileSide, setWorkProfileSide] = useState<WorkProfileSide>("right");
-  const [curveSmoothing, setCurveSmoothing] = useState(34);
-  const [printFriendliness, setPrintFriendliness] = useState(58);
+  const [curveSmoothing, setCurveSmoothing] = useState(10);
+  const [printFriendliness, setPrintFriendliness] = useState(40);
   const [bevelStrength, setBevelStrength] = useState(68);
   const [horizontalCorrectionDeg, setHorizontalCorrectionDeg] = useState(0);
+  const [shrinkagePercent, setShrinkagePercent] = useState(DEFAULT_SHRINKAGE_PERCENT);
   const {
     commitHeightInput,
     commitThicknessInput,
@@ -90,6 +92,9 @@ export default function Home() {
   } = useToolDimensionInputs({
     defaultWidthMm: DEFAULT_TOOL_WIDTH_MM,
   });
+  // Die eingegebene Höhe ist das Maß nach dem Brand; Rib, Vorschau und STL nutzen
+  // die um die Schwindung vergrößerte Höhe (app/shrinkage.ts).
+  const ribHeightMm = applyShrinkage(toolHeightMm, shrinkagePercent);
   const [status, setStatus] = useState<string>(pageText.initialStatus);
   const [segmenterState, setSegmenterState] = useState<
     "loading" | "ready" | "error"
@@ -232,7 +237,7 @@ export default function Home() {
     setSegmenting,
     setStatus,
     sourceRaster,
-    toolHeightMm,
+    toolHeightMm: ribHeightMm,
     toolWidthMm,
     workProfileSide,
   });
@@ -249,7 +254,7 @@ export default function Home() {
     printFriendliness,
     profileImageSize,
     referenceBounds,
-    toolHeightMm,
+    toolHeightMm: ribHeightMm,
     toolWidthMm,
     workProfileSide,
   });
@@ -320,7 +325,7 @@ export default function Home() {
     status,
     thicknessMm,
     toolAutoWidened,
-    toolHeightMm,
+    toolHeightMm: ribHeightMm,
     toolHoles,
     toolOutline,
     toolProfile,
@@ -338,6 +343,8 @@ export default function Home() {
     heightInput,
     horizontalCorrectionDeg,
     printFriendliness,
+    shrinkagePercent,
+    targetHeightMm: toolHeightMm,
     thicknessInput,
     widthInput,
     onBevelStrengthChange: setBevelStrength,
@@ -352,6 +359,7 @@ export default function Home() {
     onHorizontalCorrectionChange: setHorizontalCorrectionDeg,
     onPrintFriendlinessChange: setPrintFriendliness,
     onReset: resetSelection,
+    onShrinkageChange: setShrinkagePercent,
     onThicknessBlur: commitThicknessInput,
     onThicknessInputChange: setThicknessInput,
     onThicknessKeyDown: handleThicknessKeyDown,
@@ -372,6 +380,8 @@ export default function Home() {
     mobileSheetOpen,
     mobileTab,
     printFriendliness,
+    shrinkagePercent,
+    targetHeightMm: toolHeightMm,
     thicknessInput,
     widthInput,
     onBevelStrengthChange: setBevelStrength,
@@ -385,6 +395,7 @@ export default function Home() {
     onHorizontalCorrectionChange: setHorizontalCorrectionDeg,
     onPrintFriendlinessChange: setPrintFriendliness,
     onReset: resetSelection,
+    onShrinkageChange: setShrinkagePercent,
     onTabChange: setMobileTab,
     onThicknessBlur: commitThicknessInput,
     onThicknessInputChange: setThicknessInput,
@@ -474,7 +485,7 @@ export default function Home() {
           profilePreviewPath={profilePreviewPath}
           resolvedToolWidthMm={resolvedToolWidthMm}
           toolAnchors={toolAnchors}
-          toolHeightMm={toolHeightMm}
+          toolHeightMm={ribHeightMm}
           toolHoles={toolHoles}
           toolOutline={toolOutline}
           toolProfile={toolProfile}

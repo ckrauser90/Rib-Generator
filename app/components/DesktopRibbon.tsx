@@ -2,6 +2,7 @@
 
 import { ChangeEvent, KeyboardEvent, useEffect, useState } from "react";
 import styles from "../page.module.css";
+import { ShrinkageControl } from "./ShrinkageControl";
 import { SliderControl } from "./SliderControl";
 
 export type DesktopRibbonProps = {
@@ -12,6 +13,8 @@ export type DesktopRibbonProps = {
   heightInput: string;
   horizontalCorrectionDeg: number;
   printFriendliness: number;
+  shrinkagePercent: number;
+  targetHeightMm: number;
   thicknessInput: string;
   widthInput: string;
   onBevelStrengthChange: (value: number) => void;
@@ -24,6 +27,7 @@ export type DesktopRibbonProps = {
   onHorizontalCorrectionChange: (value: number) => void;
   onPrintFriendlinessChange: (value: number) => void;
   onReset: () => void;
+  onShrinkageChange: (percent: number) => void;
   onThicknessBlur: (value: string) => void;
   onThicknessInputChange: (value: string) => void;
   onThicknessKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -40,6 +44,8 @@ export function DesktopRibbon({
   heightInput,
   horizontalCorrectionDeg,
   printFriendliness,
+  shrinkagePercent,
+  targetHeightMm,
   thicknessInput,
   widthInput,
   onBevelStrengthChange,
@@ -52,6 +58,7 @@ export function DesktopRibbon({
   onHorizontalCorrectionChange,
   onPrintFriendlinessChange,
   onReset,
+  onShrinkageChange,
   onThicknessBlur,
   onThicknessInputChange,
   onThicknessKeyDown,
@@ -84,7 +91,7 @@ export function DesktopRibbon({
       <div className={styles.ribbonGroup}>
         <span className={styles.ribbonLabel}>Maße (mm)</span>
         <div className={styles.dimRow}>
-          <label className={styles.dimField}>
+          <label className={styles.dimField} title="Höhe nach dem Brand. Die Rib wird um die Schwindung größer gebaut.">
             H{" "}
             <input
               type="number"
@@ -137,9 +144,18 @@ export function DesktopRibbon({
 
       <div className={styles.ribbonDivider} />
 
+      <ShrinkageControl
+        percent={shrinkagePercent}
+        targetHeightMm={targetHeightMm}
+        variant="desktop"
+        onChange={onShrinkageChange}
+      />
+
+      <div className={styles.ribbonDivider} />
+
       <div className={styles.sliderRow}>
         <SliderControl
-          label="Glättung" value={curveSmoothing} min={0} max={100} step={1} defaultValue={34}
+          label="Glättung" value={curveSmoothing} min={0} max={100} step={1} defaultValue={10}
           tooltip="Glättet die erkannte Kontur. Höhere Werte erzeugen weichere Kurven, niedrigere erhalten mehr Originaltreue."
           disabled={!canFineTune} onChange={onCurveSmoothingChange}
           className={styles.sliderCell} sliderClassName={styles.ribbonSlider}
@@ -154,7 +170,7 @@ export function DesktopRibbon({
           testId="horizontal-correction-slider"
           tipId="d-horizon" openTipId={openTipId} onTipOpen={setOpenTipId} />
         <SliderControl
-          label="Druckoptimierung" value={printFriendliness} min={0} max={100} step={1} defaultValue={58}
+          label="Druckoptimierung" value={printFriendliness} min={0} max={100} step={1} defaultValue={40}
           tooltip="Optimiert das Profil für den 3D-Druck. Höhere Werte vermeiden Überhänge und dünne Stellen."
           disabled={!canFineTune} onChange={onPrintFriendlinessChange}
           className={styles.sliderCell} sliderClassName={styles.ribbonSlider}

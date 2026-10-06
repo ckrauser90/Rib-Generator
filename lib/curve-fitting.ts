@@ -179,3 +179,126 @@ export const smoothCurveByArcLength = (points: Point[], options: ArcSmoothingOpt
   });
   return resampleByArcLength(smoothed, options.sampleStep).points;
 };
+
+export type NotchOptions = {
+  /** Mindesttiefe der Kerbe in mm, gemessen beidseitig innerhalb von `windowMm`. */
+  minDepthMm: number;
+  windowMm: number;
+  /** Mindestknick in Grad zwischen den Richtungen ±`angleSpanMm` um die Kerbe. */
+  minAngleDeg: number;
+  angleSpanMm: number;
+  /** Vorglättung (Wellenlänge in mm), damit Pixelrauschen keine Kerben vortäuscht. */
+  preSmoothMm: number;
+};
+
+export const DEFAULT_NOTCH_OPTIONS: NotchOptions = {
+  minDepthMm: 0.6,
+  windowMm: 6,
+  minAngleDeg: 20,
+  angleSpanMm: 1.5,
+  preSmoothMm: 2,
+};
+
+/**
+ * Findet Kerben in einer Rib-Kante: Punkte, an denen die Kante eine Spitze zur
+ * Gefäßseite bildet (lokales Maximum von x) – am Gefäß eine Rille zwischen zwei
+ * Wölbungen, etwa bei Bubble-Tassen. Drei Bedingungen müssen zugleich gelten:
+ * lokales Maximum, beidseitig mindestens `minDepthMm` Abfall innerhalb von
+ * `windowMm` und ein Knick von mindestens `minAngleDeg`. Rauschen erfüllt die
+ * Tiefe nicht, eine sanfte Taille nicht den Knick.
+ *
+ * Erwartet Punkte in mm, nach y sortiert. Gibt Indizes in `points` zurück.
+ */
+export const findNotchIndices = (points: Point[], options: NotchOptions = DEFAULT_NOTCH_OPTIONS) => {
+  if (points.length < 10) return [];
+  const span = points[points.length - 1].y - points[0].y;
+  if (span <= options.windowMm * 2) return [];
+
+  const meanStep = span / (points.length - 1);
+  const xs = whittakerSmooth(
+    points.map((point) => point.x),
+    whittakerLambdaForPeriod(options.preSmoothMm / Math.max(meanStep, 1e-6)),
+  );
+  const ys = points.map((point) => point.y);
+
+  const indexAtY = (from: number, targetY: number, direction: 1 | -1) => {
+    let index = from;
+    while (index + direction >= 0 && index + direction < ys.length && Math.abs(ys[index] - ys[from]) < Math.abs(targetY - ys[from])) {
+      index += direction;
+    }
+    return index;
+  };
+
+  const candidates: { index: number; depth: number }[] = [];
+  for (let index = 1; index < xs.length - 1; index += 1) {
+    const y = ys[index];
+    if (y - ys[0] < options.windowMm / 3 || ys[ys.length - 1] - y < options.windowMm / 3) continue;
+
+    const localFrom = indexAtY(index, y - 1, -1);
+    const localTo = indexAtY(index, y + 1, 1);
+    let isLocalMax = true;
+    for (let inner = localFrom; inner <= localTo; inner += 1) {
+      if (xs[inner] > xs[index]) {
+        isLocalMax = false;
+        break;
+      }
+    }
+    if (!isLocalMax) continue;
+
+    const leftFrom = indexAtY(index, y - options.windowMm, -1);
+    const rightTo = indexAtY(index, y + options.windowMm, 1);
+    let leftMin = Number.POSITIVE_INFINITY;
+    let rightMin = Number.POSITIVE_INFINITY;
+    for (let inner = leftFrom; inner < index; inner += 1) leftMin = Math.min(leftMin, xs[inner]);
+    for (let inner = index + 1; inner <= rightTo; inner += 1) rightMin = Math.min(rightMin, xs[inner]);
+    const depth = Math.min(xs[index] - leftMin, xs[index] - rightMin);
+    if (!(depth >= options.minDepthMm)) continue;
+
+    const before = indexAtY(index, y - options.angleSpanMm, -1);
+    const after = indexAtY(index, y + options.angleSpanMm, 1);
+    const incoming = Math.atan2(ys[index] - ys[before], xs[index] - xs[before]);
+    const outgoing = Math.atan2(ys[after] - ys[index], xs[after] - xs[index]);
+    let turn = Math.abs(outgoing - incoming);
+    if (turn > Math.PI) turn = 2 * Math.PI - turn;
+    if ((turn * 180) / Math.PI < options.minAngleDeg) continue;
+
+    candidates.push({ index, depth });
+  }
+
+  // Dicht beieinander liegende Treffer gehören zur selben Kerbe: die tiefste behalten.
+  const notches: { index: number; depth: number }[] = [];
+  for (const candidate of candidates) {
+    const last = notches[notches.length - 1];
+    if (last && ys[candidate.index] - ys[last.index] < options.windowMm / 2) {
+      if (candidate.depth > last.depth) notches[notches.length - 1] = candidate;
+    } else {
+      notches.push(candidate);
+    }
+  }
+  return notches.map((notch) => notch.index);
+};
+
+/**
+ * Wie `smoothCurveByArcLength`, aber Kerben bleiben spitz: Die Kante wird an den
+ * Kerben geteilt, jedes Stück für sich geglättet, und die Kerbenpunkte bleiben
+ * genau an ihrer Stelle. So werden die Bögen ruhig, ohne dass aus den Rillen einer
+ * Bubble-Tasse weiche Wellen werden.
+ */
+export const smoothCurvePreservingNotches = (
+  points: Point[],
+  options: ArcSmoothingOptions,
+  notchOptions: NotchOptions = DEFAULT_NOTCH_OPTIONS,
+) => {
+  const ordered = points.slice().sort((left, right) => left.y - right.y);
+  const notches = findNotchIndices(ordered, notchOptions);
+  if (notches.length === 0) return { points: smoothCurveByArcLength(ordered, options), notches: [] as Point[] };
+
+  const cuts = [0, ...notches, ordered.length - 1];
+  const result: Point[] = [];
+  for (let segment = 0; segment < cuts.length - 1; segment += 1) {
+    const piece = ordered.slice(cuts[segment], cuts[segment + 1] + 1);
+    const smoothed = smoothCurveByArcLength(piece, options);
+    result.push(...(segment === 0 ? smoothed : smoothed.slice(1)));
+  }
+  return { points: result, notches: notches.map((index) => ordered[index]) };
+};

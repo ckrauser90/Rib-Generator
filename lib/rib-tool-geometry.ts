@@ -10,7 +10,7 @@ import type {
   WorkProfileSide,
 } from "./contour-base";
 import { clamp, lerp, smoothSeries } from "./contour-base";
-import { smoothCurveByArcLength } from "./curve-fitting";
+import { smoothCurvePreservingNotches } from "./curve-fitting";
 
 /** Größte erlaubte Abweichung der geglätteten Rib-Kante von der erkannten Kante. */
 export const RIB_EDGE_TOLERANCE_MM = 0.4;
@@ -477,14 +477,16 @@ export const buildRibToolOutline = (
   // dabei landeten gerade Ausreißer als Eckpunkte, und die Kurve wurde an jedem
   // Hoch- und Tiefpunkt flach – sichtbare Dellen und Plateaus am Rib.
   // Druckoptimierung steuert die Glättungslänge entlang der Kante:
-  // 0 → 3 mm (sehr formtreu), 58 (Standard) → gut 8 mm, 100 → 12 mm (sehr ruhig).
+  // 0 → 3 mm (sehr formtreu), 40 (Standard) → gut 6,5 mm, 100 → 12 mm (sehr ruhig).
   // Lippe und Fuß bleiben erhalten, wo die Kurve über mehr als 2 mm Länge mehr als
   // RIB_EDGE_TOLERANCE_MM von der erkannten Kante abweichen würde.
   const friendlinessFactor = clamp(printFriendliness / 100, 0, 1);
   const topY = 0;
   const bottomY = totalHeight;
   const outerLeftX = 0;
-  const denseProfile = smoothCurveByArcLength(profile, {
+  // Kerbenschutz (lib/curve-fitting.ts, findNotchIndices): Rillen zwischen zwei
+  // Wölbungen – an der Rib Spitzen – bleiben spitz; geglättet wird nur zwischen ihnen.
+  const { points: denseProfile } = smoothCurvePreservingNotches(profile, {
     periodMm: lerp(3, 12, friendlinessFactor),
     tolerance: RIB_EDGE_TOLERANCE_MM,
     featureLengthMm: 2,

@@ -14,6 +14,8 @@ type SharedToolControlsOptions = {
   heightInput: string;
   horizontalCorrectionDeg: number;
   printFriendliness: number;
+  shrinkagePercent: number;
+  targetHeightMm: number;
   thicknessInput: string;
   widthInput: string;
   onBevelStrengthChange: (value: number) => void;
@@ -26,6 +28,7 @@ type SharedToolControlsOptions = {
   onHorizontalCorrectionChange: (value: number) => void;
   onPrintFriendlinessChange: (value: number) => void;
   onReset: () => void;
+  onShrinkageChange: (percent: number) => void;
   onThicknessBlur: (value: string) => void;
   onThicknessInputChange: (value: string) => void;
   onThicknessKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -74,6 +77,8 @@ export const buildDesktopRibbonProps = ({
   heightInput,
   horizontalCorrectionDeg,
   printFriendliness,
+  shrinkagePercent,
+  targetHeightMm,
   thicknessInput,
   widthInput,
   onBevelStrengthChange,
@@ -86,6 +91,7 @@ export const buildDesktopRibbonProps = ({
   onHorizontalCorrectionChange,
   onPrintFriendlinessChange,
   onReset,
+  onShrinkageChange,
   onThicknessBlur,
   onThicknessInputChange,
   onThicknessKeyDown,
@@ -100,6 +106,8 @@ export const buildDesktopRibbonProps = ({
   heightInput,
   horizontalCorrectionDeg,
   printFriendliness,
+  shrinkagePercent,
+  targetHeightMm,
   thicknessInput,
   widthInput,
   onBevelStrengthChange,
@@ -112,6 +120,7 @@ export const buildDesktopRibbonProps = ({
   onHorizontalCorrectionChange,
   onPrintFriendlinessChange,
   onReset,
+  onShrinkageChange,
   onThicknessBlur,
   onThicknessInputChange,
   onThicknessKeyDown,
@@ -130,6 +139,8 @@ export const buildMobileBottomBarProps = ({
   heightInput,
   horizontalCorrectionDeg,
   printFriendliness,
+  shrinkagePercent,
+  targetHeightMm,
   thicknessInput,
   widthInput,
   onBevelStrengthChange,
@@ -141,6 +152,7 @@ export const buildMobileBottomBarProps = ({
   onHorizontalCorrectionChange,
   onPrintFriendlinessChange,
   onReset,
+  onShrinkageChange,
   onThicknessBlur,
   onThicknessInputChange,
   onWidthBlur,
@@ -165,6 +177,8 @@ export const buildMobileBottomBarProps = ({
   mobileSheetOpen,
   mobileTab,
   printFriendliness,
+  shrinkagePercent,
+  targetHeightMm,
   thicknessInput,
   widthInput,
   onBevelStrengthChange,
@@ -176,6 +190,7 @@ export const buildMobileBottomBarProps = ({
   onHorizontalCorrectionChange,
   onPrintFriendlinessChange,
   onReset,
+  onShrinkageChange,
   onTabChange,
   onThicknessBlur,
   onThicknessInputChange,

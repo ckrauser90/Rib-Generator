@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import {
+  findNotchIndices,
   smoothCurveByArcLength,
+  smoothCurvePreservingNotches,
   whittakerLambdaForPeriod,
   whittakerSmooth,
 } from "../../lib/curve-fitting";
@@ -96,4 +98,58 @@ test("smoothCurveByArcLength passes short profiles through unchanged", () => {
     { x: 6, y: 20 },
   ];
   expect(smoothCurveByArcLength(points, ribOptions)).toEqual(points);
+});
+
+// Rib-Kante einer Bubble-Tasse: Kreisbögen (Radius 12 mm) im Abstand von 20 mm, dazwischen
+// spitze Kerben. Die Kerbe ist an der Rib ein lokales Maximum von x.
+const scallopTruth = (y: number) => {
+  const pitch = 20;
+  const radius = 12;
+  const local = ((y % pitch) + pitch) % pitch - pitch / 2;
+  return 30 - Math.sqrt(radius * radius - local * local);
+};
+const notchYs = [20, 40, 60, 80];
+
+test("findNotchIndices finds the grooves of a bubble profile despite pixel noise", () => {
+  const noisy = Array.from({ length: 1000 }, (_, index) => {
+    const y = index * 0.1;
+    return { x: scallopTruth(y) + noise(index) * 0.15, y };
+  });
+
+  const found = findNotchIndices(noisy).map((index) => noisy[index].y);
+
+  expect(found.length).toBe(notchYs.length);
+  found.forEach((y, index) => expect(Math.abs(y - notchYs[index])).toBeLessThan(0.8));
+});
+
+test("findNotchIndices ignores smooth waists and noise", () => {
+  const vase = Array.from({ length: 1200 }, (_, index) => {
+    const y = index * 0.1;
+    return { x: 20 + 6 * Math.cos(y / 14) + noise(index) * 0.2, y };
+  });
+  expect(findNotchIndices(vase)).toEqual([]);
+});
+
+test("smoothCurvePreservingNotches keeps grooves sharp where plain smoothing rounds them", () => {
+  const noisy = Array.from({ length: 1000 }, (_, index) => {
+    const y = index * 0.1;
+    return { x: scallopTruth(y) + noise(index) * 0.15, y };
+  });
+  const tipError = (points: Point[]) =>
+    Math.max(
+      ...notchYs.map((notchY) => {
+        const nearest = points.reduce((best, point) => (Math.abs(point.y - notchY) < Math.abs(best.y - notchY) ? point : best));
+        return Math.abs(nearest.x - scallopTruth(notchY));
+      }),
+    );
+
+  const plain = smoothCurveByArcLength(noisy, ribOptions);
+  const protectedResult = smoothCurvePreservingNotches(noisy, ribOptions);
+
+  expect(protectedResult.notches.length).toBe(4);
+  expect(tipError(plain)).toBeGreaterThan(0.4);
+  expect(tipError(protectedResult.points)).toBeLessThan(0.25);
+  // Zwischen den Kerben bleibt die Kurve ruhig.
+  const between = protectedResult.points.filter((point) => notchYs.every((notchY) => Math.abs(point.y - notchY) > 2));
+  expect(maxDistanceTo(between, scallopTruth)).toBeLessThan(0.3);
 });

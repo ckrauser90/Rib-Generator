@@ -16,7 +16,7 @@ const smoothstep = (t: number) => {
  * Geometrieprofil für Rib und STL: die erkannte Kante, geglättet nach dem Regler
  * „Glättung“. Die Stärke ist relativ zur Profilhöhe festgelegt, damit sie nicht von
  * der Fotoauflösung abhängt: 0 entfernt nur Wellen unter 0,5 % der Höhe (Pixelreste),
- * 34 (Standard) Wellen unter gut 2 %, 100 Wellen unter 6 %. Anders als früher wird
+ * 10 (Standard) Wellen unter gut 1 %, 100 Wellen unter 6 %. Anders als früher wird
  * das Ergebnis nicht wieder mit der Rohkante gemischt – sonst blieben die Zacken.
  * Anfang und Ende sind stärker gewichtet, damit Rand und Fuß an ihrer Stelle bleiben.
  * Die Rohkante selbst bleibt unverändert die Quelle (siehe CLAUDE.md).
