@@ -18,6 +18,8 @@ import { deriveNormalizedProfileFromMask } from "../../lib/profile-normalization
 import { buildGeometryWorkProfile } from "../../app/profile-geometry";
 import { buildPreparedToolProfile, resolveToolAnchors } from "../../app/tool-profile-workflow";
 import { buildPreparedToolGeometryState } from "../../app/tool-geometry-workflow";
+import { prepareStlExport } from "../../app/export-workflow";
+import { createExtrudedStl, validateToolGeometry } from "../../lib/contour";
 import type { Point } from "../../lib/contour";
 import {
   configureInteractiveSegmenterAssets,
@@ -580,7 +582,81 @@ export const traceEdgeStages = async (input: {
   };
 };
 
+/**
+ * Kompletter App-Weg von einem Foto bis zur STL, mit automatischer Start/Ende-Wahl
+ * wie nach „Seite bestätigen“. Für Vergleiche mit einer echten Rib (z. B. als OBJ).
+ */
+export const buildRibFromPhoto = async (input: {
+  imageDataUrl: string;
+  ribHeightMm: number;
+  curveSmoothing: number;
+  printFriendliness: number;
+  side: "left" | "right";
+  toolWidthMm?: number;
+  thicknessMm?: number;
+}) => {
+  ensureAssetsConfigured();
+  const image = await loadImage(input.imageDataUrl);
+  const { canvas } = toCanvas(image);
+  await loadInteractiveSegmenter();
+  const mask = await segmentRasterFromPoint(canvas, { x: 0.5, y: 0.5 }, MEDIAPIPE_THRESHOLD);
+  const { imageData } = toCanvas(image, mask.width, mask.height);
+  const result = deriveNormalizedProfileFromMask(
+    mask.binaryMask,
+    mask.width,
+    mask.height,
+    { ...DETECTION_OPTIONS, seedPoint: { x: mask.width / 2, y: mask.height / 2 } },
+    imageData,
+    mask.confidence,
+  );
+  const workProfile = input.side === "left" ? result.leftWorkProfile : result.rightWorkProfile;
+  const geometry = buildGeometryWorkProfile(workProfile, input.curveSmoothing);
+  const toolWidthMm = input.toolWidthMm ?? 65;
+  const state = buildPreparedToolGeometryState({
+    anchorEditMode: false,
+    currentAnchorOverride: null,
+    currentAnchorsConfirmed: true,
+    displayedAnchorOverride: null,
+    imageSize: { width: mask.width, height: mask.height },
+    printFriendliness: input.printFriendliness,
+    profile: geometry,
+    referenceBounds: result.referenceBounds,
+    toolHeightMm: input.ribHeightMm,
+    toolWidthMm,
+    workProfileSide: input.side,
+  });
+  const prepared = prepareStlExport({
+    currentAnchorOverride: null,
+    currentAnchorsConfirmed: true,
+    downloadNeedsContourMessage: "Keine Kontur",
+    geometryNotExportableMessage: "Nicht exportierbar",
+    geometryValidation: validateToolGeometry(state.toolOutline, state.toolProfile, state.toolHoles),
+    geometryWorkProfile: geometry,
+    horizontalCorrectionDeg: 0,
+    profileImageSize: { width: mask.width, height: mask.height },
+    referenceBounds: result.referenceBounds,
+    sourceRasterPresent: true,
+  });
+  const stl =
+    prepared.kind === "ready"
+      ? createExtrudedStl(
+          prepared.correctedProfile,
+          prepared.imageWidth,
+          prepared.imageHeight,
+          toolWidthMm,
+          input.ribHeightMm,
+          input.thicknessMm ?? 4.2,
+          input.side,
+          prepared.correctedReferenceBounds,
+          input.printFriendliness,
+          prepared.exportAnchors,
+        )
+      : null;
+  return { toolProfile: state.toolProfile, toolOutline: state.toolOutline, stl, blocked: prepared.kind === "blocked" ? prepared.status : null };
+};
+
 export const ribLab = {
+  buildRibFromPhoto,
   traceEdgeStages,
   analyze,
   analyzeWithBrowserBiRefNet,

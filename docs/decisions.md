@@ -86,3 +86,44 @@ Kantenerkennung (Subpixel aus der Konfidenzmaske) angehen.
 **Verworfen:** B-Spline mit Nachverdichtung bei 0,35 mm Abweichung – zeichnete genau diese
 Wellen nach und schwang an flachen Abschnitten (Schalenrand, Henkel). Glättung pro Bildzeile –
 instabil, wo die Kante fast waagrecht läuft.
+
+---
+
+## R-004 · 2026-10-06 · Kerbenschutz, ruhigere Standardwerte, Schwindungsausgleich
+
+**Entscheidung:**
+- *Kerbenschutz* (`findNotchIndices`, `smoothCurvePreservingNotches` in `lib/curve-fitting.ts`):
+  Rillen zwischen zwei Wölbungen (an der Rib Spitzen) bleiben spitz; geglättet wird nur zwischen
+  ihnen. Eine Kerbe braucht zugleich ein lokales Extrem, beidseitig ≥ 0,6 mm Tiefe innerhalb von
+  6 mm und einen Knick ≥ 20°.
+- *Standardwerte*: Glättung 34 → 10, Druckoptimierung 58 → 40.
+- *Schwindung* (`app/shrinkage.ts`, `ShrinkageControl`): Vorgaben Kein Ausgleich / Steingut 7 % /
+  Steinzeug 12 % (Standard) / Porzellan 15 % oder eigener Wert. Die eingegebene Höhe ist das Maß
+  nach dem Brand; Rib, Vorschau und STL nutzen Höhe ÷ (1 − Schwindung). Bögen und Kerben wachsen mit.
+
+**Begründung:** Bei Chris' Bubble-Tassen machte die Glättung aus spitzen Kerben weiche Wellen.
+Reine Knickerkennung trennt Kerben auf verwackelten Fotos nicht sicher von Rauschen (beide 25–45°);
+erst die Tiefenbedingung macht sie robust. Mit Kerbenschutz kann die übrige Glättung moderat
+bleiben (Druck 40), sodass normale Gefäße ruhig werden.
+Schwindungs-Richtwerte: Steingut 6–8 %, Steinzeug 10–13 %, Porzellan 14–17 %
+(Valentine Clays, The Pottery Wheel, ClayCalc); gedrehte Gefäße schwinden oft in der Höhe stärker.
+
+**Verworfen:** Druck 20 als Standard – Kerben blieben, aber verwackelte Fotos wurden unruhig.
+Getrennte Schwindung für Höhe und Breite – erst, wenn Messwerte zeigen, dass es nötig ist.
+
+---
+
+## R-005 · 2026-10-06 · Befund: Gebrannte Tassen zeigen nur etwa die halbe Bogentiefe der Rib
+
+**Befund (Labor `obj-compare`, Daten `tests/fixtures/segmentation/bubble/`):** Aus vier Fotos der
+mit `rib_test_bubble.obj` gedrehten Tassen wurde der komplette App-Weg bis zur STL durchlaufen und
+die Arbeitskante an den Kerben auf die linke Kante der Original-Rib gelegt. Die Kerben werden
+gefunden und liegen übereinander (3–4 gemeinsame Kerben, Maßstab stabil). Die Bögen der Foto-Rib
+sind aber nur **1,4–2,5 mm** tief statt **4,0 mm** – unabhängig von Glättung und Druckoptimierung
+(auch bei 0/0). Die Abweichung entsteht also vor der App: beim Drehen (Ton füllt die Bögen der
+Rib nicht ganz aus), durch Glasur in den Rillen und ggf. Rundung an der Fotokante.
+
+**Folgerung:** Eine Rib aus dem Foto bildet die *Tasse* nach, nicht die *Rib*, mit der sie
+entstand. Wer mit der Foto-Rib dreht, bekäme vermutlich wieder flachere Wölbungen. Eine optionale
+„Formverstärkung“ (Bogentiefe × ~1,6–2) wäre denkbar, braucht aber mehr Messungen (andere
+Formen, Tassen vor und nach Glasur) – noch nicht umgesetzt.
