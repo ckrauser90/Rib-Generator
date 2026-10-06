@@ -9,7 +9,7 @@
 // Masken dieselbe Kontur-Strecke wie in der App, danach die Messungen.
 //
 // Echte Fotos (Satz B) liegen in tests/fixtures/segmentation/real/ und tragen die
-// Gefäßhöhe im Namen, z. B. 01-becher-ruhig_h95.jpg.
+// Gefäßhöhe am Ende des Namens, z. B. 01-becher-ruhig_h95.jpg oder 07_Tasse_74mm.jpeg.
 
 import { expect, test } from "@playwright/test";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -52,10 +52,11 @@ const loadFixtures = (): Fixture[] => {
   if (existsSync(realDir)) {
     for (const name of readdirSync(realDir).sort()) {
       if (!MIME[path.extname(name).toLowerCase()]) continue;
-      const height = /_h(\d+(?:[.,]\d+)?)/i.exec(name);
+      // Höhe am Ende des Namens: `_h95`, `_95mm` oder `_h95mm`.
+      const height = /_h?(\d+(?:[.,]\d+)?)(?:mm)?$/i.exec(path.parse(name).name);
       fixtures.push({
         id: path.parse(name).name,
-        label: path.parse(name).name.replace(/_h\d+([.,]\d+)?/i, "").replace(/[-_]+/g, " "),
+        label: path.parse(name).name.replace(/_h?\d+([.,]\d+)?(mm)?$/i, "").replace(/[-_]+/g, " "),
         kind: "real",
         // Ohne Höhe im Namen rechnen wir mit 120 mm; die mm-Werte sind dann nur relativ.
         heightMm: height ? Number(height[1].replace(",", ".")) : 120,

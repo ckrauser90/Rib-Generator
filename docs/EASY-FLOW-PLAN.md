@@ -47,6 +47,8 @@ Ergebnis 12 synthetische Szenen (Abweichung der Arbeitskante rechts von der exak
   auf der Arbeitsseite.
 - Zwischenfazit: Kriterium 1 nicht erfüllt. MediaPipe bleibt vorerst; Entscheidung nach Satz B (echte Fotos).
 
+**Ergebnis mit Satz B (11 echte Fotos, 2026-10-06): MediaPipe bleibt – siehe `docs/decisions.md` R-002.**
+
 ## Offen
 
 - Monetarisierung: Registrierung + 1 kostenlose STL, danach bezahlen (Details noch offen).
