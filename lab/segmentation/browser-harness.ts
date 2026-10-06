@@ -15,6 +15,9 @@
 //   echten Browser gibt es `analyzeWithBrowserBiRefNet` (WebGPU).
 
 import { deriveNormalizedProfileFromMask } from "../../lib/profile-normalization";
+import { buildGeometryWorkProfile } from "../../app/profile-geometry";
+import { buildPreparedToolProfile, resolveToolAnchors } from "../../app/tool-profile-workflow";
+import { buildPreparedToolGeometryState } from "../../app/tool-geometry-workflow";
 import type { Point } from "../../lib/contour";
 import {
   configureInteractiveSegmenterAssets,
@@ -29,6 +32,8 @@ import {
   type MaskResult,
 } from "../../lib/segmenters/birefnet";
 import {
+  edgeRoughness,
+  type EdgeRoughness,
   edgeAlignment,
   gradientMagnitude,
   maskIoU,
@@ -433,7 +438,120 @@ export const renderSynthetic = (sceneId: string): SyntheticRender => {
   return renderSyntheticScene(scene);
 };
 
+export type EdgeStage = {
+  id: "maske" | "app-roh" | "app-geometrie" | "rib";
+  label: string;
+  roughness: EdgeRoughness | null;
+  /** Profil in mm (y nach unten), für Diagramme im Bericht. */
+  profileMm: Point[];
+};
+
+/**
+ * Misst, in welcher Stufe der Kette die Arbeitskante (rechte Seite) wellig wird:
+ * Maske allein → Kante nach Einrasten am Foto (Quelle der Wahrheit) → geglättetes
+ * Geometrieprofil (Glättung 34, Standard) → fertige Rib-Kante (Druckoptimierung 58).
+ * Alle Stufen in echten mm, damit sie vergleichbar sind.
+ */
+export const traceEdgeStages = async (input: {
+  imageDataUrl: string;
+  heightMm: number;
+  /** Optional: Sollmaske. Dann läuft sie durch dieselbe Kette, und die Differenz zeigt reines Rauschen. */
+  truthDataUrl?: string;
+}) => {
+  ensureAssetsConfigured();
+  const image = await loadImage(input.imageDataUrl);
+  const { canvas } = toCanvas(image);
+  await loadInteractiveSegmenter();
+  const mask = await segmentRasterFromPoint(canvas, { x: 0.5, y: 0.5 }, MEDIAPIPE_THRESHOLD);
+  const { imageData } = toCanvas(image, mask.width, mask.height);
+  const seedPoint = { x: mask.width / 2, y: mask.height / 2 };
+  const options = { ...DETECTION_OPTIONS, seedPoint };
+
+  const maskOnly = deriveNormalizedProfileFromMask(mask.binaryMask, mask.width, mask.height, options);
+  const withImage = deriveNormalizedProfileFromMask(
+    mask.binaryMask,
+    mask.width,
+    mask.height,
+    options,
+    imageData,
+    mask.confidence,
+  );
+  const vesselHeightPx = Math.max(1, withImage.referenceBounds.maxY - withImage.referenceBounds.minY);
+  const mmPerPx = input.heightMm / vesselHeightPx;
+  const toMm = (points: Point[]) => points.map((point) => ({ x: point.x * mmPerPx, y: point.y * mmPerPx }));
+
+  // Gleiche Kette wie in der App ab dem Arbeitsprofil: Glättung 34, Start/Ende automatisch,
+  // Druckoptimierung 58. Der Rib wird so skaliert, dass 1 mm am Rib 1 mm am Gefäß entspricht.
+  const buildDownstream = (workProfile: Point[], referenceBounds: { minY: number; maxY: number }) => {
+    const geometry = buildGeometryWorkProfile(workProfile, 34);
+    const { confirmedAnchors } = resolveToolAnchors({
+      currentAnchorOverride: null,
+      displayedAnchorOverride: null,
+      profile: geometry,
+    });
+    const trimmed = buildPreparedToolProfile({ activeAnchors: confirmedAnchors, profile: geometry });
+    const trimmedHeightPx = trimmed.correctedReferenceBounds
+      ? trimmed.correctedReferenceBounds.maxY - trimmed.correctedReferenceBounds.minY
+      : vesselHeightPx;
+    const rib = buildPreparedToolGeometryState({
+      anchorEditMode: false,
+      currentAnchorOverride: null,
+      currentAnchorsConfirmed: true,
+      displayedAnchorOverride: null,
+      imageSize: { width: mask.width, height: mask.height },
+      printFriendliness: 58,
+      profile: geometry,
+      referenceBounds,
+      toolHeightMm: Math.max(20, trimmedHeightPx * mmPerPx),
+      toolWidthMm: 65,
+      workProfileSide: "right",
+    });
+    return { geometry, rib: rib.toolProfile };
+  };
+
+  const downstream = buildDownstream(withImage.rightWorkProfile, withImage.referenceBounds);
+  const stages: EdgeStage[] = [
+    { id: "maske", label: "Maske allein", profileMm: toMm(maskOnly.rightWorkProfile) },
+    { id: "app-roh", label: "Nach Einrasten am Foto", profileMm: toMm(withImage.rightWorkProfile) },
+    { id: "app-geometrie", label: "Geglättet (Glättung 34)", profileMm: toMm(downstream.geometry) },
+    // Die Rib-Kante ist gespiegelt (Tiefe statt Radius); für die Rauheit spielt das keine Rolle.
+    { id: "rib", label: "Fertige Rib-Kante", profileMm: downstream.rib },
+  ].map((stage) => ({ ...stage, roughness: edgeRoughness(stage.profileMm) })) as EdgeStage[];
+
+  // Rauschen = Abstand jeder Stufe zur selben Stufe, gerechnet aus der Sollmaske.
+  let noiseMm: Record<EdgeStage["id"], number | null> | null = null;
+  if (input.truthDataUrl) {
+    const truthImage = await loadImage(input.truthDataUrl);
+    const truthMask = truthMaskFromImage(truthImage);
+    const truthResult = deriveNormalizedProfileFromMask(
+      truthMask.binaryMask,
+      truthMask.width,
+      truthMask.height,
+      options,
+    );
+    const truthDownstream = buildDownstream(truthResult.rightWorkProfile, truthResult.referenceBounds);
+    const truthStages: Record<EdgeStage["id"], Point[]> = {
+      maske: toMm(truthResult.rightWorkProfile),
+      "app-roh": toMm(truthResult.rightWorkProfile),
+      "app-geometrie": toMm(truthDownstream.geometry),
+      rib: truthDownstream.rib,
+    };
+    noiseMm = Object.fromEntries(
+      stages.map((stage) => [stage.id, polylineDeviation(stage.profileMm, truthStages[stage.id])?.mean ?? null]),
+    ) as Record<EdgeStage["id"], number | null>;
+  }
+
+  return {
+    maskSize: { width: mask.width, height: mask.height },
+    imageSize: { width: image.naturalWidth, height: image.naturalHeight },
+    mmPerPx,
+    stages,
+    noiseMm,
+  };
+};
+
 export const ribLab = {
+  traceEdgeStages,
   analyze,
   analyzeWithBrowserBiRefNet,
   prepareBiRefNetInput,

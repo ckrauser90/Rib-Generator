@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   edgeAlignment,
+  edgeRoughness,
   gradientMagnitude,
   maskIoU,
   maskVerticalExtent,
@@ -59,4 +60,19 @@ test("profileJitter separates smooth from zig-zag profiles", () => {
   const zigzag = smooth.map((point, index) => ({ ...point, x: point.x + (index % 2) * 2 }));
   expect(profileJitter(smooth)).toBe(0);
   expect(profileJitter(zigzag)).toBeCloseTo(4, 5);
+});
+
+test("edgeRoughness is near zero for a smooth curve and catches bumps", () => {
+  const smooth = Array.from({ length: 200 }, (_, index) => ({
+    x: 10 + 3 * Math.sin(index / 60),
+    y: index * 0.5,
+  }));
+  const bumpy = smooth.map((point, index) => ({ ...point, x: point.x + 0.15 * Math.sin(index / 2) }));
+
+  const clean = edgeRoughness(smooth)!;
+  const rough = edgeRoughness(bumpy)!;
+  expect(clean.wavinessRmsMm).toBeLessThan(0.02);
+  expect(clean.bumpsPer10Mm).toBe(0);
+  expect(rough.wavinessRmsMm).toBeGreaterThan(0.08);
+  expect(rough.bumpsPer10Mm).toBeGreaterThan(2);
 });

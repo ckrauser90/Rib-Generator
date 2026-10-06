@@ -162,3 +162,71 @@ export const profileJitter = (profile: Point[]) => {
   }
   return total / (sorted.length - 2);
 };
+
+/** Profil gleichmäßig in y abtasten (lineare Interpolation), damit Stufen vergleichbar sind. */
+export const resampleByY = (profile: Point[], step: number): Point[] => {
+  if (profile.length < 2) return profile.slice();
+  const sorted = profile.slice().sort((left, right) => left.y - right.y);
+  const result: Point[] = [];
+  let segment = 0;
+  for (let y = sorted[0].y; y <= sorted[sorted.length - 1].y; y += step) {
+    while (segment < sorted.length - 2 && sorted[segment + 1].y < y) segment += 1;
+    const start = sorted[segment];
+    const end = sorted[segment + 1];
+    const span = end.y - start.y;
+    const t = span === 0 ? 0 : (y - start.y) / span;
+    result.push({ x: start.x + (end.x - start.x) * t, y });
+  }
+  return result;
+};
+
+export type EdgeRoughness = {
+  /** Mittlere zweite Differenz bei 0,5 mm Abtastung (mm) – feine Zacken und Treppen. */
+  jitterMm: number;
+  /** RMS-Abstand zur Großform (gleitendes Mittel ±4 mm) – sichtbare Wellen. */
+  wavinessRmsMm: number;
+  /** Höcker pro 10 mm Kantenlänge: lokale Ausschläge > 0,03 mm gegenüber der Großform. */
+  bumpsPer10Mm: number;
+};
+
+/**
+ * Rauheit einer Kante in mm. Erwartet ein Profil, dessen Koordinaten schon in mm sind.
+ * Eine glatte Töpferkurve hat hier Werte nahe 0 und kaum Höcker.
+ */
+export const edgeRoughness = (profileMm: Point[]): EdgeRoughness | null => {
+  const step = 0.5;
+  const samples = resampleByY(profileMm, step);
+  if (samples.length < 20) return null;
+
+  let jitter = 0;
+  for (let index = 1; index < samples.length - 1; index += 1) {
+    jitter += Math.abs(samples[index + 1].x - 2 * samples[index].x + samples[index - 1].x);
+  }
+
+  const radius = Math.round(4 / step);
+  const residual = samples.map((point, index) => {
+    const from = Math.max(0, index - radius);
+    const to = Math.min(samples.length - 1, index + radius);
+    let sum = 0;
+    for (let inner = from; inner <= to; inner += 1) sum += samples[inner].x;
+    return point.x - sum / (to - from + 1);
+  });
+  // Die Enden haben kein symmetrisches Fenster und verfälschen die Großform – nicht mitzählen.
+  const core = residual.slice(radius, residual.length - radius);
+  if (core.length < 5) return null;
+  const rms = Math.sqrt(core.reduce((sum, value) => sum + value * value, 0) / core.length);
+
+  let bumps = 0;
+  for (let index = 1; index < core.length - 1; index += 1) {
+    const isPeak = core[index] > core[index - 1] && core[index] >= core[index + 1];
+    const isValley = core[index] < core[index - 1] && core[index] <= core[index + 1];
+    if ((isPeak || isValley) && Math.abs(core[index]) > 0.03) bumps += 1;
+  }
+  const lengthMm = core.length * step;
+
+  return {
+    jitterMm: jitter / (samples.length - 2),
+    wavinessRmsMm: rms,
+    bumpsPer10Mm: (bumps / lengthMm) * 10,
+  };
+};
