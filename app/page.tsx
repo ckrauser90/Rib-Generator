@@ -36,6 +36,14 @@ import { DEFAULT_SHRINKAGE_PERCENT, applyShrinkage } from "./shrinkage";
 import { DEFAULT_SHAPE_BOOST } from "./shape-boost";
 import { readModeFromSearch, type AppMode, type EasyStep } from "./easy-flow";
 import { useEasyAutoDetect, useEasyAutoSide } from "./easy-flow-effects";
+import {
+  DEFAULT_SEGMENTER,
+  SEGMENTER_OPTIONS,
+  readStoredSegmenter,
+  resolveSegmenterChoice,
+  writeStoredSegmenter,
+  type SegmenterKind,
+} from "./segmenter-choice";
 
 const DEFAULT_TOOL_WIDTH_MM = 65;
 
@@ -48,6 +56,11 @@ export default function Home() {
   const [correctionMode, setCorrectionMode] = useState(false);
   const [sideChosenByHand, setSideChosenByHand] = useState(false);
   const [resizeTick, setResizeTick] = useState(0);
+  const [segmenter, setSegmenter] = useState<SegmenterKind>(DEFAULT_SEGMENTER);
+  const changeSegmenter = useCallback((next: SegmenterKind) => {
+    setSegmenter(next);
+    writeStoredSegmenter(next);
+  }, []);
   const [sourceRaster, setSourceRaster] = useState<RasterSource | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [promptPoint, setPromptPoint] = useState<Point | null>(null);
@@ -270,6 +283,7 @@ export default function Home() {
     printFriendliness,
     promptPoint,
     resetDetectedGeometry,
+    segmenter,
     segmenterState,
     setSegmenting,
     setStatus,
@@ -384,6 +398,7 @@ export default function Home() {
     horizontalCorrectionDeg,
     printFriendliness,
     shapeBoost,
+    segmenter,
     shrinkagePercent,
     targetHeightMm: toolHeightMm,
     thicknessInput,
@@ -401,6 +416,7 @@ export default function Home() {
     onPrintFriendlinessChange: setPrintFriendliness,
     onReset: resetSelection,
     onShapeBoostChange: setShapeBoost,
+    onSegmenterChange: changeSegmenter,
     onShrinkageChange: setShrinkagePercent,
     onThicknessBlur: commitThicknessInput,
     onThicknessInputChange: setThicknessInput,
@@ -423,6 +439,7 @@ export default function Home() {
     mobileTab,
     printFriendliness,
     shapeBoost,
+    segmenter,
     shrinkagePercent,
     targetHeightMm: toolHeightMm,
     thicknessInput,
@@ -439,6 +456,7 @@ export default function Home() {
     onPrintFriendlinessChange: setPrintFriendliness,
     onReset: resetSelection,
     onShapeBoostChange: setShapeBoost,
+    onSegmenterChange: changeSegmenter,
     onShrinkageChange: setShrinkagePercent,
     onTabChange: setMobileTab,
     onThicknessBlur: commitThicknessInput,
@@ -483,6 +501,7 @@ export default function Home() {
   // ── Einfacher Ablauf ──
   useEffect(() => {
     setMode(readModeFromSearch(window.location.search));
+    setSegmenter(resolveSegmenterChoice(window.location.search, readStoredSegmenter()));
   }, []);
 
   // Neues Foto geladen: weiter zu Start/Ende, Seite wieder automatisch wählen.
@@ -585,6 +604,10 @@ export default function Home() {
           onHeightChange: setToolHeightMm,
           onShrinkageChange: setShrinkagePercent,
           onToggleSide: toggleEasySide,
+          segmenterNote:
+            segmenter === DEFAULT_SEGMENTER
+              ? null
+              : `Erkennung: ${SEGMENTER_OPTIONS.find((option) => option.id === segmenter)?.label ?? segmenter} – im Pro-Modus umstellbar.`,
         }}
         done={{
           bevelStrength,

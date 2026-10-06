@@ -35,6 +35,8 @@ export type ContourStepProps = {
   onHeightChange: (heightMm: number) => void;
   onShrinkageChange: (percent: number) => void;
   onToggleSide: () => void;
+  /** Hinweis, wenn nicht die Standard-Erkennung läuft (app/segmenter-choice.ts). */
+  segmenterNote: string | null;
 };
 
 export function ContourStep({
@@ -57,6 +59,7 @@ export function ContourStep({
   onHeightChange,
   onShrinkageChange,
   onToggleSide,
+  segmenterNote,
 }: ContourStepProps) {
   const [heightText, setHeightText] = useState(String(heightMm));
   useEffect(() => setHeightText(String(heightMm)), [heightMm]);
@@ -117,6 +120,8 @@ export function ContourStep({
 
       <div className={styles.controls}>
         {statusIsError && !segmenting && <p className={styles.errorNote}>{status}</p>}
+        {segmenting && segmenterNote && <p className={styles.note} role="status">{status}</p>}
+        {segmenterNote && <p className={styles.note} data-testid="easy-segmenter-note">{segmenterNote}</p>}
         <button
           type="button"
           className={styles.textButton}

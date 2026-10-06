@@ -12,3 +12,4 @@ tsconfig.tsbuildinfo
 .lab-models
 public/lab-assets
 reports/segmentation
+/out

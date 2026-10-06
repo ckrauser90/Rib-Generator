@@ -5,9 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:cloudflare": "node scripts/build-static.mjs",
     "start": "next start",
     "lint": "next lint",
-    "test:e2e": "playwright test tests/release-smoke.spec.ts tests/mobile-sheet.spec.ts tests/dimension-inputs.spec.ts tests/stl-content.spec.ts tests/shrinkage.spec.ts tests/shape-boost.spec.ts tests/easy-flow.spec.ts",
+    "test:e2e": "playwright test tests/release-smoke.spec.ts tests/mobile-sheet.spec.ts tests/dimension-inputs.spec.ts tests/stl-content.spec.ts tests/shrinkage.spec.ts tests/shape-boost.spec.ts tests/easy-flow.spec.ts tests/segmenter-switch.spec.ts",
     "test:unit": "playwright test -c playwright.unit.config.ts",
     "lab:models": "node scripts/lab-fetch-models.mjs",
     "lab:synthetic": "playwright test -c playwright.lab.config.ts generate-synthetic",

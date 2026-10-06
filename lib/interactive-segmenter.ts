@@ -21,7 +21,7 @@ type SegmenterModule = typeof import("@mediapipe/tasks-vision");
 let segmenterPromise: Promise<import("@mediapipe/tasks-vision").InteractiveSegmenter> | null = null;
 let segmenterInstance: import("@mediapipe/tasks-vision").InteractiveSegmenter | null = null;
 
-const isE2eMockEnabled = () => {
+export const isE2eMockEnabled = () => {
   if (typeof window === "undefined") {
     return false;
   }

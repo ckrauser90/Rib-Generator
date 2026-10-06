@@ -22,6 +22,7 @@ export const pageText = {
   segmenterLoadError: "MediaPipe konnte nicht geladen werden.",
   segmentationFailed: "Segmentierung fehlgeschlagen.",
   segmentationInProgress: "Kontur wird erkannt...",
+  birefnetRunning: "BiRefNet erkennt die Kontur … beim ersten Mal lädt das Modell (ca. 220 MB).",
   anchorDraftMoved:
     "Start und Ende als Entwurf verschoben. Übernehmen aktualisiert Rib-Profil, 3D und STL.",
   anchorsReset: "Start und Ende wieder automatisch gesetzt. Bitte erneut bestätigen.",

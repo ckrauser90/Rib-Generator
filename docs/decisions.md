@@ -197,3 +197,37 @@ Arbeit); den Pro-Modus entfernen (Formverstärkung, Fase usw. brauchen weiter Re
 an echten Henkeltassen prüfen (die Testfotos haben keinen Henkel).
 
 Bilder: `docs/easy-flow-mobil.png`, `docs/easy-flow-desktop.jpg`.
+
+## R-008 · 2026-10-06 · Erkennungs-Schalter: MediaPipe bleibt Standard, BiRefNet zum Testen
+
+**Entscheidung:** Im Pro-Modus gibt es „Erkennung: MediaPipe (Standard) / BiRefNet (Test)“,
+auch per Adresse (`?erkennung=birefnet`). Die Wahl bleibt im Browser gespeichert; der einfache
+Ablauf zeigt einen Hinweis, wenn nicht MediaPipe läuft. Beide liefern dasselbe Maskenformat,
+danach läuft dieselbe Kontur-Strecke (`app/segmentation-workflow.ts`).
+
+**Befund beim Einbau (gemessen):** Das BiRefNet-Modell aus dem Vergleichstest (lite, feste
+Eingabe 1024×1024) braucht mit onnxruntime-node **~6,9 GB Arbeitsspeicher** und 28 s auf der
+CPU. Im Browser bricht es ab (`Aborted()`), weil WASM höchstens 4 GB adressiert; am Handy ist
+es nicht lauffähig. Auf einem Rechner mit Grafikkarte (WebGPU) ist es denkbar, aber hier nicht
+prüfbar. Eine Eingabe von 512 rechnet dieses Modell nicht (feste Form). Modelladresse und
+Eingabegröße sind deshalb per Umgebungsvariable austauschbar (`docs/DEPLOY-CLOUDFLARE.md`),
+damit sich eine 512er- oder dynamische Fassung ohne Codeänderung testen lässt. Hugging Face ist
+aus der Entwicklungsumgebung gesperrt; eine solche Fassung ist noch nicht geprüft.
+
+**Folgerung:** R-002 bleibt: MediaPipe ist die Erkennung der App. Für Vergleiche an eigenen
+Fotos ist das Labor (`npm run lab:compare`, BiRefNet nativ) der verlässliche Weg.
+
+## R-009 · 2026-10-06 · Hosting: Cloudflare Worker mit statischen Dateien
+
+**Entscheidung:** Statischer Export (`npm run build:cloudflare` → `out/`), ausgeliefert vom Worker
+`rib-generator` (`wrangler.jsonc`), gebaut über Workers Builds aus GitHub. Produktion aus einem
+Branch, Previews mit eigener Adresse für alle anderen Branches. Anleitung: `docs/DEPLOY-CLOUDFLARE.md`.
+
+**Begründung:** Die App hat keinen Server-Teil; kostenlos; derselbe Weg wie im Webbaukasten
+(E-025), also eine Plattform für alles.
+
+**Verworfen:** Vercel (zweite Plattform), Cloudflare Pages (für neue Projekte nicht mehr der
+empfohlene Weg, Webbaukasten nutzt Workers), eigener Server.
+
+**Folgen:** Bezahlschranke (Monetarisierung) braucht später einen Server-Teil, z. B. denselben
+Worker mit Code für die STL-Ausgabe.

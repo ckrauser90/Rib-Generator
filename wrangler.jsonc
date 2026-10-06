@@ -1,0 +1,15 @@
+// Cloudflare Worker mit statischen Dateien (wie im Webbaukasten, E-025).
+// Der Build (`npm run build:cloudflare`) legt die fertige Seite nach `out/`; der Worker
+// liefert nur diese Dateien aus, eigenen Server-Code gibt es nicht.
+// Einrichtung und Vorschau-Links je Branch: docs/DEPLOY-CLOUDFLARE.md
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rib-generator",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./out",
+    "not_found_handling": "404-page"
+  },
+  "workers_dev": true,
+  "preview_urls": true
+}

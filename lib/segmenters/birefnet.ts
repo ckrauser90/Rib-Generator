@@ -10,7 +10,8 @@
 //   Node-Runner des Vergleichstests (tests/lab), der das Modell per
 //   onnxruntime-node ausführt.
 // - `segmentRasterWithBiRefNet` läuft im Browser über onnxruntime-web (WebGPU,
-//   sonst WASM) und wird bisher nur von der Laborseite genutzt.
+//   sonst WASM): auf der Laborseite und in der App, wenn BiRefNet gewählt ist
+//   (app/segmenter-choice.ts).
 //
 // Modell: BiRefNet lite (Swin-T, MIT-Lizenz), Eingabe 1×3×1024×1024 nach
 // ImageNet-Normierung, Ausgabe 1×1×1024×1024 als Logits.
@@ -32,8 +33,7 @@ export type MaskResult = {
  * CHW-Tensor des Modells. Das Seitenverhältnis wird dabei bewusst nicht
  * erhalten – BiRefNet wurde mit gestreckten Eingaben trainiert.
  */
-export const buildBiRefNetInput = (rgba: Uint8ClampedArray | Uint8Array) => {
-  const size = BIREFNET_INPUT_SIZE;
+export const buildBiRefNetInput = (rgba: Uint8ClampedArray | Uint8Array, size = BIREFNET_INPUT_SIZE) => {
   const plane = size * size;
   if (rgba.length !== plane * 4) {
     throw new Error(`BiRefNet erwartet ${size}×${size} RGBA-Pixel.`);
@@ -61,8 +61,8 @@ export const logitsToMask = (
   targetWidth: number,
   targetHeight: number,
   confidenceCutoff: number,
+  size = BIREFNET_INPUT_SIZE,
 ): MaskResult => {
-  const size = BIREFNET_INPUT_SIZE;
   if (logits.length !== size * size) {
     throw new Error("Unerwartete Größe der BiRefNet-Ausgabe.");
   }
@@ -107,23 +107,44 @@ export const logitsToMask = (
 
 type BrowserRunnerOptions = {
   modelUrl: string;
-  wasmRoot: string;
+  /** Ordner der onnxruntime-Laufzeit; ohne Angabe jsDelivr in der installierten Version. */
+  wasmRoot?: string;
+  /**
+   * Kantenlänge der Modell-Eingabe. Das Standardmodell erwartet fest 1024 und braucht
+   * dabei rund 7 GB Arbeitsspeicher (gemessen mit onnxruntime-node) – zu viel für WASM
+   * (max. 4 GB) und Handys. Eine 512er-Fassung braucht etwa ein Viertel.
+   */
+  inputSize?: number;
 };
 
-let sessionPromise: Promise<import("onnxruntime-web").InferenceSession> | null = null;
+type OrtModule = typeof import("onnxruntime-web");
+
+let sessionPromise: Promise<{ ort: OrtModule; session: import("onnxruntime-web").InferenceSession }> | null = null;
 let activeBackend: "webgpu" | "wasm" = "wasm";
 
 const loadSession = async ({ modelUrl, wasmRoot }: BrowserRunnerOptions) => {
   if (!sessionPromise) {
     sessionPromise = (async () => {
-      const ort = await import("onnxruntime-web/webgpu");
-      ort.env.wasm.wasmPaths = wasmRoot;
-      const hasWebGpu = typeof navigator !== "undefined" && "gpu" in navigator;
+      // `navigator.gpu` gibt es auch ohne nutzbare Grafikkarte; erst ein Adapter zählt.
+      const gpu = typeof navigator !== "undefined" ? (navigator as Navigator & { gpu?: { requestAdapter: () => Promise<unknown> } }).gpu : undefined;
+      const hasWebGpu = Boolean(gpu && (await gpu.requestAdapter().catch(() => null)));
       activeBackend = hasWebGpu ? "webgpu" : "wasm";
-      return ort.InferenceSession.create(modelUrl, {
+      // Ohne WebGPU die schlanke WASM-Laufzeit: Die WebGPU-Variante bringt eine größere
+      // (asyncify) Laufzeit mit, die auf der CPU nichts bringt und mehr Speicher braucht.
+      const ort: OrtModule = hasWebGpu ? await import("onnxruntime-web/webgpu") : await import("onnxruntime-web");
+      ort.env.wasm.wasmPaths =
+        wasmRoot ?? `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ort.env.versions.web ?? ort.env.versions.common}/dist/`;
+      const session = await ort.InferenceSession.create(modelUrl, {
         executionProviders: hasWebGpu ? ["webgpu", "wasm"] : ["wasm"],
+        graphOptimizationLevel: "all",
+        enableMemPattern: false,
       });
+      return { ort, session };
     })();
+    // Ein fehlgeschlagener Start soll beim nächsten Versuch neu laden dürfen.
+    sessionPromise.catch(() => {
+      sessionPromise = null;
+    });
   }
   return sessionPromise;
 };
@@ -140,25 +161,20 @@ export const segmentRasterWithBiRefNet = async (
   const height = raster instanceof HTMLImageElement ? raster.naturalHeight : raster.height;
 
   const canvas = document.createElement("canvas");
-  canvas.width = BIREFNET_INPUT_SIZE;
-  canvas.height = BIREFNET_INPUT_SIZE;
+  const size = options.inputSize ?? BIREFNET_INPUT_SIZE;
+  canvas.width = size;
+  canvas.height = size;
   const context = canvas.getContext("2d");
   if (!context) {
     throw new Error("Canvas für BiRefNet konnte nicht erstellt werden.");
   }
-  context.drawImage(raster, 0, 0, BIREFNET_INPUT_SIZE, BIREFNET_INPUT_SIZE);
-  const pixels = context.getImageData(0, 0, BIREFNET_INPUT_SIZE, BIREFNET_INPUT_SIZE).data;
+  context.drawImage(raster, 0, 0, size, size);
+  const pixels = context.getImageData(0, 0, size, size).data;
 
-  const session = await loadSession(options);
-  const ort = await import("onnxruntime-web/webgpu");
-  const input = new ort.Tensor("float32", buildBiRefNetInput(pixels), [
-    1,
-    3,
-    BIREFNET_INPUT_SIZE,
-    BIREFNET_INPUT_SIZE,
-  ]);
+  const { ort, session } = await loadSession(options);
+  const input = new ort.Tensor("float32", buildBiRefNetInput(pixels, size), [1, 3, size, size]);
   const output = await session.run({ [session.inputNames[0]]: input });
   const logits = (await output[session.outputNames[0]].getData()) as Float32Array;
 
-  return logitsToMask(logits, width, height, confidenceCutoff);
+  return logitsToMask(logits, width, height, confidenceCutoff, size);
 };

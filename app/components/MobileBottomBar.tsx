@@ -3,9 +3,11 @@
 import { ChangeEvent, useCallback, useEffect, useState } from "react";
 import styles from "../page.module.css";
 import { pageText } from "../page-copy";
+import { SegmenterControl } from "./SegmenterControl";
 import { ShrinkageControl } from "./ShrinkageControl";
 import { SliderControl } from "./SliderControl";
 import { SHAPE_BOOST_TOOLTIP, formatShapeBoost } from "../shape-boost";
+import type { SegmenterKind } from "../segmenter-choice";
 
 export type MobileTab = "foto" | "profil" | "3d";
 
@@ -23,6 +25,7 @@ export type MobileBottomBarProps = {
   printFriendliness: number;
   shapeBoost: number;
   shrinkagePercent: number;
+  segmenter: SegmenterKind;
   targetHeightMm: number;
   thicknessInput: string;
   widthInput: string;
@@ -37,6 +40,7 @@ export type MobileBottomBarProps = {
   onReset: () => void;
   onShapeBoostChange: (value: number) => void;
   onShrinkageChange: (percent: number) => void;
+  onSegmenterChange: (value: SegmenterKind) => void;
   onTabChange: (tab: MobileTab) => void;
   onThicknessBlur: (value: string) => void;
   onThicknessInputChange: (value: string) => void;
@@ -61,6 +65,7 @@ export function MobileBottomBar({
   printFriendliness,
   shapeBoost,
   shrinkagePercent,
+  segmenter,
   targetHeightMm,
   thicknessInput,
   widthInput,
@@ -75,6 +80,7 @@ export function MobileBottomBar({
   onReset,
   onShapeBoostChange,
   onShrinkageChange,
+  onSegmenterChange,
   onTabChange,
   onThicknessBlur,
   onThicknessInputChange,
@@ -283,6 +289,7 @@ export function MobileBottomBar({
               variant="mobile"
               onChange={onShrinkageChange}
             />
+            <SegmenterControl value={segmenter} variant="mobile" onChange={onSegmenterChange} />
             <button type="button" className={styles.mobileResetBtn} onClick={onReset}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path d="M3 12a9 9 0 109-9M3 12V6m0 6H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

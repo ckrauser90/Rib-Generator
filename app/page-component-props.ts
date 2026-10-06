@@ -5,6 +5,7 @@ import type { WorkProfileSide } from "../lib/contour";
 import type { DesktopRibbonProps } from "./components/DesktopRibbon";
 import type { MobileBottomBarProps } from "./components/MobileBottomBar";
 import type { PhotoPanelProps } from "./components/PhotoPanel";
+import type { SegmenterKind } from "./segmenter-choice";
 
 type SharedToolControlsOptions = {
   bevelStrength: number;
@@ -16,6 +17,7 @@ type SharedToolControlsOptions = {
   printFriendliness: number;
   shapeBoost: number;
   shrinkagePercent: number;
+  segmenter: SegmenterKind;
   targetHeightMm: number;
   thicknessInput: string;
   widthInput: string;
@@ -31,6 +33,7 @@ type SharedToolControlsOptions = {
   onReset: () => void;
   onShapeBoostChange: (value: number) => void;
   onShrinkageChange: (percent: number) => void;
+  onSegmenterChange: (value: SegmenterKind) => void;
   onThicknessBlur: (value: string) => void;
   onThicknessInputChange: (value: string) => void;
   onThicknessKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -81,6 +84,7 @@ export const buildDesktopRibbonProps = ({
   printFriendliness,
   shapeBoost,
   shrinkagePercent,
+  segmenter,
   targetHeightMm,
   thicknessInput,
   widthInput,
@@ -96,6 +100,7 @@ export const buildDesktopRibbonProps = ({
   onReset,
   onShapeBoostChange,
   onShrinkageChange,
+  onSegmenterChange,
   onThicknessBlur,
   onThicknessInputChange,
   onThicknessKeyDown,
@@ -112,6 +117,7 @@ export const buildDesktopRibbonProps = ({
   printFriendliness,
   shapeBoost,
   shrinkagePercent,
+  segmenter,
   targetHeightMm,
   thicknessInput,
   widthInput,
@@ -127,6 +133,7 @@ export const buildDesktopRibbonProps = ({
   onReset,
   onShapeBoostChange,
   onShrinkageChange,
+  onSegmenterChange,
   onThicknessBlur,
   onThicknessInputChange,
   onThicknessKeyDown,
@@ -147,6 +154,7 @@ export const buildMobileBottomBarProps = ({
   printFriendliness,
   shapeBoost,
   shrinkagePercent,
+  segmenter,
   targetHeightMm,
   thicknessInput,
   widthInput,
@@ -161,6 +169,7 @@ export const buildMobileBottomBarProps = ({
   onReset,
   onShapeBoostChange,
   onShrinkageChange,
+  onSegmenterChange,
   onThicknessBlur,
   onThicknessInputChange,
   onWidthBlur,
@@ -187,6 +196,7 @@ export const buildMobileBottomBarProps = ({
   printFriendliness,
   shapeBoost,
   shrinkagePercent,
+  segmenter,
   targetHeightMm,
   thicknessInput,
   widthInput,
@@ -201,6 +211,7 @@ export const buildMobileBottomBarProps = ({
   onReset,
   onShapeBoostChange,
   onShrinkageChange,
+  onSegmenterChange,
   onTabChange,
   onThicknessBlur,
   onThicknessInputChange,

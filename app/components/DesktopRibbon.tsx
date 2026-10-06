@@ -2,9 +2,11 @@
 
 import { ChangeEvent, KeyboardEvent, useEffect, useState } from "react";
 import styles from "../page.module.css";
+import { SegmenterControl } from "./SegmenterControl";
 import { ShrinkageControl } from "./ShrinkageControl";
 import { SliderControl } from "./SliderControl";
 import { SHAPE_BOOST_TOOLTIP, formatShapeBoost } from "../shape-boost";
+import type { SegmenterKind } from "../segmenter-choice";
 
 export type DesktopRibbonProps = {
   bevelStrength: number;
@@ -16,6 +18,7 @@ export type DesktopRibbonProps = {
   printFriendliness: number;
   shapeBoost: number;
   shrinkagePercent: number;
+  segmenter: SegmenterKind;
   targetHeightMm: number;
   thicknessInput: string;
   widthInput: string;
@@ -31,6 +34,7 @@ export type DesktopRibbonProps = {
   onReset: () => void;
   onShapeBoostChange: (value: number) => void;
   onShrinkageChange: (percent: number) => void;
+  onSegmenterChange: (value: SegmenterKind) => void;
   onThicknessBlur: (value: string) => void;
   onThicknessInputChange: (value: string) => void;
   onThicknessKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -49,6 +53,7 @@ export function DesktopRibbon({
   printFriendliness,
   shapeBoost,
   shrinkagePercent,
+  segmenter,
   targetHeightMm,
   thicknessInput,
   widthInput,
@@ -64,6 +69,7 @@ export function DesktopRibbon({
   onReset,
   onShapeBoostChange,
   onShrinkageChange,
+  onSegmenterChange,
   onThicknessBlur,
   onThicknessInputChange,
   onThicknessKeyDown,
@@ -155,6 +161,8 @@ export function DesktopRibbon({
         variant="desktop"
         onChange={onShrinkageChange}
       />
+
+      <SegmenterControl value={segmenter} variant="desktop" onChange={onSegmenterChange} />
 
       <div className={styles.ribbonDivider} />
 

@@ -1,0 +1,8 @@
+# Sicherheits-Header für Cloudflare (Worker mit statischen Dateien liest diese Datei).
+# Bewusst ohne CSP: Erkennung und Modelle kommen von jsDelivr, Google und Hugging Face;
+# eine CSP folgt, wenn die Quellen feststehen.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), payment=()
+  X-Frame-Options: DENY

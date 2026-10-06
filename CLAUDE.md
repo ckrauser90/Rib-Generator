@@ -97,6 +97,8 @@ Use these before/after meaningful changes:
 - `cmd /c "npm run test:unit"`
 - `cmd /c "npm run test:e2e"`
 
+Cloudflare (static export to `out/`, see `docs/DEPLOY-CLOUDFLARE.md`): `cmd /c "npm run build:cloudflare"`
+
 Coverage exists for:
 
 - release smoke flow

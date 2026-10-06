@@ -14,8 +14,8 @@ import { runSegmentationWorkflow } from "./segmentation-workflow";
 import { buildPreparedToolGeometryState } from "./tool-geometry-workflow";
 import type { ToolGeometryState } from "./tool-geometry";
 import type { WorkProfileSide } from "../lib/contour";
+import type { SegmenterKind } from "./segmenter-choice";
 
-const DEFAULT_MASK_THRESHOLD = 0.18;
 const DEFAULT_MASK_SMOOTH_PASSES = 1;
 const DEFAULT_CROP_BOTTOM_RATIO = 0.04;
 
@@ -47,6 +47,7 @@ type UseSegmentationEffectOptions = {
   printFriendliness: number;
   promptPoint: Point | null;
   resetDetectedGeometry: () => void;
+  segmenter: SegmenterKind;
   segmenterState: "loading" | "ready" | "error";
   setSegmenting: (nextValue: boolean) => void;
   setStatus: (nextStatus: string) => void;
@@ -172,6 +173,7 @@ export const useSegmentationEffect = ({
   printFriendliness,
   promptPoint,
   resetDetectedGeometry,
+  segmenter,
   segmenterState,
   setSegmenting,
   setStatus,
@@ -193,6 +195,7 @@ export const useSegmentationEffect = ({
     const runSegmentation = async () => {
       try {
         setSegmenting(true);
+        if (segmenter === "birefnet") setStatus(pageText.birefnetRunning);
         const result = await runSegmentationWorkflow({
           anchorEditMode,
           anchorsConfirmedForSide,
@@ -201,9 +204,9 @@ export const useSegmentationEffect = ({
           curveSmoothing,
           displayedAnchorOverride,
           maskSmoothPasses: DEFAULT_MASK_SMOOTH_PASSES,
-          maskThreshold: DEFAULT_MASK_THRESHOLD,
           printFriendliness,
           promptPoint,
+          segmenter,
           sourceRaster,
           toolHeightMm,
           toolWidthMm,
@@ -234,7 +237,7 @@ export const useSegmentationEffect = ({
     return () => {
       cancelled = true;
     };
-  }, [promptPoint, segmenterState, sourceRaster]);
+  }, [promptPoint, segmenter, segmenterState, sourceRaster]);
 };
 
 export const useToolGeometryEffect = ({

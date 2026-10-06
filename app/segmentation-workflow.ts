@@ -1,5 +1,6 @@
 import type { Point, WorkProfileSide } from "../lib/contour";
-import { segmentRasterFromPoint } from "../lib/interactive-segmenter";
+import { isE2eMockEnabled, segmentRasterFromPoint } from "../lib/interactive-segmenter";
+import { segmentRasterWithBiRefNet } from "../lib/segmenters/birefnet";
 import { deriveNormalizedProfileFromMask } from "../lib/profile-normalization";
 import { getRasterSize, type RasterSource } from "../lib/perspective";
 import { getContourReadyStatus } from "./page-copy";
@@ -9,6 +10,7 @@ import {
 } from "./tool-geometry";
 import { buildPreparedToolGeometryState } from "./tool-geometry-workflow";
 import type { ManualAnchorOverride } from "./anchor-utils";
+import { BIREFNET_INPUT_SIZE_SETTING, BIREFNET_MODEL_URL, MASK_THRESHOLD, type SegmenterKind } from "./segmenter-choice";
 
 type RunSegmentationWorkflowOptions = {
   anchorEditMode: boolean;
@@ -17,8 +19,8 @@ type RunSegmentationWorkflowOptions = {
   currentAnchorOverride: ManualAnchorOverride | null;
   displayedAnchorOverride: ManualAnchorOverride | null;
   maskSmoothPasses: number;
-  maskThreshold: number;
   printFriendliness: number;
+  segmenter: SegmenterKind;
   promptPoint: Point;
   sourceRaster: RasterSource;
   toolHeightMm: number;
@@ -71,8 +73,8 @@ export const runSegmentationWorkflow = async ({
   curveSmoothing,
   displayedAnchorOverride,
   maskSmoothPasses,
-  maskThreshold,
   printFriendliness,
+  segmenter,
   promptPoint,
   sourceRaster,
   toolHeightMm,
@@ -91,11 +93,25 @@ export const runSegmentationWorkflow = async ({
 
   workerContext.drawImage(sourceRaster, 0, 0, width, height);
   const sourceImageData = workerContext.getImageData(0, 0, width, height);
-  const segmentationResult = await segmentRasterFromPoint(
-    workerCanvas,
-    { x: promptPoint.x / width, y: promptPoint.y / height },
-    maskThreshold,
-  );
+  const maskThreshold = MASK_THRESHOLD[segmenter];
+  // BiRefNet braucht keinen Klickpunkt; der Punkt wählt danach nur das Gefäß unter
+  // mehreren freigestellten Teilen aus (seedPoint der Kontur-Strecke).
+  const segmentationResult =
+    segmenter === "birefnet" && !isE2eMockEnabled()
+      ? await segmentRasterWithBiRefNet(workerCanvas, maskThreshold, {
+          inputSize: BIREFNET_INPUT_SIZE_SETTING,
+          modelUrl: BIREFNET_MODEL_URL,
+        }).catch(
+          (error: unknown) => {
+            const reason = error instanceof Error ? error.message : String(error);
+            throw new Error(`BiRefNet konnte nicht laufen (${reason}). Im Pro-Modus auf MediaPipe zurückstellen.`);
+          },
+        )
+      : await segmentRasterFromPoint(
+          workerCanvas,
+          { x: promptPoint.x / width, y: promptPoint.y / height },
+          maskThreshold,
+        );
 
   const contourSeedPoint = {
     x: (promptPoint.x / width) * segmentationResult.width,
