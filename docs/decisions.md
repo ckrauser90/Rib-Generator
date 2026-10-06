@@ -168,3 +168,32 @@ auf 0,56 mm.
 
 **Verworfen:** automatische Verstärkung (zu wenig Messdaten, verletzt „konservativ als
 Standard“); Verstärkung aller Wölbungen ohne Kerbbezug (würde auch glatte Bauchformen verändern).
+
+## R-007 · 2026-10-06 · Easy Flow umgesetzt, bisherige Oberfläche wird Pro-Modus
+
+**Entscheidung:** Die App startet im einfachen Ablauf (R-001): **Foto → Start/Ende → Fertig**.
+Die bisherige Oberfläche bleibt vollständig erhalten und heißt Pro-Modus (`?modus=pro`, Knopf
+„Pro-Modus“ oben rechts bzw. im dritten Schritt; zurück über „Einfacher Modus“/„Einfach“).
+Beide Modi arbeiten auf demselben Zustand in `app/page.tsx`: Ein Wechsel verliert weder Foto
+noch Kontur, Start/Ende oder Maße.
+
+- **Schritt 1:** „Foto aufnehmen“ zeigt zuerst die Foto-Tipps (abwählbar, im Browser
+  gespeichert) und öffnet dann die Kamera; „Aus Galerie wählen“ und Ziehen aufs Feld gehen direkt.
+- **Schritt 2:** Erkennung ohne Klick ab der Bildmitte; Seite ohne Henkel automatisch
+  (`suggestWorkProfileSide` in `app/easy-flow.ts`), „Andere Seite“ schaltet um. Start/Ende
+  ziehen mit Lupe (zur Bildmitte versetzt); der gewählte Abschnitt ist grün hervorgehoben.
+  „Falsch erkannt? Tippe einmal mitten ins Gefäß.“ setzt den Klickpunkt neu. Höhe des
+  gebrannten Gefäßes und Schwindung stehen hier.
+- **Schritt 3:** 3D-Vorschau, Höhe/Breite/Dicke, STL-Download, Weg in den Pro-Modus.
+
+**Begründung:** Weniger Entscheidungen für Töpfer; die Regler bleiben für Fortgeschrittene
+erreichbar. Kein zweiter Geometrie-Weg: Vorschau, 3D und STL entstehen in beiden Modi aus
+denselben Helfern (Leitplanke aus CLAUDE.md).
+
+**Verworfen:** eigener Zustand für den einfachen Ablauf (zwei Wahrheiten, Wechsel verliert
+Arbeit); den Pro-Modus entfernen (Formverstärkung, Fase usw. brauchen weiter Regler).
+
+**Offen:** Pro-Modus als Bezahlfunktion (Monetarisierung, `docs/EASY-FLOW-PLAN.md`), Seitenwahl
+an echten Henkeltassen prüfen (die Testfotos haben keinen Henkel).
+
+Bilder: `docs/easy-flow-mobil.png`, `docs/easy-flow-desktop.jpg`.

@@ -112,7 +112,8 @@ const drawMagnifier = (
 
   const lensCenterX = Math.min(
     canvasWidth - radius - margin,
-    Math.max(radius + margin, focusCanvasX + 78),
+    // Zur Bildmitte hin versetzt: Dort liegt das Gefäß, nicht die Bedienknöpfe am Rand.
+    Math.max(radius + margin, focusCanvasX + (focusCanvasX > canvasWidth / 2 ? -78 : 78)),
   );
   const lensCenterY = Math.min(
     canvasHeight - radius - margin,
@@ -222,11 +223,20 @@ export const drawPreview = (
     : 0;
   const width = fitScale > 0 ? Math.max(1, Math.round(imageWidth * fitScale)) : Math.max(1, parentWidth);
   const height = fitScale > 0 ? Math.max(1, Math.round(imageHeight * fitScale)) : Math.max(220, Math.round(width / ratio));
-  canvas.width = width;
-  canvas.height = height;
+  // Eingepasst (einfacher Ablauf) in voller Pixeldichte zeichnen, sonst wirkt das Foto
+  // am Telefon unscharf. Gezeichnet wird weiter in CSS-Pixeln; die Umrechnung von
+  // Fingerpositionen (anchor-utils.ts) arbeitet mit Verhältnissen und bleibt gleich.
+  const pixelRatio = fitScale > 0 ? Math.min(3, Math.max(1, window.devicePixelRatio || 1)) : 1;
+  canvas.width = Math.round(width * pixelRatio);
+  canvas.height = Math.round(height * pixelRatio);
+  if (fitScale > 0) {
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+  }
 
   const context = canvas.getContext("2d");
   if (!context) return;
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
 
   context.clearRect(0, 0, width, height);
   context.drawImage(image, 0, 0, width, height);
@@ -272,12 +282,12 @@ export const drawPreview = (
     };
     context.lineCap = "round";
     context.lineJoin = "round";
-    context.strokeStyle = "rgba(250, 248, 245, 0.75)";
-    context.lineWidth = 7;
+    context.strokeStyle = "rgba(250, 248, 245, 0.85)";
+    context.lineWidth = 9;
     traceSegment();
     context.stroke();
     context.strokeStyle = "#5C6E52";
-    context.lineWidth = 3.6;
+    context.lineWidth = 5;
     traceSegment();
     context.stroke();
   }

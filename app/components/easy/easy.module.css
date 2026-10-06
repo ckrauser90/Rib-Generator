@@ -220,6 +220,10 @@
 }
 
 .canvas[data-dragging] { cursor: grabbing; }
+
+/* Beim Ziehen gehört der Platz der Lupe; Hinweise und Knopf treten zurück. */
+.canvasFrame:has(.canvas[data-dragging]) .chip,
+.canvasFrame:has(.canvas[data-dragging]) .overlayButton { opacity: 0; pointer-events: none; }
 .canvas[data-correction] { cursor: crosshair; }
 
 .chip,
@@ -328,7 +332,7 @@
 }
 
 .tiles dt { font-size: 12px; color: var(--easy-muted); }
-.tiles dd { margin: 0; font-size: 17px; font-weight: 600; }
+.tiles dd { margin: 0; font-size: 16px; font-weight: 600; white-space: nowrap; }
 
 .proCard {
   border-radius: 16px;
@@ -420,6 +424,14 @@
 .checkboxRow { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; font-size: 14px; color: var(--easy-muted); }
 .checkboxRow input { width: 18px; height: 18px; accent-color: var(--easy-primary); }
 
+/* Am Telefon bleibt der Hauptknopf von Schritt 2 sichtbar, auch wenn die Höhe darunter liegt. */
+.stickyAction {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+  box-shadow: 0 10px 24px rgba(62, 56, 50, 0.18);
+}
+
 /* ── Schreibtisch ── */
 @media (min-width: 60rem) {
   .easy { max-width: 72rem; padding: 24px 40px 40px; gap: 24px; }
@@ -443,4 +455,5 @@
   .sheetLayer { align-items: center; }
   .sheet { border-radius: 28px; }
   .sheetHandle { display: none; }
+  .stickyAction { position: static; box-shadow: none; }
 }

@@ -1,6 +1,6 @@
 # Easy Flow – Entscheidungen und offene Punkte
 
-Stand: 2026-10-05
+Stand: 2026-10-06 – **umgesetzt**, siehe `docs/decisions.md` R-007
 
 Design-Canvas mit allen Entwürfen: https://claude.ai/artifact/KsnrMyon2mTQK5ihqjLqMM
 
@@ -22,7 +22,7 @@ Design-Canvas mit allen Entwürfen: https://claude.ai/artifact/KsnrMyon2mTQK5ihq
 1. **Vergleichstest Segmentierung zuerst:** BiRefNet vs. MediaPipe `magic_touch` auf den
    Fotos in `tests/fixtures`, Konturen übereinandergelegt. Danach mit echten Daten entscheiden.
 2. Projekt-Fundament auf Baukasten-Niveau (CI, Deployment, Sicherheit) – Brainstorming läuft.
-3. Easy Flow (Variante A + Lupe) umsetzen.
+3. ~~Easy Flow (Variante A + Lupe) umsetzen.~~ Erledigt 2026-10-06 (R-007).
 
 ## Vergleichstest Segmentierung – Zwischenstand (Satz A, synthetisch)
 

@@ -32,7 +32,8 @@ Skip [CLAUDE.md](../CLAUDE.md) and [app/page.tsx](../app/page.tsx) unless the ta
 ## File Map (grep first, read only if needed)
 
 UI entry points:
-- `app/page.tsx` — thin orchestrator, mostly wiring
+- `app/page.tsx` — thin orchestrator, mostly wiring; renders the easy flow (default) or the pro UI (`?modus=pro`)
+- `app/components/easy/*`, `app/easy-flow.ts`, `app/easy-flow-effects.ts` — easy flow (Foto → Start/Ende → Fertig)
 - `app/components/PhotoPanel.tsx` — upload canvas, anchors
 - `app/components/MobileBottomBar.tsx` — mobile tabs + sheet
 - `app/components/DesktopRibbon.tsx` — desktop controls

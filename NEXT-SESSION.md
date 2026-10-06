@@ -1,6 +1,13 @@
 # Next Session
 
-Last updated: 2026-04-14
+Last updated: 2026-10-06
+
+## Stand 2026-10-06 (Branch `claude/relaxed-dijkstra-tgjeh9`)
+
+- Easy Flow ist Standard, bisherige Oberfläche = Pro-Modus (`docs/decisions.md` R-007)
+- Rib-Kante: Glättung entlang der Bogenlänge, Kerbenschutz, Schwindung, Formverstärkung (R-003 … R-006)
+- Labor: `npm run lab:compare`, `obj-compare` (Vergleich mit Original-Rib)
+- Nächster Schritt laut Nutzer: verschiedene Formen drucken, damit testen, dann Formverstärkung/Schwindung kalibrieren
 
 ## Current Stable Baseline
 

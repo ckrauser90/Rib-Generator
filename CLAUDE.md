@@ -2,7 +2,7 @@
 
 Project guide for Claude Code and future agent sessions.
 
-Last updated: 2026-04-14
+Last updated: 2026-10-06
 
 ## Start Here
 
@@ -16,14 +16,15 @@ Do not start by reading the geometry modules unless the task is explicitly geome
 
 This repo is a Next.js app that turns a cup / mug side profile from a photo into a printable rib tool:
 
-1. Upload photo
-2. Click inside the vessel
-3. Segment object with MediaPipe
-4. Choose left or right side
-5. Adjust `Start` / `Ende` anchors
-6. Tune rib parameters
-7. Preview 2D / 3D
-8. Export STL
+Default (easy flow, `app/components/easy/*`):
+
+1. Photo (tips sheet before camera)
+2. Contour detected automatically from the image centre, side without handle preselected; drag `Start` / `Ende` (loupe), set fired height and shrinkage
+3. 3D preview and STL export
+
+Pro mode (`?modus=pro`, the previous UI): click inside the vessel, choose side, adjust anchors,
+tune smoothing / print optimisation / bevel / shape boost / dimensions, preview 2D / 3D, export STL.
+Both modes share one state in `app/page.tsx`.
 
 The goal is not generative cleanup or fake-perfect geometry. The goal is a reliable, conservative working edge for a real ceramic tool.
 
@@ -82,6 +83,7 @@ Read only when needed:
 
 ## Important Behavior
 
+- Easy flow is the default; existing e2e specs open `/?e2eMockSegmenter=1&modus=pro`.
 - MediaPipe is reset between image uploads on purpose.
 - Mobile uses tabs and a bottom sheet and should be treated as its own UX mode.
 - Mobile anchor drag uses rendered-image coordinates, not the full letterboxed canvas box.

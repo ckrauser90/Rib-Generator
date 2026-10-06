@@ -164,7 +164,7 @@ export function ContourStep({
 
         <button
           type="button"
-          className={styles.primaryButton}
+          className={`${styles.primaryButton} ${styles.stickyAction}`}
           disabled={!contourReady || segmenting}
           onClick={onCreateRib}
           data-testid="easy-create-button"
