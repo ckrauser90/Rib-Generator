@@ -142,18 +142,29 @@ Vertiefung ist durch die zulässige Rib-Tiefe begrenzt. Der Wert läuft über di
 sie gedreht wurden. Standard bleibt aus, weil der Rohprofil-Grundsatz gilt (Leitplanke: konservativ,
 Hilfen nur optional) und die Messbasis eine Rib mit vier Tassen ist.
 
-**Messung (Labor `obj-compare`, Bogentiefe Median, Original-Rib 3,97 mm):**
+**Messung (Labor `obj-compare`, Bogentiefe Median, Original-Rib 3,97 mm; Bild:
+`docs/formverstaerkung-vergleich.png`):**
 
 | Einstellung | Bogentiefe (8 Tassenseiten) | Mittlere Abweichung Ø, Summe 8 Seiten |
 |---|---|---|
 | Standard (1,0×) | 0,8–2,5 mm | 5,8 mm |
-| 1,6× | 1,8–4,3 mm | 5,6 mm |
-| 2,0× | 2,6–5,5 mm | 7,1 mm |
+| 1,6× | 1,9–4,3 mm | 5,3 mm |
+| 2,0× | 2,1–5,5 mm | 6,6 mm |
 
-1,6× trifft die Bogentiefe am besten und verbessert die Gesamtabweichung leicht; 2,0× schießt
-über. Die gemessene Tiefe wächst etwas stärker als der Faktor (vermutlich, weil die Messung die
-Kerben auf der fertigen Kante neu sucht). Im Tooltip steht daher 1,6× als
-Richtwert.
+1,6× trifft die Bogentiefe am besten und verringert die Gesamtabweichung; 2,0× schießt
+über. Die gemessene Tiefe wächst etwas stärker als der Faktor: Verstärkt wird gegen die
+Verbindungslinie der beiden Spitzen, gemessen ab der tieferen Spitze. Im Tooltip steht
+1,6× als Richtwert.
+
+**Korrekturen nach dem Bildvergleich:** Die erste Fassung nahm die Kerbpunkte der
+ungeglätteten Kante als Bezug. Sie lagen bis zu ~1 mm neben der geglätteten Kurve,
+dadurch wurden auch die Spitzen um bis zu 0,8 mm verschoben. Verpasste die
+Kerbenerkennung eine flache Zwischenkerbe, wurden zwei Bögen als einer behandelt und um
+bis zu 5,6 mm vertieft. Jetzt gilt: Bezug sind die Hochpunkte der geglätteten Kante,
+jeder deutliche Hochpunkt (≥ 0,3 mm) zwischen erster und letzter Kerbe teilt einen
+Bogen, und Abschnitte mit schräger Bezugslinie (> ~14°, Übergang in Fuß oder Lippe)
+bleiben unverändert. Bei tasse-4 rechts sank die Abweichung dadurch bei 1,6× von 0,81
+auf 0,56 mm.
 
 **Verworfen:** automatische Verstärkung (zu wenig Messdaten, verletzt „konservativ als
 Standard“); Verstärkung aller Wölbungen ohne Kerbbezug (würde auch glatte Bauchformen verändern).

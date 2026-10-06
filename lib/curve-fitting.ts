@@ -305,9 +305,17 @@ export const smoothCurvePreservingNotches = (
 
 /**
  * Formverstärkung: vertieft die Bögen zwischen benachbarten Kerben um `factor`.
- * Die Kerbenspitzen bleiben, wo sie sind; gemessen wird die Tiefe gegenüber der
- * Geraden zwischen zwei Kerben. Abschnitte vor der ersten und nach der letzten
- * Kerbe bleiben unverändert, ebenso Kanten ohne Kerben.
+ * Gemessen wird die Tiefe gegenüber der Geraden zwischen zwei Hochpunkten der Kante.
+ * Abschnitte vor der ersten und nach der letzten Kerbe bleiben unverändert, ebenso
+ * Kanten ohne Kerben und alles, was über diese Gerade hinausragt.
+ *
+ * Die Hochpunkte werden auf `points` selbst gesucht, nicht an den übergebenen Kerben:
+ * Die Kerben stammen aus der ungeglätteten Kante und liegen bis zu ~1 mm daneben, dann
+ * würde auch die Spitze „vertieft“. Zwischen erster und letzter Kerbe zählt außerdem
+ * jeder deutliche Hochpunkt (`minTipProminenceMm`) als Spitze – auch einer, den die
+ * strengere Kerbenerkennung verpasst hat. Sonst würden zwei Bögen als ein großer
+ * behandelt und viel zu tief. Abschnitte mit schräger Bezugslinie (Übergang in Fuß
+ * oder Lippe) bleiben ebenfalls unverändert.
  *
  * Hintergrund (docs/decisions.md, R-005): Gebrannte Tassen zeigen nur etwa die halbe
  * Bogentiefe der Rib, mit der sie gedreht wurden. Wer eine Tasse aus dem Foto
@@ -321,17 +329,62 @@ export const deepenArcsBetweenNotches = (
   notches: Point[],
   factor: number,
   minX = Number.NEGATIVE_INFINITY,
+  { snapMm = 1.5, minTipProminenceMm = 0.3, prominenceWindowMm = 6, maxChordSlope = 0.25 } = {},
 ) => {
-  if (factor === 1 || notches.length < 2) return points.slice();
-  const notchYs = notches.map((notch) => notch.y).sort((a, b) => a - b);
-  return points.map((point) => {
-    const segment = notchYs.findIndex((y, index) => index < notchYs.length - 1 && point.y >= y && point.y <= notchYs[index + 1]);
-    if (segment < 0) return point;
-    const top = notches.find((notch) => notch.y === notchYs[segment])!;
-    const bottom = notches.find((notch) => notch.y === notchYs[segment + 1])!;
-    const t = bottom.y === top.y ? 0 : (point.y - top.y) / (bottom.y - top.y);
-    const baselineX = top.x + (bottom.x - top.x) * t;
-    const depth = baselineX - point.x;
-    return { x: Math.max(minX, baselineX - depth * factor), y: point.y };
-  });
+  if (factor === 1 || notches.length < 2 || points.length < 3) return points.slice();
+
+  const indexRange = (centerY: number, radius: number) => {
+    let from = 0;
+    while (from < points.length - 1 && points[from].y < centerY - radius) from += 1;
+    let to = from;
+    while (to < points.length - 1 && points[to + 1].y <= centerY + radius) to += 1;
+    return [from, to] as const;
+  };
+  const argMaxX = (from: number, to: number) => {
+    let best = from;
+    for (let index = from + 1; index <= to; index += 1) if (points[index].x > points[best].x) best = index;
+    return best;
+  };
+  const minXBetween = (from: number, to: number) => {
+    let min = Number.POSITIVE_INFINITY;
+    for (let index = from; index <= to; index += 1) min = Math.min(min, points[index].x);
+    return min;
+  };
+
+  // Kerben auf den Hochpunkt der Kante in ihrer Nähe setzen.
+  const notchTips = notches.map((notch) => argMaxX(...indexRange(notch.y, snapMm)));
+  const first = Math.min(...notchTips);
+  const last = Math.max(...notchTips);
+
+  // Weitere deutliche Hochpunkte dazwischen: Maximum in ±snapMm und auf beiden Seiten
+  // innerhalb des Fensters um mindestens minTipProminenceMm höher als die Kante.
+  const tips = new Set(notchTips);
+  for (let index = first + 1; index < last; index += 1) {
+    const [from, to] = indexRange(points[index].y, snapMm);
+    if (argMaxX(from, to) !== index) continue;
+    const [windowFrom, windowTo] = indexRange(points[index].y, prominenceWindowMm);
+    const x = points[index].x;
+    if (x - minXBetween(windowFrom, index) >= minTipProminenceMm && x - minXBetween(index, windowTo) >= minTipProminenceMm) {
+      tips.add(index);
+    }
+  }
+  const ordered = [...tips].sort((left, right) => left - right);
+
+  const result = points.slice();
+  for (let segment = 0; segment < ordered.length - 1; segment += 1) {
+    const top = points[ordered[segment]];
+    const bottom = points[ordered[segment + 1]];
+    // Schräge Bezugslinie (> ~14°): Übergang in Fuß oder Lippe, kein Bogen zwischen zwei
+    // Wölbungen. Dort würde die waagerecht gemessene Tiefe den Übergang stark verzerren.
+    if (Math.abs(bottom.x - top.x) > maxChordSlope * Math.abs(bottom.y - top.y)) continue;
+    for (let index = ordered[segment] + 1; index < ordered[segment + 1]; index += 1) {
+      const point = points[index];
+      const t = bottom.y === top.y ? 0 : (point.y - top.y) / (bottom.y - top.y);
+      const baselineX = top.x + (bottom.x - top.x) * t;
+      const depth = baselineX - point.x;
+      if (depth <= 0) continue;
+      result[index] = { x: Math.max(minX, baselineX - depth * factor), y: point.y };
+    }
+  }
+  return result;
 };

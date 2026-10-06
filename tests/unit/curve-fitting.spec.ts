@@ -182,6 +182,41 @@ test("deepenArcsBetweenNotches is a no-op without notches or with factor 1", () 
   expect(deepenArcsBetweenNotches(points, [{ x: 1, y: 0 }, { x: 2, y: 1 }], 1)).toEqual(points);
 });
 
+test("deepenArcsBetweenNotches keeps the real tips even if notch points lie beside the curve", () => {
+  const points = Array.from({ length: 1000 }, (_, index) => ({ x: scallopTruth(index * 0.1), y: index * 0.1 }));
+  // Kerben aus der ungeglätteten Kante: leicht versetzt und 1 mm zu weit außen.
+  const notches = notchYs.map((y) => ({ x: scallopTruth(y) + 1, y: y + 0.4 }));
+  const deepened = deepenArcsBetweenNotches(points, notches, 2);
+  for (const y of notchYs) {
+    const index = Math.round(y * 10);
+    expect(deepened[index].x).toBeCloseTo(points[index].x, 6);
+  }
+  // Bogenmitte: Tiefe gegenüber den echten Spitzen verdoppelt.
+  expect(scallopTruth(20) - deepened[300].x).toBeCloseTo(2 * (scallopTruth(20) - points[300].x), 3);
+});
+
+test("deepenArcsBetweenNotches splits at tips the notch detection missed", () => {
+  const points = Array.from({ length: 1000 }, (_, index) => ({ x: scallopTruth(index * 0.1), y: index * 0.1 }));
+  // Nur äußere Kerben bekannt; die Spitzen bei 40 und 60 hat die Erkennung verpasst.
+  const notches = [20, 80].map((y) => ({ x: scallopTruth(y), y }));
+  const deepened = deepenArcsBetweenNotches(points, notches, 2);
+  expect(deepened[400].x).toBeCloseTo(points[400].x, 6);
+  expect(deepened[600].x).toBeCloseTo(points[600].x, 6);
+  for (const index of [300, 500, 700]) {
+    expect(scallopTruth(20) - deepened[index].x).toBeCloseTo(2 * (scallopTruth(20) - points[index].x), 3);
+  }
+});
+
+test("deepenArcsBetweenNotches leaves steep transitions like a foot unchanged", () => {
+  // Bogen zwischen einer Spitze bei x = 10 und dem Fuß bei x = 20, 15 mm tiefer.
+  const points = Array.from({ length: 151 }, (_, index) => {
+    const y = index * 0.1;
+    return { x: 10 + (10 * y) / 15 - Math.sin((y / 15) * Math.PI) * 2, y };
+  });
+  const notches = [points[0], points[150]];
+  expect(deepenArcsBetweenNotches(points, notches, 2)).toEqual(points);
+});
+
 test("deepenArcsBetweenNotches respects the material limit", () => {
   const points = Array.from({ length: 1000 }, (_, index) => ({ x: scallopTruth(index * 0.1), y: index * 0.1 }));
   const notches = notchYs.map((y) => ({ x: scallopTruth(y), y }));
