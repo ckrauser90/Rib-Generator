@@ -5,6 +5,7 @@ import styles from "../page.module.css";
 import { pageText } from "../page-copy";
 import { ShrinkageControl } from "./ShrinkageControl";
 import { SliderControl } from "./SliderControl";
+import { SHAPE_BOOST_TOOLTIP, formatShapeBoost } from "../shape-boost";
 
 export type MobileTab = "foto" | "profil" | "3d";
 
@@ -20,6 +21,7 @@ export type MobileBottomBarProps = {
   mobileSheetOpen: boolean;
   mobileTab: MobileTab;
   printFriendliness: number;
+  shapeBoost: number;
   shrinkagePercent: number;
   targetHeightMm: number;
   thicknessInput: string;
@@ -33,6 +35,7 @@ export type MobileBottomBarProps = {
   onHorizontalCorrectionChange: (value: number) => void;
   onPrintFriendlinessChange: (value: number) => void;
   onReset: () => void;
+  onShapeBoostChange: (value: number) => void;
   onShrinkageChange: (percent: number) => void;
   onTabChange: (tab: MobileTab) => void;
   onThicknessBlur: (value: string) => void;
@@ -56,6 +59,7 @@ export function MobileBottomBar({
   mobileSheetOpen,
   mobileTab,
   printFriendliness,
+  shapeBoost,
   shrinkagePercent,
   targetHeightMm,
   thicknessInput,
@@ -69,6 +73,7 @@ export function MobileBottomBar({
   onHorizontalCorrectionChange,
   onPrintFriendlinessChange,
   onReset,
+  onShapeBoostChange,
   onShrinkageChange,
   onTabChange,
   onThicknessBlur,
@@ -220,6 +225,13 @@ export function MobileBottomBar({
               tooltip="Optimiert das Profil für den 3D-Druck. Vermeidet Überhänge und dünne Stellen."
               disabled={!canFineTune} onChange={onPrintFriendlinessChange}
               tipId="print" openTipId={openTipId} onTipOpen={setOpenTipId} />
+            <SliderControl
+              label="Formverstärkung" value={shapeBoost} min={1} max={2.5} step={0.1} defaultValue={1}
+              formatValue={formatShapeBoost}
+              tooltip={SHAPE_BOOST_TOOLTIP}
+              disabled={!canFineTune} onChange={onShapeBoostChange}
+              testId="mobile-shape-boost-slider"
+              tipId="boost" openTipId={openTipId} onTipOpen={setOpenTipId} />
             <SliderControl
               label="3D-Fase" value={bevelStrength} min={0} max={100} step={1} defaultValue={68}
               tooltip="Fügt eine abgerundete Fase an den 3D-Kanten hinzu."

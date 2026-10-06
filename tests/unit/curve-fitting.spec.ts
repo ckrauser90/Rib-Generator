@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  deepenArcsBetweenNotches,
   findNotchIndices,
   smoothCurveByArcLength,
   smoothCurvePreservingNotches,
@@ -152,4 +153,38 @@ test("smoothCurvePreservingNotches keeps grooves sharp where plain smoothing rou
   // Zwischen den Kerben bleibt die Kurve ruhig.
   const between = protectedResult.points.filter((point) => notchYs.every((notchY) => Math.abs(point.y - notchY) > 2));
   expect(maxDistanceTo(between, scallopTruth)).toBeLessThan(0.3);
+});
+
+test("deepenArcsBetweenNotches deepens arcs between notches and keeps the tips", () => {
+  const points = Array.from({ length: 1000 }, (_, index) => ({ x: scallopTruth(index * 0.1), y: index * 0.1 }));
+  const notches = notchYs.map((y) => ({ x: scallopTruth(y), y }));
+  const depthAt = (profile: Point[], y: number) => {
+    const point = profile.reduce((best, p) => (Math.abs(p.y - y) < Math.abs(best.y - y) ? p : best));
+    return scallopTruth(20) - point.x;
+  };
+
+  const deepened = deepenArcsBetweenNotches(points, notches, 2);
+
+  // Bogenmitte zwischen den Kerben 20 und 40: Tiefe verdoppelt.
+  expect(depthAt(deepened, 30)).toBeCloseTo(2 * depthAt(points, 30), 3);
+  // Kerbenspitzen und Abschnitte außerhalb der Kerben bleiben gleich.
+  expect(depthAt(deepened, 40)).toBeCloseTo(depthAt(points, 40), 6);
+  expect(depthAt(deepened, 10)).toBeCloseTo(depthAt(points, 10), 6);
+  expect(depthAt(deepened, 90)).toBeCloseTo(depthAt(points, 90), 6);
+});
+
+test("deepenArcsBetweenNotches is a no-op without notches or with factor 1", () => {
+  const points = [
+    { x: 1, y: 0 },
+    { x: 2, y: 1 },
+  ];
+  expect(deepenArcsBetweenNotches(points, [], 2)).toEqual(points);
+  expect(deepenArcsBetweenNotches(points, [{ x: 1, y: 0 }, { x: 2, y: 1 }], 1)).toEqual(points);
+});
+
+test("deepenArcsBetweenNotches respects the material limit", () => {
+  const points = Array.from({ length: 1000 }, (_, index) => ({ x: scallopTruth(index * 0.1), y: index * 0.1 }));
+  const notches = notchYs.map((y) => ({ x: scallopTruth(y), y }));
+  const limited = deepenArcsBetweenNotches(points, notches, 3, 17);
+  expect(Math.min(...limited.map((point) => point.x))).toBeGreaterThanOrEqual(17);
 });

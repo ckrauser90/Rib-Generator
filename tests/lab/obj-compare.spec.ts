@@ -139,22 +139,25 @@ test("compare ribs from bubble cup photos with the original rib", async ({ page 
   const objArcDepth = median(arcDepths(objEdge, objNotches));
   console.log(`Original-Rib links: Kerben bei ${objNotches.map((y) => y.toFixed(1)).join(", ")} mm, Bogentiefe ${objArcDepth.toFixed(2)} mm`);
   const photos = readdirSync(fixtureDir).filter((name) => name.endsWith(".jpg")).sort();
-  const settings: [string, number, number][] = [
-    ["Standard neu (10/40, Kerbenschutz)", 10, 40],
-    ["Standard alt (34/58)", 34, 58],
-    ["sehr formtreu (0/0)", 0, 0],
+  const settings: [string, number, number, number][] = [
+    ["Standard neu (10/40, Kerbenschutz)", 10, 40, 1],
+    ["Formverstärkung 1,6×", 10, 40, 1.6],
+    ["Formverstärkung 2,0×", 10, 40, 2],
+    ["Standard alt (34/58)", 34, 58, 1],
+    ["sehr formtreu (0/0)", 0, 0, 1],
   ];
 
   const results = [];
   for (const name of photos) {
     for (const side of ["left", "right"] as const) {
-      for (const [label, smoothing, friendliness] of settings) {
+      for (const [label, smoothing, friendliness, shapeBoost] of settings) {
         const rib = await page.evaluate((args) => window.__ribLab!.buildRibFromPhoto(args), {
           imageDataUrl: `data:image/jpeg;base64,${readFileSync(path.join(fixtureDir, name)).toString("base64")}`,
           ribHeightMm: ASSUMED_RIB_HEIGHT_MM,
           curveSmoothing: smoothing,
           printFriendliness: friendliness,
           side,
+          shapeBoost,
         });
         if (rib.toolProfile.length < 10) continue;
         const photoEdge = rib.toolProfile.slice().sort((a, b) => a.y - b.y);

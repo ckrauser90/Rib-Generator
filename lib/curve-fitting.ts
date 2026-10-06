@@ -302,3 +302,36 @@ export const smoothCurvePreservingNotches = (
   }
   return { points: result, notches: notches.map((index) => ordered[index]) };
 };
+
+/**
+ * Formverstärkung: vertieft die Bögen zwischen benachbarten Kerben um `factor`.
+ * Die Kerbenspitzen bleiben, wo sie sind; gemessen wird die Tiefe gegenüber der
+ * Geraden zwischen zwei Kerben. Abschnitte vor der ersten und nach der letzten
+ * Kerbe bleiben unverändert, ebenso Kanten ohne Kerben.
+ *
+ * Hintergrund (docs/decisions.md, R-005): Gebrannte Tassen zeigen nur etwa die halbe
+ * Bogentiefe der Rib, mit der sie gedreht wurden. Wer eine Tasse aus dem Foto
+ * nachdrehen will, kann die Bögen der neuen Rib entsprechend tiefer machen.
+ *
+ * Erwartet Punkte nach y sortiert; Kerben zeigen zu größerem x (wie an der Rib).
+ * `minX` begrenzt, wie weit die Bögen in das Material gehen dürfen.
+ */
+export const deepenArcsBetweenNotches = (
+  points: Point[],
+  notches: Point[],
+  factor: number,
+  minX = Number.NEGATIVE_INFINITY,
+) => {
+  if (factor === 1 || notches.length < 2) return points.slice();
+  const notchYs = notches.map((notch) => notch.y).sort((a, b) => a - b);
+  return points.map((point) => {
+    const segment = notchYs.findIndex((y, index) => index < notchYs.length - 1 && point.y >= y && point.y <= notchYs[index + 1]);
+    if (segment < 0) return point;
+    const top = notches.find((notch) => notch.y === notchYs[segment])!;
+    const bottom = notches.find((notch) => notch.y === notchYs[segment + 1])!;
+    const t = bottom.y === top.y ? 0 : (point.y - top.y) / (bottom.y - top.y);
+    const baselineX = top.x + (bottom.x - top.x) * t;
+    const depth = baselineX - point.x;
+    return { x: Math.max(minX, baselineX - depth * factor), y: point.y };
+  });
+};

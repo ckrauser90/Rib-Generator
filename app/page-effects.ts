@@ -63,6 +63,7 @@ type UseToolGeometryEffectOptions = {
   printFriendliness: number;
   profileImageSize: { width: number; height: number } | null;
   referenceBounds: { minY: number; maxY: number } | null;
+  shapeBoost: number;
   toolHeightMm: number;
   toolWidthMm: number;
   workProfileSide: WorkProfileSide;
@@ -233,6 +234,7 @@ export const useToolGeometryEffect = ({
   printFriendliness,
   profileImageSize,
   referenceBounds,
+  shapeBoost,
   toolHeightMm,
   toolWidthMm,
   workProfileSide,
@@ -251,6 +253,7 @@ export const useToolGeometryEffect = ({
         printFriendliness,
         profile: geometryWorkProfile,
         referenceBounds,
+        shapeBoost,
         toolHeightMm,
         toolWidthMm,
         workProfileSide,
@@ -269,6 +272,7 @@ export const useToolGeometryEffect = ({
     printFriendliness,
     profileImageSize,
     referenceBounds,
+    shapeBoost,
     toolHeightMm,
     toolWidthMm,
     workProfileSide,

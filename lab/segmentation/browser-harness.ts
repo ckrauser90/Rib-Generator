@@ -594,6 +594,7 @@ export const buildRibFromPhoto = async (input: {
   side: "left" | "right";
   toolWidthMm?: number;
   thicknessMm?: number;
+  shapeBoost?: number;
 }) => {
   ensureAssetsConfigured();
   const image = await loadImage(input.imageDataUrl);
@@ -620,6 +621,7 @@ export const buildRibFromPhoto = async (input: {
     imageSize: { width: mask.width, height: mask.height },
     printFriendliness: input.printFriendliness,
     profile: geometry,
+    shapeBoost: input.shapeBoost ?? 1,
     referenceBounds: result.referenceBounds,
     toolHeightMm: input.ribHeightMm,
     toolWidthMm,
@@ -650,6 +652,8 @@ export const buildRibFromPhoto = async (input: {
           prepared.correctedReferenceBounds,
           input.printFriendliness,
           prepared.exportAnchors,
+          undefined,
+          input.shapeBoost ?? 1,
         )
       : null;
   return { toolProfile: state.toolProfile, toolOutline: state.toolOutline, stl, blocked: prepared.kind === "blocked" ? prepared.status : null };

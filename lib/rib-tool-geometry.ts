@@ -10,10 +10,13 @@ import type {
   WorkProfileSide,
 } from "./contour-base";
 import { clamp, lerp, smoothSeries } from "./contour-base";
-import { smoothCurvePreservingNotches } from "./curve-fitting";
+import { deepenArcsBetweenNotches, smoothCurvePreservingNotches } from "./curve-fitting";
 
 /** Größte erlaubte Abweichung der geglätteten Rib-Kante von der erkannten Kante. */
 export const RIB_EDGE_TOLERANCE_MM = 0.4;
+
+/** Höchster Faktor der Formverstärkung (Bogentiefe zwischen Kerben). */
+export const MAX_SHAPE_BOOST = 2.5;
 const getBounds = (points: Point[]) => {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -419,6 +422,7 @@ export const buildRibToolOutline = (
   referenceBounds?: { minY: number; maxY: number },
   printFriendliness = 58,
   manualAnchors?: ProfileAnchors | null,
+  shapeBoost = 1,
 ): ToolOutlineResult => {
   if (workProfile.length < 2) {
     return {
@@ -486,12 +490,21 @@ export const buildRibToolOutline = (
   const outerLeftX = 0;
   // Kerbenschutz (lib/curve-fitting.ts, findNotchIndices): Rillen zwischen zwei
   // Wölbungen – an der Rib Spitzen – bleiben spitz; geglättet wird nur zwischen ihnen.
-  const { points: denseProfile } = smoothCurvePreservingNotches(profile, {
+  const { points: smoothedProfile, notches } = smoothCurvePreservingNotches(profile, {
     periodMm: lerp(3, 12, friendlinessFactor),
     tolerance: RIB_EDGE_TOLERANCE_MM,
     featureLengthMm: 2,
     sampleStep: 0.5,
   });
+  // Formverstärkung (optional): Bögen zwischen Kerben tiefer machen, weil gedrehte und
+  // glasierte Gefäße flacher werden als die Rib (docs/decisions.md, R-005). Die Bögen
+  // dürfen dabei nicht tiefer ins Material gehen als die übrige Kante.
+  const denseProfile = deepenArcsBetweenNotches(
+    smoothedProfile,
+    notches,
+    clamp(shapeBoost, 1, MAX_SHAPE_BOOST),
+    totalWidthMm - maxAllowedDepthMm,
+  );
   const provisionalSupportProfile = buildSupportSideProfile(denseProfile, totalWidthMm, []);
   const holePlan = buildGripHoles(totalWidthMm, totalHeight, denseProfile, provisionalSupportProfile);
   const finalProfile = denseProfile.map((point) => ({
@@ -708,6 +721,7 @@ export function createExtrudedStl(
   printFriendliness = 58,
   manualAnchors?: ProfileAnchors | null,
   bevelStrength = 68,
+  shapeBoost = 1,
 ) {
   if (workProfile.length < 6) {
     throw new Error("Nicht genug Konturpunkte fuer den STL-Export.");
@@ -723,6 +737,7 @@ export function createExtrudedStl(
     referenceBounds,
     printFriendliness,
     manualAnchors,
+    shapeBoost,
   );
   const toolOutline = ensureOrientation(toolGeometry.outline, false);
   const holePolygons = toolGeometry.holes.map((hole) =>

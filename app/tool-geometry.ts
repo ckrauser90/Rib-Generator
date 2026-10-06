@@ -21,6 +21,7 @@ type BuildToolGeometryStateOptions = {
   imageHeight: number;
   imageWidth: number;
   printFriendliness: number;
+  shapeBoost?: number;
   referenceBounds?: { minY: number; maxY: number } | null;
   showAnchors: boolean;
   toolHeightMm: number;
@@ -58,6 +59,7 @@ export const buildToolGeometryState = ({
   imageWidth,
   printFriendliness,
   referenceBounds,
+  shapeBoost = 1,
   showAnchors,
   toolHeightMm,
   toolWidthMm,
@@ -74,6 +76,7 @@ export const buildToolGeometryState = ({
     referenceBounds ?? undefined,
     printFriendliness,
     activeAnchors,
+    shapeBoost,
   );
 
   return mapToolOutlineResultToState(ribGeometry, showAnchors);

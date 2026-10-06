@@ -107,6 +107,7 @@ type UsePageHandlersOptions = {
   setPromptPoint: Dispatch<SetStateAction<Point | null>>;
   setStatus: Dispatch<SetStateAction<string>>;
   setWorkProfileSide: Dispatch<SetStateAction<WorkProfileSide>>;
+  shapeBoost: number;
   sourceRaster: RasterSource | null;
   status: string;
   thicknessMm: number;
@@ -165,6 +166,7 @@ export const usePageHandlers = ({
   setPromptPoint,
   setStatus,
   setWorkProfileSide,
+  shapeBoost,
   sourceRaster,
   status,
   thicknessMm,
@@ -439,6 +441,7 @@ export const usePageHandlers = ({
       printFriendliness,
       preparedExport.exportAnchors,
       bevelStrength,
+      shapeBoost,
     );
 
     triggerBrowserDownload({

@@ -23,6 +23,7 @@ type BuildPreparedToolGeometryStateOptions = {
   printFriendliness: number;
   profile: Point[];
   referenceBounds?: { minY: number; maxY: number } | null;
+  shapeBoost?: number;
   toolHeightMm: number;
   toolWidthMm: number;
   workProfileSide: WorkProfileSide;
@@ -40,6 +41,7 @@ export const buildPreparedToolGeometryState = ({
   printFriendliness,
   profile,
   referenceBounds,
+  shapeBoost = 1,
   toolHeightMm,
   toolWidthMm,
   workProfileSide,
@@ -79,6 +81,7 @@ export const buildPreparedToolGeometryState = ({
     imageWidth: imageSize.width,
     printFriendliness,
     referenceBounds: correctedReferenceBounds,
+    shapeBoost,
     showAnchors: anchorEditMode || !currentAnchorsConfirmed,
     toolHeightMm,
     toolWidthMm,

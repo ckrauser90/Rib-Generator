@@ -4,6 +4,7 @@ import { ChangeEvent, KeyboardEvent, useEffect, useState } from "react";
 import styles from "../page.module.css";
 import { ShrinkageControl } from "./ShrinkageControl";
 import { SliderControl } from "./SliderControl";
+import { SHAPE_BOOST_TOOLTIP, formatShapeBoost } from "../shape-boost";
 
 export type DesktopRibbonProps = {
   bevelStrength: number;
@@ -13,6 +14,7 @@ export type DesktopRibbonProps = {
   heightInput: string;
   horizontalCorrectionDeg: number;
   printFriendliness: number;
+  shapeBoost: number;
   shrinkagePercent: number;
   targetHeightMm: number;
   thicknessInput: string;
@@ -27,6 +29,7 @@ export type DesktopRibbonProps = {
   onHorizontalCorrectionChange: (value: number) => void;
   onPrintFriendlinessChange: (value: number) => void;
   onReset: () => void;
+  onShapeBoostChange: (value: number) => void;
   onShrinkageChange: (percent: number) => void;
   onThicknessBlur: (value: string) => void;
   onThicknessInputChange: (value: string) => void;
@@ -44,6 +47,7 @@ export function DesktopRibbon({
   heightInput,
   horizontalCorrectionDeg,
   printFriendliness,
+  shapeBoost,
   shrinkagePercent,
   targetHeightMm,
   thicknessInput,
@@ -58,6 +62,7 @@ export function DesktopRibbon({
   onHorizontalCorrectionChange,
   onPrintFriendlinessChange,
   onReset,
+  onShapeBoostChange,
   onShrinkageChange,
   onThicknessBlur,
   onThicknessInputChange,
@@ -176,6 +181,14 @@ export function DesktopRibbon({
           className={styles.sliderCell} sliderClassName={styles.ribbonSlider}
           testId="print-friendliness-slider"
           tipId="d-print" openTipId={openTipId} onTipOpen={setOpenTipId} />
+        <SliderControl
+          label="Formverstärkung" value={shapeBoost} min={1} max={2.5} step={0.1} defaultValue={1}
+          formatValue={formatShapeBoost}
+          tooltip={SHAPE_BOOST_TOOLTIP}
+          disabled={!canFineTune} onChange={onShapeBoostChange}
+          className={styles.sliderCell} sliderClassName={styles.ribbonSlider}
+          testId="shape-boost-slider"
+          tipId="d-boost" openTipId={openTipId} onTipOpen={setOpenTipId} />
         <SliderControl
           label="3D-Fase" value={bevelStrength} min={0} max={100} step={1} defaultValue={68}
           tooltip="Fügt eine abgerundete Fase an den 3D-Kanten hinzu. Höhere Werte erzeugen stärkere Kantenverrundung."

@@ -127,3 +127,33 @@ Rib nicht ganz aus), durch Glasur in den Rillen und ggf. Rundung an der Fotokant
 entstand. Wer mit der Foto-Rib dreht, bekäme vermutlich wieder flachere Wölbungen. Eine optionale
 „Formverstärkung“ (Bogentiefe × ~1,6–2) wäre denkbar, braucht aber mehr Messungen (andere
 Formen, Tassen vor und nach Glasur) – noch nicht umgesetzt.
+
+## R-006 · 2026-10-06 · Formverstärkung als Option (Standard: aus)
+
+**Entscheidung:** Neuer Regler „Formverstärkung“ (1,0× bis 2,5×, Standard 1,0× = aus) in
+Desktop-Leiste und mobilem Form-Bereich. Er vertieft nur die Bögen *zwischen* erkannten Kerben
+(`deepenArcsBetweenNotches` in `lib/curve-fitting.ts`): Bezug ist die Gerade zwischen zwei
+Kerbspitzen, die Tiefe darunter wird mit dem Faktor multipliziert. Kerben selbst, Abschnitte über
+der ersten und unter der letzten Kerbe sowie Profile ohne Kerben bleiben unverändert. Die
+Vertiefung ist durch die zulässige Rib-Tiefe begrenzt. Der Wert läuft über dieselben Helfer in
+2D-Vorschau, 3D und STL.
+
+**Begründung:** R-005 – Fotos gebrannter Tassen liefern etwa die halbe Bogentiefe der Rib, mit der
+sie gedreht wurden. Standard bleibt aus, weil der Rohprofil-Grundsatz gilt (Leitplanke: konservativ,
+Hilfen nur optional) und die Messbasis eine Rib mit vier Tassen ist.
+
+**Messung (Labor `obj-compare`, Bogentiefe Median, Original-Rib 3,97 mm):**
+
+| Einstellung | Bogentiefe (8 Tassenseiten) | Mittlere Abweichung Ø, Summe 8 Seiten |
+|---|---|---|
+| Standard (1,0×) | 0,8–2,5 mm | 5,8 mm |
+| 1,6× | 1,8–4,3 mm | 5,6 mm |
+| 2,0× | 2,6–5,5 mm | 7,1 mm |
+
+1,6× trifft die Bogentiefe am besten und verbessert die Gesamtabweichung leicht; 2,0× schießt
+über. Die gemessene Tiefe wächst etwas stärker als der Faktor (vermutlich, weil die Messung die
+Kerben auf der fertigen Kante neu sucht). Im Tooltip steht daher 1,6× als
+Richtwert.
+
+**Verworfen:** automatische Verstärkung (zu wenig Messdaten, verletzt „konservativ als
+Standard“); Verstärkung aller Wölbungen ohne Kerbbezug (würde auch glatte Bauchformen verändern).

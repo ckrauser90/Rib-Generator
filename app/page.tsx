@@ -32,6 +32,7 @@ import { usePageViewModel } from "./page-view-model";
 import styles from "./page.module.css";
 import { useToolDimensionInputs } from "./tool-dimension-inputs";
 import { DEFAULT_SHRINKAGE_PERCENT, applyShrinkage } from "./shrinkage";
+import { DEFAULT_SHAPE_BOOST } from "./shape-boost";
 
 const DEFAULT_TOOL_WIDTH_MM = 65;
 
@@ -70,6 +71,7 @@ export default function Home() {
   const [bevelStrength, setBevelStrength] = useState(68);
   const [horizontalCorrectionDeg, setHorizontalCorrectionDeg] = useState(0);
   const [shrinkagePercent, setShrinkagePercent] = useState(DEFAULT_SHRINKAGE_PERCENT);
+  const [shapeBoost, setShapeBoost] = useState(DEFAULT_SHAPE_BOOST);
   const {
     commitHeightInput,
     commitThicknessInput,
@@ -254,6 +256,7 @@ export default function Home() {
     printFriendliness,
     profileImageSize,
     referenceBounds,
+    shapeBoost,
     toolHeightMm: ribHeightMm,
     toolWidthMm,
     workProfileSide,
@@ -321,6 +324,7 @@ export default function Home() {
     setPromptPoint,
     setStatus,
     setWorkProfileSide,
+    shapeBoost,
     sourceRaster,
     status,
     thicknessMm,
@@ -343,6 +347,7 @@ export default function Home() {
     heightInput,
     horizontalCorrectionDeg,
     printFriendliness,
+    shapeBoost,
     shrinkagePercent,
     targetHeightMm: toolHeightMm,
     thicknessInput,
@@ -359,6 +364,7 @@ export default function Home() {
     onHorizontalCorrectionChange: setHorizontalCorrectionDeg,
     onPrintFriendlinessChange: setPrintFriendliness,
     onReset: resetSelection,
+    onShapeBoostChange: setShapeBoost,
     onShrinkageChange: setShrinkagePercent,
     onThicknessBlur: commitThicknessInput,
     onThicknessInputChange: setThicknessInput,
@@ -380,6 +386,7 @@ export default function Home() {
     mobileSheetOpen,
     mobileTab,
     printFriendliness,
+    shapeBoost,
     shrinkagePercent,
     targetHeightMm: toolHeightMm,
     thicknessInput,
@@ -395,6 +402,7 @@ export default function Home() {
     onHorizontalCorrectionChange: setHorizontalCorrectionDeg,
     onPrintFriendlinessChange: setPrintFriendliness,
     onReset: resetSelection,
+    onShapeBoostChange: setShapeBoost,
     onShrinkageChange: setShrinkagePercent,
     onTabChange: setMobileTab,
     onThicknessBlur: commitThicknessInput,
