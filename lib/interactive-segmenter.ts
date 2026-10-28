@@ -1,4 +1,6 @@
 import type { RasterSource } from "./perspective";
+import { createSegmenter, segmentWithOwnedMask, type SegmentationMask } from "./mediapipe-core";
+import type { WorkerRequest } from "./mediapipe-worker";
 
 // Woher Laufzeit und Modell kommen. Die WASM-Laufzeit MUSS zur gebündelten JS-Version
 // passen: Ohne Versionsnummer liefert jsDelivr die neueste (seit Okt. 2026 1.x) und das
@@ -27,10 +29,55 @@ export function configureInteractiveSegmenterAssets(assets: {
   modelUrl = assets.modelUrl ?? modelUrl;
 }
 
-type SegmenterModule = typeof import("@mediapipe/tasks-vision");
+let mainInstance: Awaited<ReturnType<typeof createSegmenter>> | null = null;
+let mainPromise: Promise<Awaited<ReturnType<typeof createSegmenter>>> | null = null;
+let worker: Worker | null = null;
+let workerReady: Promise<void> | null = null;
+let workerDisabled = false;
+let generation = 0;
+let nextId = 0;
+const requests = new Map<number, { resolve: (mask?: SegmentationMask) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
 
-let segmenterPromise: Promise<import("@mediapipe/tasks-vision").InteractiveSegmenter> | null = null;
-let segmenterInstance: import("@mediapipe/tasks-vision").InteractiveSegmenter | null = null;
+const assets = () => ({
+  wasmRoot: new URL(wasmRoot, window.location.href).href,
+  modelUrl: new URL(modelUrl, window.location.href).href,
+});
+
+function stopWorker() {
+  worker?.terminate();
+  worker = null;
+  workerReady = null;
+  for (const request of requests.values()) {
+    clearTimeout(request.timer);
+    request.reject(new Error("Erkennung wurde zurueckgesetzt."));
+  }
+  requests.clear();
+}
+
+function requestWorker(data: Omit<WorkerRequest, "id" | "assets"> = {}) {
+  return new Promise<SegmentationMask | undefined>((resolve, reject) => {
+    const id = ++nextId;
+    const timer = setTimeout(() => {
+      requests.delete(id);
+      reject(new Error("MediaPipe antwortet nicht."));
+    }, 60_000);
+    requests.set(id, { resolve, reject, timer });
+    try { worker!.postMessage({ ...data, id, assets: assets() }, data.image ? [data.image] : []); }
+    catch (error) { clearTimeout(timer); requests.delete(id); data.image?.close(); reject(error); }
+  });
+}
+
+async function loadMain() {
+  if (!mainPromise) {
+    const current = generation;
+    mainPromise = createSegmenter(assets()).then((instance) => {
+      if (current !== generation) { instance.close(); throw new Error("Erkennung wurde zurueckgesetzt."); }
+      mainInstance = instance;
+      return instance;
+    });
+  }
+  return mainPromise;
+}
 
 export const isE2eMockEnabled = () => {
   if (typeof window === "undefined") {
@@ -40,91 +87,45 @@ export const isE2eMockEnabled = () => {
   return new URLSearchParams(window.location.search).get("e2eMockSegmenter") === "1";
 };
 
-const BENIGN_MEDIAPIPE_LOGS = [
-  "INFO: Created TensorFlow Lite XNNPACK delegate for CPU.",
-  "Created TensorFlow Lite XNNPACK delegate for CPU.",
-  "OpenGL error checking is disabled",
-  "Feedback manager requires a model with a single signature inference",
-];
-
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-const stringifyConsoleArgs = (args: unknown[]) =>
-  args
-    .map((arg) => {
-      if (typeof arg === "string") {
-        return arg;
-      }
-
-      if (arg instanceof Error) {
-        return arg.message;
-      }
-
-      try {
-        return JSON.stringify(arg);
-      } catch {
-        return String(arg);
-      }
-    })
-    .join(" ");
-
-async function suppressBenignMediapipeLogs<T>(task: () => Promise<T> | T): Promise<T> {
-  const originalConsoleError = console.error;
-  const originalConsoleWarn = console.warn;
-
-  const shouldSuppress = (...args: unknown[]) => {
-    const message = stringifyConsoleArgs(args);
-    return BENIGN_MEDIAPIPE_LOGS.some((entry) => message.includes(entry));
-  };
-  console.error = (...args: unknown[]) => {
-    if (shouldSuppress(...args)) {
-      return;
-    }
-    originalConsoleError(...args);
-  };
-  console.warn = (...args: unknown[]) => {
-    if (shouldSuppress(...args)) {
-      return;
-    }
-    originalConsoleWarn(...args);
-  };
-
-  try {
-    return await task();
-  } finally {
-    console.error = originalConsoleError;
-    console.warn = originalConsoleWarn;
-  }
-}
-
-async function loadModule(): Promise<SegmenterModule> {
-  return import("@mediapipe/tasks-vision");
-}
-
+/** Prefer background inference; older browsers retain the same main-thread implementation. */
 export async function loadInteractiveSegmenter() {
-  if (isE2eMockEnabled()) {
-    return null;
+  if (isE2eMockEnabled()) return;
+  if (!workerDisabled && typeof Worker !== "undefined" && typeof OffscreenCanvas !== "undefined" && typeof createImageBitmap === "function") {
+    const current = generation;
+    if (!workerReady) {
+      workerReady = (async () => {
+        worker = new Worker(new URL("./mediapipe-worker.ts", import.meta.url));
+        worker.onmessage = ({ data }) => {
+          const request = requests.get(data.id);
+          if (!request) return;
+          clearTimeout(request.timer);
+          requests.delete(data.id);
+          if (data.error) request.reject(new Error(data.error));
+          else request.resolve(data.mask);
+        };
+        worker.onerror = () => stopWorker();
+        await requestWorker();
+      })();
+    }
+    try { await workerReady; return; }
+    catch (error) {
+      if (current !== generation) throw error;
+      // OffscreenCanvas/WebGL support differs on Safari. Keep the workflow usable.
+      workerDisabled = true;
+      stopWorker();
+    }
   }
-
-  if (!segmenterPromise) {
-    segmenterPromise = suppressBenignMediapipeLogs(async () => {
-      const { FilesetResolver, InteractiveSegmenter } = await loadModule();
-      const vision = await FilesetResolver.forVisionTasks(wasmRoot);
-      const segmenter = await InteractiveSegmenter.createFromModelPath(vision, modelUrl);
-      segmenterInstance = segmenter;
-      return segmenter;
-    });
-  }
-
-  return segmenterPromise;
+  await loadMain();
 }
 
 export function resetInteractiveSegmenter() {
-  if (segmenterInstance) {
-    segmenterInstance.close();
-    segmenterInstance = null;
-  }
-  segmenterPromise = null;
+  generation += 1;
+  stopWorker();
+  mainInstance?.close();
+  mainInstance = null;
+  mainPromise = null;
 }
 
 function buildMockSegmentation(
@@ -213,40 +214,17 @@ async function runSegmentation(
   normalizedPoint: { x: number; y: number },
   confidenceCutoff: number,
 ) {
-  const segmenter = await loadInteractiveSegmenter();
-  if (!segmenter) {
-    throw new Error("Mock-Segmenter ist aktiv. Direkte MediaPipe-Segmentierung ist deaktiviert.");
+  const current = generation;
+  await loadInteractiveSegmenter();
+  if (current !== generation) throw new Error("Erkennung wurde zurueckgesetzt.");
+  if (worker) {
+    const image = await createImageBitmap(raster);
+    if (current !== generation) { image.close(); throw new Error("Erkennung wurde zurueckgesetzt."); }
+    const mask = await requestWorker({ image, point: normalizedPoint, cutoff: confidenceCutoff });
+    if (!mask) throw new Error("MediaPipe hat keine Maske zurueckgegeben.");
+    return mask;
   }
-  const result = await suppressBenignMediapipeLogs(() =>
-    Promise.resolve(
-      segmenter.segment(raster, {
-        keypoint: {
-          x: normalizedPoint.x,
-          y: normalizedPoint.y,
-        },
-      }),
-    ),
-  );
-
-  const mask = result.confidenceMasks?.[0];
-  if (!mask) {
-    throw new Error("MediaPipe hat keine Konfidenzmaske zurueckgegeben.");
-  }
-
-  const confidence = mask.getAsFloat32Array();
-  const binaryMask = new Uint8Array(confidence.length);
-
-  for (let index = 0; index < confidence.length; index += 1) {
-    binaryMask[index] = confidence[index] >= confidenceCutoff ? 1 : 0;
-  }
-
-  return {
-    width: mask.width,
-    height: mask.height,
-    confidence,
-    binaryMask,
-    ...summariseMask(confidence, binaryMask),
-  };
+  return segmentWithOwnedMask(await loadMain(), raster, normalizedPoint, confidenceCutoff);
 }
 
 /**
