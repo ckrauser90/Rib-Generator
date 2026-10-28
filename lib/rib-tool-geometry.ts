@@ -761,11 +761,12 @@ export function createExtrudedStl(
 
   const mesh = new THREE.Mesh(geometry, new THREE.MeshNormalMaterial());
   const exporter = new STLExporter();
-  const stl = exporter.parse(mesh) as string;
+  // Binary STL stores the same triangles without allocating a large text representation.
+  const stl = exporter.parse(mesh, { binary: true });
 
   geometry.dispose();
   mesh.geometry.dispose();
   (mesh.material as THREE.Material).dispose();
 
-  return stl;
+  return stl.buffer;
 }
