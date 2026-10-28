@@ -79,6 +79,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
   const holdSinceRef = useRef<number | null>(null);
   const capturingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [restart, setRestart] = useState(0);
   const [needsTap, setNeedsTap] = useState(false);
   const [videoInfo, setVideoInfo] = useState("Video: wartet auf Kamera …");
   const [band, setBand] = useState<Band>(DEFAULT_BAND);
@@ -113,6 +114,10 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
   // Kamera starten (und bei Kamerawechsel neu starten).
   useEffect(() => {
     let cancelled = false;
+    let watchdog = 0;
+    setError(null);
+    setNeedsTap(false);
+    stopStream();
     const start = async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
         setError("Dieser Browser erlaubt hier keinen Kamerazugriff (nur über HTTPS möglich).");
@@ -125,8 +130,8 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: false,
           video: deviceId
-            ? { deviceId: { exact: deviceId }, width: { ideal: 3840 }, height: { ideal: 2160 } }
-            : { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+            ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+            : { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
         });
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop());
@@ -146,11 +151,11 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
           video.srcObject = stream;
           // Nicht abwarten: Auf dem iPhone bleibt play() teils hängen, bis Bilder kommen.
           video.play().then(
-            () => setNeedsTap(false),
-            () => setNeedsTap(true),
+            () => { if (!cancelled && video.readyState >= 2 && video.videoWidth > 0) setNeedsTap(false); },
+            () => { if (!cancelled) setNeedsTap(true); },
           );
-          window.setTimeout(() => {
-            if (videoRef.current?.paused) setNeedsTap(true);
+          watchdog = window.setInterval(() => {
+            if (!cancelled) setNeedsTap(video.paused || video.readyState < 2 || video.videoWidth === 0);
           }, 2000);
         }
         const track = stream.getVideoTracks()[0];
@@ -163,15 +168,17 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
             ? { min: capabilities.zoom.min, max: capabilities.zoom.max, value: settings.zoom ?? capabilities.zoom.min }
             : null;
         setZoom(range);
-        // 2× als Start: Mit der Weitwinkel-Hauptkamera müsste man zu nah heran (verzerrt).
-        if (range && range.min <= 2 && range.max >= 2) void applyZoom(2, range);
+        // Erst mit unveränderten Kameraeinstellungen starten; Zoom bleibt manuell verfügbar.
         if (cameraIds.length === 0) {
-          const devices = await navigator.mediaDevices.enumerateDevices();
+          const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+          if (cancelled) return;
           const videoInputs = devices.filter((device) => device.kind === "videoinput");
           const backCameras = videoInputs.filter((device) => /back|rück|rear|environment|tele|wide/i.test(device.label));
           setCameraIds((backCameras.length > 1 ? backCameras : videoInputs).map((device) => device.deviceId));
         }
       } catch (cause) {
+        if (cancelled) return;
+        stopStream();
         const name = cause instanceof DOMException ? cause.name : "";
         setError(
           name === "NotAllowedError"
@@ -183,9 +190,11 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
     void start();
     return () => {
       cancelled = true;
+      window.clearInterval(watchdog);
+      stopStream();
     };
     // cameraIds nur beim ersten Start füllen; ein Wechsel läuft über cameraIndex.
-  }, [applyZoom, cameraIndex, stopStream]);
+  }, [applyZoom, cameraIndex, restart, stopStream]);
 
   useEffect(() => () => stopStream(), [stopStream]);
 
@@ -225,10 +234,10 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
   }, []);
 
   const startPlayback = () => {
-    void videoRef.current?.play().then(
-      () => setNeedsTap(false),
-      () => setNeedsTap(true),
-    );
+    stopStream();
+    setError(null);
+    setNeedsTap(false);
+    setRestart((value) => value + 1);
   };
 
   // Lagesensor: Schwerkraftvektor, leicht geglättet.
@@ -261,7 +270,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
     let segmenting = false;
     const interval = window.setInterval(() => {
       const video = videoRef.current;
-      if (!video || !context || video.readyState < 2 || video.videoWidth === 0) return;
+      if (document.hidden || !video || !context || video.readyState < 2 || video.videoWidth === 0) return;
       tick += 1;
       // Schärfe: mittlerer Bildausschnitt, 200 px breit, nur relativ zum besten Wert.
       const sampleWidth = 200;
@@ -359,6 +368,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
       {error ? (
         <div className={styles.errorBox} role="alert">
           <p>{error}</p>
+          <button type="button" className={styles.fallbackButton} onClick={startPlayback}>Erneut versuchen</button>
           <button type="button" className={styles.fallbackButton} onClick={() => { stopStream(); onFallback(); }}>
             Normale Kamera nutzen
           </button>
@@ -411,7 +421,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
 
           {needsTap && (
             <button type="button" className={styles.tapToStart} onClick={startPlayback} data-testid="guided-tap-start">
-              Kamera starten
+              Kamera neu starten
             </button>
           )}
         </>
@@ -451,7 +461,9 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
           <span>{guidance.detail}</span>
         </div>
         <div className={styles.controls}>
-          <span />
+          {!tilt ? (
+            <button type="button" className={styles.iconButton} onClick={() => { void requestMotionPermission(); }} aria-label="Lagesensor aktivieren">Lage</button>
+          ) : <span />}
           <button
             type="button"
             className={styles.shutter}

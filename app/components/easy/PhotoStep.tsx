@@ -11,7 +11,7 @@ import { readTipsDismissed, writeTipsDismissed } from "../../easy-flow";
 import { PhotoTipsSheet } from "./PhotoTipsSheet";
 // Geführte Aufnahme (Test): einzige Verbindung zur App. Zum Verwerfen diesen Import,
 // den Knopf unten und den Ordner guided-camera/ löschen (docs/decisions.md R-010).
-import { GuidedCamera, requestMotionPermission, type GuidedCaptureInfo } from "./guided-camera/GuidedCamera";
+import { GuidedCamera, type GuidedCaptureInfo } from "./guided-camera/GuidedCamera";
 import type { CaptureMode } from "../../test-log";
 import styles from "./easy.module.css";
 
@@ -53,8 +53,6 @@ export function PhotoStep({
   const [guidedOpen, setGuidedOpen] = useState(false);
 
   const openGuidedCamera = () => {
-    // Der Lagesensor muss auf dem iPhone im selben Tipp freigegeben werden.
-    void requestMotionPermission();
     onCaptureStart?.("gefuehrt");
     setGuidedOpen(true);
   };

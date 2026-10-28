@@ -7,6 +7,7 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { writeSecurityHeaders } from "./security-headers.mjs";
 
 const root = process.cwd();
 const target = path.join(root, "public", "mediapipe");
@@ -45,4 +46,19 @@ const result = spawnSync("npx", ["next", "build"], {
   shell: process.platform === "win32",
   env: { ...process.env, RIB_STATIC_EXPORT: "1", NEXT_PUBLIC_MEDIAPIPE_ASSET_BASE: "/mediapipe" },
 });
-process.exit(result.status ?? 1);
+if (result.status !== 0) process.exit(result.status ?? 1);
+
+// BiRefNet is optional and explicitly loads its runtime from the versioned CDN
+// (lib/segmenters/birefnet.ts, ort.env.wasm.wasmPaths). Webpack still emits local
+// copies of those large ONNX WASM binaries. Exclude only those duplicates from
+// Wrangler's asset upload; retain all MediaPipe variants, JS modules, and model.
+writeFileSync(
+  path.join(root, "out", ".assetsignore"),
+  "# ONNX WASM is loaded from the versioned CDN, not these emitted duplicates.\n/_next/static/media/ort-wasm*.wasm\n",
+);
+
+// Hash the exact exported bootstrap scripts, after Next has finished writing HTML.
+const security = writeSecurityHeaders(path.join(root, "out"), {
+  modelUrl: process.env.NEXT_PUBLIC_BIREFNET_MODEL_URL,
+});
+console.log(`Static CSP: ${security.scriptHashes} inline script hashes across ${security.htmlFiles} HTML files.`);
