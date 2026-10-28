@@ -45,20 +45,39 @@ function inspectBinaryStl(content: Buffer) {
   let finite = true;
   let validNormals = true;
   let attributesEmpty = true;
+  let degenerateTriangles = 0;
   for (let triangle = 0; triangle < triangleCount; triangle += 1) {
     const offset = 84 + triangle * 50;
     const normal = [0, 1, 2].map((axis) => content.readFloatLE(offset + axis * 4));
-    validNormals &&= Math.abs(Math.hypot(...normal) - 1) < 0.001;
+    const normalLength = Math.hypot(...normal);
+    finite &&= normal.every(Number.isFinite);
+    const vertices: number[][] = [];
     attributesEmpty &&= content.readUInt16LE(offset + 48) === 0;
     for (let vertex = 0; vertex < 3; vertex += 1) {
+      vertices.push([]);
       for (let axis = 0; axis < 3; axis += 1) {
         const value = content.readFloatLE(offset + 12 + vertex * 12 + axis * 4);
+        vertices[vertex].push(value);
         finite &&= Number.isFinite(value);
         min[axis] = Math.min(min[axis], value);
         max[axis] = Math.max(max[axis], value);
       }
     }
+    const ab = vertices[1].map((value, axis) => value - vertices[0][axis]);
+    const ac = vertices[2].map((value, axis) => value - vertices[0][axis]);
+    const cross = [ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]];
+    const crossLength = Math.hypot(...cross);
+    if (crossLength <= 1e-9) {
+      degenerateTriangles += 1;
+      // The unchanged bevel mesh contains collapsed facets. A zero normal is
+      // permitted only when the encoded triangle has no measurable area.
+      validNormals &&= normalLength === 0 || Math.abs(normalLength - 1) < 0.001;
+    } else {
+      const alignment = cross.reduce((sum, value, axis) => sum + value * normal[axis], 0) / crossLength;
+      validNormals &&= Math.abs(normalLength - 1) < 0.001 && alignment > 0.99;
+    }
   }
+  expect(triangleCount - degenerateTriangles).toBeGreaterThan(10);
   expect(finite).toBe(true);
   expect(validNormals).toBe(true);
   expect(attributesEmpty).toBe(true);
