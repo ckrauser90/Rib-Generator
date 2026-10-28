@@ -1,6 +1,6 @@
 # Cloudflare: Vorschau und Produktion
 
-Stand: 2026-10-06 · Entscheidung: `docs/decisions.md` R-009
+Stand: 2026-10-28 · Entscheidung: `docs/decisions.md` R-009
 
 Die App ist eine reine Browser-App (Erkennung, Geometrie und STL laufen im Gerät). Sie wird
 als statische Seite exportiert und von einem **Cloudflare Worker mit statischen Dateien**
@@ -27,8 +27,8 @@ Lokal und in den E2E-Tests bleibt der normale Build (`npm run build`, `npm run s
      **`claude/relaxed-dijkstra-tgjeh9`**; nach dem Merge auf `main` umstellen
      (Settings → Build → Branch control)
    - Build command: `npm run build:cloudflare`
-   - Deploy command: `npx wrangler deploy` (Standard)
-   - Preview command: `npx wrangler preview` (Standard)
+   - Deploy command: `npx wrangler deploy` (nutzt die gesperrte Projektversion)
+   - Preview command: `npx wrangler preview` (nutzt die gesperrte Projektversion)
 4. **Deploy.** Danach läuft die App unter `https://rib-generator.<dein-subdomain>.workers.dev`.
 
 ### Produktionsbranch nachträglich ändern
@@ -54,10 +54,13 @@ in den PR. Abschalten unter Settings → Build → Branch control.
 
 ## Grenzen
 
-- Cloudflare liefert Dateien nur bis **25 MiB** aus. Die größte Datei im Export ist die
-  mitgebündelte onnxruntime-WASM-Datei mit 24,3 MiB (zur Laufzeit kommt sie von jsDelivr).
-  Wird sie bei einem onnxruntime-Update größer, bricht der Deploy ab – dann die Datei per
-  `.assetsignore` ausschließen.
+- Cloudflare liefert Dateien nur bis **25 MiB** aus. Der statische Build erzeugt
+  `out/.assetsignore`, das ausschließlich die von Webpack kopierten ONNX-WASM-Dateien
+  unter `_next/static/media/ort-wasm*.wasm` vom Upload ausschließt. BiRefNet lädt diese
+  Laufzeit ohnehin von der versionierten jsDelivr-Adresse (`ort.env.wasm.wasmPaths`).
+  Damit entfallen bei ONNX 1.23.2 rund **47 MiB** ungenutzte Upload-Dateien; BiRefNet,
+  seine JavaScript-Module und sämtliche MediaPipe-Fallbacks bleiben erhalten.
+  Der lokale Export enthält die ausgeschlossenen Dateien weiterhin.
 - MediaPipe (WASM ~11 MB, Modell ~6 MB) wird mit ausgeliefert. Grund: Ohne Versionsnummer
   lieferte jsDelivr die neueste Laufzeit (1.x) zur gebündelten 0.10.34 – die Erkennung startete
   dann nie (06.10.2026, am Handy aufgefallen). Ohne Cloudflare-Build lädt die App die Laufzeit
@@ -78,3 +81,26 @@ Unter **Settings → Build** für Produktions- und Vorschau-Builds prüfen:
 
 Nach Änderungen einen neuen Build starten. Das Speichern dieser Befehle im Dashboard
 wird durch Änderungen am Repository nicht automatisch übernommen.
+
+## Installation ohne native Labor-Laufzeit
+
+Der Web-Build braucht `onnxruntime-node` nicht. Die native Bibliothek liegt deshalb
+mit eigenem Lockfile unter `lab/package.json` und wird bei `npm ci` im Projektstamm
+nicht installiert. Das vermeidet rund 247 MiB entpackte native Dateien im Web-Build
+und zusätzliche native Downloads. `onnxruntime-web` bleibt für BiRefNet im Browser erhalten.
+
+Für native Laborvergleiche einmalig zusätzlich ausführen:
+
+```sh
+npm run lab:setup
+npm run lab:models
+npm run lab:compare
+```
+
+`lab:setup` nutzt `npm ci --prefix lab` mit normalen Installationsskripten und dem
+Labor-Lockfile. Bei Labor-Abhängigkeitsänderungen das Lockfile dort separat erneuern.
+Die Produktiv-Installation benötigt diesen Schritt nicht.
+
+Wrangler ist als genaue Projektabhängigkeit gesperrt. Dadurch verwenden Produktion
+und Vorschau dieselbe CLI; `npx wrangler` lädt beim Deploy keine wechselnde neueste
+Version mehr nach. Ein frischer `npm ci` muss Wrangler weiterhin installieren.

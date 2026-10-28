@@ -45,4 +45,13 @@ const result = spawnSync("npx", ["next", "build"], {
   shell: process.platform === "win32",
   env: { ...process.env, RIB_STATIC_EXPORT: "1", NEXT_PUBLIC_MEDIAPIPE_ASSET_BASE: "/mediapipe" },
 });
-process.exit(result.status ?? 1);
+if (result.status !== 0) process.exit(result.status ?? 1);
+
+// BiRefNet is optional and explicitly loads its runtime from the versioned CDN
+// (lib/segmenters/birefnet.ts, ort.env.wasm.wasmPaths). Webpack still emits local
+// copies of those large ONNX WASM binaries. Exclude only those duplicates from
+// Wrangler's asset upload; retain all MediaPipe variants, JS modules, and model.
+writeFileSync(
+  path.join(root, "out", ".assetsignore"),
+  "# ONNX WASM is loaded from the versioned CDN, not these emitted duplicates.\n/_next/static/media/ort-wasm*.wasm\n",
+);

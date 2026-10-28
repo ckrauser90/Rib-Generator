@@ -1,0 +1,9 @@
+{
+  "name": "rib-generator-segmentation-lab",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Optional native runtime for the segmentation comparison; not installed for web builds.",
+  "dependencies": {
+    "onnxruntime-node": "1.23.2"
+  }
+}
