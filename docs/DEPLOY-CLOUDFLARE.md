@@ -104,3 +104,30 @@ Die Produktiv-Installation benötigt diesen Schritt nicht.
 Wrangler ist als genaue Projektabhängigkeit gesperrt. Dadurch verwenden Produktion
 und Vorschau dieselbe CLI; `npx wrangler` lädt beim Deploy keine wechselnde neueste
 Version mehr nach. Ein frischer `npm ci` muss Wrangler weiterhin installieren.
+
+## Content Security Policy im statischen Export
+
+`npm run build:cloudflare` ergänzt `out/_headers` um eine CSP. Der Build berechnet
+SHA-256-Hashes aus den tatsächlichen Inline-Skripten aller exportierten HTML-Seiten.
+Dadurch bleibt der Next.js-Start erlaubt, zusätzliche Inline-Skripte und JavaScript
+`eval` sind gesperrt. Nachträgliche Änderungen an den HTML-Dateien erfordern einen
+neuen Build; die Hashes in `out/_headers` nicht von Hand anpassen.
+
+Die Richtlinie erlaubt die eigene Worker-Laufzeit, WebAssembly, Kamera-Videos über
+Blob-URLs, lokale Bilddaten und die bisherigen Schriftquellen. Für die optionale
+BiRefNet-Erkennung bleiben jsDelivr und Hugging Face samt deren `hf.co`-Weiterleitungen
+erlaubt. Ein per `NEXT_PUBLIC_BIREFNET_MODEL_URL` konfigurierter zusätzlicher
+HTTPS-Modellhost wird beim Build ergänzt; weitere externe Redirect-Hosts müssen in
+`scripts/security-headers.mjs` ausdrücklich berücksichtigt werden. URLs oder Zugangsdaten
+werden nicht in den Header übernommen, nur der HTTPS-Ursprung des Modellhosts.
+
+Die vorhandenen Header gegen Einbettung und MIME-Sniffing bleiben erhalten. Inline-CSS
+bleibt für React-Stile erlaubt; Inline-JavaScript erhält keine pauschale Freigabe.
+Die CSP wird von Cloudflare über die exportierte `_headers`-Datei ausgeliefert; ein
+gewöhnlicher lokaler Dateiserver wendet diese Datei nicht automatisch an.
+
+Die Header-Tests laufen ohne zusätzliche Abhängigkeiten:
+
+```sh
+node --test tests/security-headers.test.mjs
+```

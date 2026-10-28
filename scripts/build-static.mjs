@@ -7,6 +7,7 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { writeSecurityHeaders } from "./security-headers.mjs";
 
 const root = process.cwd();
 const target = path.join(root, "public", "mediapipe");
@@ -55,3 +56,9 @@ writeFileSync(
   path.join(root, "out", ".assetsignore"),
   "# ONNX WASM is loaded from the versioned CDN, not these emitted duplicates.\n/_next/static/media/ort-wasm*.wasm\n",
 );
+
+// Hash the exact exported bootstrap scripts, after Next has finished writing HTML.
+const security = writeSecurityHeaders(path.join(root, "out"), {
+  modelUrl: process.env.NEXT_PUBLIC_BIREFNET_MODEL_URL,
+});
+console.log(`Static CSP: ${security.scriptHashes} inline script hashes across ${security.htmlFiles} HTML files.`);

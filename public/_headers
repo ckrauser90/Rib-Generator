@@ -1,6 +1,6 @@
 # Sicherheits-Header für Cloudflare (Worker mit statischen Dateien liest diese Datei).
-# Bewusst ohne CSP: Erkennung und Modelle kommen von jsDelivr, Google und Hugging Face;
-# eine CSP folgt, wenn die Quellen feststehen.
+# Der Cloudflare-Build ergänzt die CSP in out/_headers mit Hashes der exportierten
+# Next.js-Skripte (scripts/security-headers.mjs). Diese Basis-Header bleiben erhalten.
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
