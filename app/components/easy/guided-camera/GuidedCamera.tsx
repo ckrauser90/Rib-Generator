@@ -270,7 +270,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
     let segmenting = false;
     const interval = window.setInterval(() => {
       const video = videoRef.current;
-      if (!video || !context || video.readyState < 2 || video.videoWidth === 0) return;
+      if (document.hidden || !video || !context || video.readyState < 2 || video.videoWidth === 0) return;
       tick += 1;
       // Schärfe: mittlerer Bildausschnitt, 200 px breit, nur relativ zum besten Wert.
       const sampleWidth = 200;
