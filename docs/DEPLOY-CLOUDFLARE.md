@@ -63,3 +63,18 @@ in den PR. Abschalten unter Settings → Build → Branch control.
   dann nie (06.10.2026, am Handy aufgefallen). Ohne Cloudflare-Build lädt die App die Laufzeit
   von jsDelivr, jetzt immer in der installierten Version (`next.config.ts`).
 - BiRefNet (224 MB) passt nicht ins Deployment und kommt von Hugging Face.
+
+## Build erfolgreich, Preview schlägt fehl
+
+Bei `wrangler preview` ab Version 4.154.0 ist der Block `"previews": {}` in
+`wrangler.jsonc` erforderlich; `preview_urls: true` ersetzt ihn nicht.
+
+Unter **Settings → Build** für Produktions- und Vorschau-Builds prüfen:
+
+- Build command: `npm run build:cloudflare` (ein normales `npm run build`
+  erzeugt den von Wrangler erwarteten Ordner `out/` nicht).
+- Deploy command für Produktion: `npx wrangler deploy`.
+- Deploy command für Vorschau: `npx wrangler preview`.
+
+Nach Änderungen einen neuen Build starten. Das Speichern dieser Befehle im Dashboard
+wird durch Änderungen am Repository nicht automatisch übernommen.
