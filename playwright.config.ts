@@ -12,6 +12,7 @@ export default defineConfig({
     video: process.env.CI ? "retain-on-failure" : "off",
   },
   webServer: {
+    env: { NEXT_PUBLIC_ENABLE_E2E_MOCK: "1" },
     // Plain npm commands run under cmd.exe on Windows and sh on Linux/CI alike.
     command: "npm run build && npm run start -- --hostname 127.0.0.1 --port 3005",
     url: "http://127.0.0.1:3005",

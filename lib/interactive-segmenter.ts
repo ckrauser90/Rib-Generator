@@ -1,3 +1,4 @@
+import { isE2eMockEnabled } from "./e2e-mode";
 import type { RasterSource } from "./perspective";
 import { createSegmenter, segmentWithOwnedMask, type SegmentationMask } from "./mediapipe-core";
 import type { WorkerRequest } from "./mediapipe-worker";
@@ -79,13 +80,7 @@ async function loadMain() {
   return mainPromise;
 }
 
-export const isE2eMockEnabled = () => {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  return new URLSearchParams(window.location.search).get("e2eMockSegmenter") === "1";
-};
+export { isE2eMockEnabled } from "./e2e-mode";
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
