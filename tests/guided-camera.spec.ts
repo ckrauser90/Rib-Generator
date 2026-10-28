@@ -79,3 +79,37 @@ test("in test mode the guided capture is recorded with its state at the shutter"
   expect(typeof attempt.guided.instruction).toBe("string");
   expect(attempt.durationMs).toBeGreaterThan(0);
 });
+
+test("camera enumeration failure keeps the working preview", async ({ page }) => {
+  await page.addInitScript(() => {
+    navigator.mediaDevices.enumerateDevices = async () => { throw new Error("Device list unavailable"); };
+  });
+  await page.goto("/?e2eMockSegmenter=1");
+  await page.getByTestId("easy-guided-button").click();
+  await expect.poll(() => page.getByTestId("guided-video").evaluate((video: HTMLVideoElement) => video.readyState)).toBeGreaterThanOrEqual(2);
+  await expect(page.getByTestId("guided-camera").getByRole("alert")).toHaveCount(0);
+});
+
+test("a stalled video offers a restart that requests a new stream", async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    let requests = 0;
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      requests += 1;
+      document.documentElement.dataset.cameraRequests = String(requests);
+      return original(constraints);
+    };
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "readyState")!;
+    Object.defineProperty(HTMLMediaElement.prototype, "readyState", {
+      configurable: true,
+      get() { return requests === 1 ? 0 : descriptor.get!.call(this); },
+    });
+  });
+  await page.goto("/?e2eMockSegmenter=1");
+  await page.getByTestId("easy-guided-button").click();
+  await expect(page.getByTestId("guided-tap-start")).toBeVisible();
+  await page.getByTestId("guided-tap-start").click();
+  await expect(page.locator("html")).toHaveAttribute("data-camera-requests", "2");
+  await expect.poll(() => page.getByTestId("guided-video").evaluate((video: HTMLVideoElement) => video.readyState)).toBeGreaterThanOrEqual(2);
+  await expect(page.getByTestId("guided-tap-start")).toBeHidden();
+});
