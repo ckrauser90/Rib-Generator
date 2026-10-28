@@ -1,6 +1,25 @@
 # Next Session
 
-Last updated: 2026-10-06
+Last updated: 2026-10-28
+
+## Performance und Security (2026-10-28)
+
+Aktueller Arbeitsbranch: `fix/iphone-guided-camera`, basiert auf dem bestehenden UI-Branch
+`claude/relaxed-dijkstra-tgjeh9`. UI und konservative Kontur-/Geometriegrenzen bleiben erhalten.
+
+- MediaPipe läuft bevorzugt im Worker, mit geprüftem Browser-Rückfallpfad; frühe Uploads
+  während der Modellinitialisierung werden durch einen Regressionstest abgesichert.
+- Binäre STL, wiederverwendeter 3D-Renderer, bedarfsgesteuertes Rendern und optimierte
+  Whittaker-Initialisierung. Referenzgeometrie bleibt erhalten.
+- Native ONNX-Laborinstallation separat (`npm run lab:setup`); doppelte externe ONNX-WASM-
+  Dateien sind vom Deployment ausgeschlossen. Wrangler ist versioniert.
+- Framework-/Dependency-Sicherheitsupdates, generierte CSP-Skripthashes und Mock-Erkennung
+  nur in expliziten Test-Builds. Keine Testfreigabe in Cloudflare setzen.
+- Geprüft: 87 Unit-Tests, 37 Browser-Tests, 7 Header-Tests, öffentlicher Cloudflare-Build und
+  Deploy-Dry-Run. Echtes MediaPipe erzeugt im Worker und im Rückfallpfad dieselbe
+  Referenz-STL (41.812 Dreiecke). Root-/Lab-Audits melden keine bekannten Schwachstellen.
+- Details und Befehle: `docs/PERFORMANCE-AND-SECURITY.md`, `docs/DEPENDENCY-SECURITY.md`.
+- Nicht auf echter iPhone-Hardware geprüft und nicht direkt aus dieser Session deployed.
 
 ## Stand 2026-10-06 (Branch `claude/relaxed-dijkstra-tgjeh9`)
 

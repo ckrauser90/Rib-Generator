@@ -85,10 +85,10 @@ export { isE2eMockEnabled } from "./e2e-mode";
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /** Prefer background inference; older browsers retain the same main-thread implementation. */
-export async function loadInteractiveSegmenter() {
+export async function loadInteractiveSegmenter(): Promise<void> {
   if (isE2eMockEnabled()) return;
+  const current = generation;
   if (!workerDisabled && typeof Worker !== "undefined" && typeof OffscreenCanvas !== "undefined" && typeof createImageBitmap === "function") {
-    const current = generation;
     if (!workerReady) {
       workerReady = (async () => {
         worker = new Worker(new URL("./mediapipe-worker.ts", import.meta.url));
@@ -106,13 +106,19 @@ export async function loadInteractiveSegmenter() {
     }
     try { await workerReady; return; }
     catch (error) {
-      if (current !== generation) throw error;
+      // An early photo upload resets initialization. Lifecycle callers must await
+      // the new generation rather than leave the UI permanently in an error state.
+      if (current !== generation) return loadInteractiveSegmenter();
       // OffscreenCanvas/WebGL support differs on Safari. Keep the workflow usable.
       workerDisabled = true;
       stopWorker();
     }
   }
-  await loadMain();
+  try { await loadMain(); }
+  catch (error) {
+    if (current !== generation) return loadInteractiveSegmenter();
+    throw error;
+  }
 }
 
 export function resetInteractiveSegmenter() {
