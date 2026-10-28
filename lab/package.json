@@ -5,5 +5,10 @@
   "description": "Optional native runtime for the segmentation comparison; not installed for web builds.",
   "dependencies": {
     "onnxruntime-node": "1.23.2"
+  },
+  "overrides": {
+    "onnxruntime-node": {
+      "adm-zip": "0.6.1"
+    }
   }
 }
