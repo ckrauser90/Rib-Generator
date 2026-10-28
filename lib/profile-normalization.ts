@@ -86,8 +86,9 @@ const applyWhittakerOperator = (values: number[], lambda: number, weights: numbe
 const solveWhittakerSmooth = (observed: number[], lambda: number, weights: number[]) => {
   const rightHandSide = observed.map((value, index) => value * weights[index]);
   let solution = observed.slice();
+  const initialOperator = applyWhittakerOperator(solution, lambda, weights);
   let residual = rightHandSide.map(
-    (value, index) => value - applyWhittakerOperator(solution, lambda, weights)[index],
+    (value, index) => value - initialOperator[index],
   );
   let direction = residual.slice();
   let residualNorm = dotProduct(residual, residual);
