@@ -64,8 +64,25 @@ export function writeSecurityHeaders(outDir, { modelUrl } = {}) {
   const hashes = new Set(htmlFiles.flatMap((filename) => inlineScriptHashes(readFileSync(filename, "utf8"))));
   const policy = createContentSecurityPolicy([...hashes].sort(), modelUrl);
   const headersPath = path.join(outDir, "_headers");
-  // Preserve the existing Cloudflare headers and replace only our generated block.
-  const baseline = readFileSync(headersPath, "utf8").split(GENERATED_MARKER)[0].trimEnd();
-  writeFileSync(headersPath, `${baseline}\n\n${GENERATED_MARKER}\n/*\n  Content-Security-Policy: ${policy}\n`);
+  // Cloudflare treats duplicate path rules as replacements, so add CSP to the
+  // existing global rule instead of creating a second /* rule.
+  const source = readFileSync(headersPath, "utf8").split(/\r?\n/);
+  const lines = [];
+  for (let index = 0; index < source.length; index += 1) {
+    if (source[index].trim() === GENERATED_MARKER) {
+      // Also remove the duplicate rule written by the earlier generator.
+      if (source[index + 1]?.trim() === "/*") index += 1;
+      if (/^\s+Content-Security-Policy:/i.test(source[index + 1] ?? "")) index += 1;
+    } else {
+      lines.push(source[index]);
+    }
+  }
+  let globalRule = lines.findIndex((line) => line.trim() === "/*");
+  if (globalRule === -1) {
+    lines.push("/*");
+    globalRule = lines.length - 1;
+  }
+  lines.splice(globalRule + 1, 0, GENERATED_MARKER, `  Content-Security-Policy: ${policy}`);
+  writeFileSync(headersPath, `${lines.join("\n").trimEnd()}\n`);
   return { policy, htmlFiles: htmlFiles.length, scriptHashes: hashes.size };
 }
