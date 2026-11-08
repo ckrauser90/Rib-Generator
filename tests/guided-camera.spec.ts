@@ -61,6 +61,8 @@ test("in test mode the guided capture is recorded with its state at the shutter"
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/?e2eMockSegmenter=1&test=1");
   await page.getByTestId("easy-guided-button").click();
+  await page.getByTestId("guided-auto-capture").uncheck();
+  await expect(page.getByTestId("guided-auto-capture")).not.toBeChecked();
   await expect
     .poll(() => page.getByTestId("guided-video").evaluate((video: HTMLVideoElement) => video.readyState), { timeout: 15_000 })
     .toBeGreaterThanOrEqual(2);
@@ -75,7 +77,7 @@ test("in test mode the guided capture is recorded with its state at the shutter"
   const data = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
   const [attempt] = data.attempts;
   expect(attempt).toMatchObject({ mode: "gefuehrt", outcome: "neues-foto" });
-  expect(typeof attempt.guided.autoCaptured).toBe("boolean");
+  expect(attempt.guided.autoCaptured).toBe(false);
   expect(typeof attempt.guided.instruction).toBe("string");
   expect(attempt.durationMs).toBeGreaterThan(0);
 });
@@ -108,8 +110,10 @@ test("a stalled video offers a restart that requests a new stream", async ({ pag
   await page.goto("/?e2eMockSegmenter=1");
   await page.getByTestId("easy-guided-button").click();
   await expect(page.getByTestId("guided-tap-start")).toBeVisible();
+  await expect(page.getByTestId("guided-shutter")).toBeDisabled();
   await page.getByTestId("guided-tap-start").click();
   await expect(page.locator("html")).toHaveAttribute("data-camera-requests", "2");
   await expect.poll(() => page.getByTestId("guided-video").evaluate((video: HTMLVideoElement) => video.readyState)).toBeGreaterThanOrEqual(2);
   await expect(page.getByTestId("guided-tap-start")).toBeHidden();
+  await expect(page.getByTestId("guided-shutter")).toBeEnabled();
 });

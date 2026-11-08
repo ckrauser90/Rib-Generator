@@ -38,5 +38,7 @@ test("uploading before worker initialization finishes restarts recognition", asy
   await page.getByTestId("easy-upload-input").setInputFiles(path.join(__dirname, "fixtures", "sample-cup.svg"));
   await expect(page.getByTestId("easy-contour-status")).toHaveText("Kontur erkannt");
   await expect(page.locator("html")).toHaveAttribute("data-vision-workers", "2");
+  await expect(page.getByTestId("easy-create-button")).toBeDisabled();
+  await page.getByTestId("easy-height-confirmed").check();
   await expect(page.getByTestId("easy-create-button")).toBeEnabled();
 });

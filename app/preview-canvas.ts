@@ -243,6 +243,7 @@ export const drawPreview = (
 
   if (contour.length > 1) {
     context.fillStyle = "rgba(122, 142, 110, 0.12)";
+    context.setLineDash(fitToParent ? [5, 5] : []);
     context.strokeStyle = "#7A8E6E";
     context.lineWidth = 2.4;
     context.beginPath();
@@ -255,10 +256,12 @@ export const drawPreview = (
     context.closePath();
     context.fill();
     context.stroke();
+    context.setLineDash([]);
   }
 
   if (workProfile.length > 1) {
     context.beginPath();
+    context.setLineDash(fitToParent ? [6, 5] : []);
     context.strokeStyle = "#F8F6F1";
     context.lineWidth = 2.2;
     workProfile.forEach((point, index) => {
@@ -268,6 +271,7 @@ export const drawPreview = (
       else context.lineTo(x, y);
     });
     context.stroke();
+    context.setLineDash([]);
   }
 
   if (activeSegment && activeSegment.length > 1) {

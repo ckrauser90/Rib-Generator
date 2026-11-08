@@ -9,7 +9,7 @@
 import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { readTipsDismissed, writeTipsDismissed } from "../../easy-flow";
 import { PhotoTipsSheet } from "./PhotoTipsSheet";
-// Geführte Aufnahme (Test): einzige Verbindung zur App. Zum Verwerfen diesen Import,
+// Geführte Aufnahme: einzige Verbindung zur App. Zum Verwerfen diesen Import,
 // den Knopf unten und den Ordner guided-camera/ löschen (docs/decisions.md R-010).
 import { GuidedCamera, type GuidedCaptureInfo } from "./guided-camera/GuidedCamera";
 import type { CaptureMode } from "../../test-log";
@@ -104,8 +104,8 @@ export function PhotoStep({
   return (
     <>
       <div className={styles.intro}>
-        <h1 className={styles.title}>Fotografiere<br />dein Gefäß</h1>
-        <p className={styles.lead}>Aus dem Foto entsteht eine Rib, die genau zu deiner Form passt.</p>
+        <h1 className={styles.title}>Deine Form.<br />Deine Rib.</h1>
+        <p className={styles.lead}>Aus der Kontur deines Gefäßes.</p>
       </div>
 
       <div
@@ -117,7 +117,9 @@ export function PhotoStep({
       >
         <div className={styles.dropZone}>
           <svg width="90" height="120" viewBox="0 0 200 260" fill="none" aria-hidden>
-            <path d="M62 20 L138 20 C134 40 128 50 130 62 C160 90 176 130 168 170 C162 205 145 228 140 240 L60 240 C55 228 38 205 32 170 C24 130 40 90 70 62 C72 50 66 40 62 20 Z" stroke="#7A8E6E" strokeWidth="5" strokeDasharray="10 8" strokeLinejoin="round" />
+            <path d="M62 20 L138 20 C134 40 128 50 130 62 C160 90 176 130 168 170 C162 205 145 228 140 240 L60 240 C55 228 38 205 32 170 C24 130 40 90 70 62 C72 50 66 40 62 20 Z" fill="#E8E0D3" stroke="#DDD5C8" strokeWidth="2" />
+            <path d="M145 20 C141 40 135 50 137 62 C167 90 183 130 175 170 C169 205 152 228 147 240" stroke="#5C6E52" strokeWidth="4" strokeDasharray="8 7" strokeLinecap="round" />
+            <circle cx="145" cy="20" r="6" fill="#5C6E52" /><circle cx="147" cy="240" r="6" fill="#5C6E52" />
           </svg>
           <span className={styles.dropHint}>Bild hierher ziehen</span>
         </div>
@@ -143,7 +145,7 @@ export function PhotoStep({
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <rect x="3" y="3" width="18" height="18" rx="3" /><line x1="12" y1="3" x2="12" y2="21" /><line x1="6" y1="6.5" x2="18" y2="6.5" /><line x1="6" y1="17.5" x2="18" y2="17.5" />
           </svg>
-          Geführte Aufnahme (Test)
+          Geführte Aufnahme
         </button>
         <button type="button" className={styles.textButton} onClick={() => { setTipsBeforeCamera(false); onTipsOpenChange(true); }}>
           Tipps für ein gutes Foto

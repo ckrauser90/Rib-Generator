@@ -5,12 +5,16 @@
 // Alles Weitere (Glättung, Fase, Breite, Dicke, Formverstärkung) liegt im Pro-Modus.
 // Kann die STL nicht erzeugt werden, steht der Grund direkt über dem Knopf.
 
+import { useState } from "react";
+import { stlFileName } from "../../stl-file-name";
+import { PhotoComparison, type PhotoComparisonData } from "./PhotoComparison";
 import type { Point, ToolHole, WorkProfileSide } from "../../../lib/contour";
 import { Rib3DPreview } from "../../rib-3d-preview";
 import { findShrinkagePreset, formatMm } from "../../shrinkage";
 import styles from "./easy.module.css";
 
 export type DoneStepProps = {
+  comparison: PhotoComparisonData;
   bevelStrength: number;
   blockedReason: string | null;
   canDownload: boolean;
@@ -28,6 +32,7 @@ export type DoneStepProps = {
 };
 
 export function DoneStep({
+  comparison,
   bevelStrength,
   blockedReason,
   canDownload,
@@ -43,6 +48,7 @@ export function DoneStep({
   onNewPhoto,
   onOpenPro,
 }: DoneStepProps) {
+  const [view, setView] = useState<"photo" | "3d">("3d");
   const preset = findShrinkagePreset(shrinkagePercent);
   const shrinkageText = shrinkagePercent > 0
     ? `Für ${preset ? preset.label : "deinen Ton"} (${String(shrinkagePercent).replace(".", ",")} %) vergrößert – nach dem Brand ${formatMm(targetHeightMm)}.`
@@ -51,14 +57,18 @@ export function DoneStep({
   return (
     <>
       <div className={styles.intro}>
-        <h1 className={styles.title}>Deine Rib ist fertig</h1>
+        <h1 className={styles.title}>Deine Rib ist bereit</h1>
         <p className={styles.lead}>
-          Passt genau zur {workProfileSide === "left" ? "linken" : "rechten"} Seite deines Gefäßes. {shrinkageText}
+          Aus der {workProfileSide === "left" ? "linken" : "rechten"} Kontur deines Gefäßes. {shrinkageText}
         </p>
       </div>
 
       <div className={`${styles.visual} ${styles.previewFrame}`} data-testid="easy-3d">
-        {toolOutline.length > 1 ? (
+        <div className={styles.previewChoice} role="group" aria-label="Ansicht wählen">
+          <button type="button" aria-pressed={view === "photo"} onClick={() => setView("photo")} data-testid="easy-view-photo">Am Foto</button>
+          <button type="button" aria-pressed={view === "3d"} onClick={() => setView("3d")} data-testid="easy-view-3d">3D</button>
+        </div>
+        {view === "photo" ? <PhotoComparison {...comparison} /> : toolOutline.length > 1 ? (
           <Rib3DPreview outline={toolOutline} holes={toolHoles} thicknessMm={thicknessMm} bevelStrength={bevelStrength} className={styles.preview3d} />
         ) : (
           <p className={styles.muted}>Noch keine Rib – geh einen Schritt zurück.</p>
@@ -67,7 +77,7 @@ export function DoneStep({
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M21 12a9 9 0 1 1-3-6.7" /><polyline points="21 3 21 9 15 9" />
           </svg>
-          Wischen zum Drehen
+          {view === "3d" ? "Wischen zum Drehen" : "Gestrichelt: Kontur · Grün: gewählte Kante"}
         </span>
       </div>
 
@@ -87,6 +97,8 @@ export function DoneStep({
           STL herunterladen
         </button>
 
+        <p className={styles.downloadHint} data-testid="easy-download-name">{stlFileName(ribHeightMm, ribWidthMm, thicknessMm)}<br /><span>Im Slicer: Millimeter · 100 % Größe</span></p>
+
         <button type="button" className={styles.proCard} onClick={onOpenPro} data-testid="easy-pro-button">
           <span className={styles.proIcon} aria-hidden>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -94,7 +106,7 @@ export function DoneStep({
             </svg>
           </span>
           <span className={styles.proText}>
-            <strong>Pro-Modus</strong>
+            <strong>Details anpassen</strong>
             <span className={styles.muted}>Glättung, Fase, Breite, Dicke, Formverstärkung</span>
           </span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polyline points="9 18 15 12 9 6" /></svg>

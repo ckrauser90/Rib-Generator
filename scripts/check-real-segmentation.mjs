@@ -38,9 +38,10 @@ try {
     await page.getByTestId("easy-upload-input").setInputFiles(fixture);
     await expect(page.getByTestId("easy-contour-status")).toHaveText("Kontur erkannt", { timeout: 90_000 });
     if (!fallback) assert.ok(await page.evaluate(() => window.visionMasks > 0), "Real worker must return a mask despite test URL");
+    await page.getByTestId("easy-height-confirmed").check();
     await page.getByTestId("easy-create-button").click();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("easy-download-button").click()]);
-    assert.equal(download.suggestedFilename(), "rib-tool.stl");
+    assert.equal(download.suggestedFilename(), await page.getByTestId("easy-download-name").evaluate((node) => node.firstChild.textContent));
     const stream = await download.createReadStream();
     const chunks = [];
     for await (const chunk of stream) chunks.push(Buffer.from(chunk));

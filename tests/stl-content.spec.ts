@@ -25,7 +25,7 @@ async function setupAndDownload(page: Page) {
 
 test("exported STL has correct filename", async ({ page }) => {
   const download = await setupAndDownload(page);
-  expect(download.suggestedFilename()).toBe("rib-tool.stl");
+  expect(download.suggestedFilename()).toMatch(/^Rib_[\d.]+x[\d.]+x[\d.]+mm\.stl$/);
 });
 
 async function readStl(download: Download) {

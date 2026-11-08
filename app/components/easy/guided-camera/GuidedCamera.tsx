@@ -78,6 +78,8 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
   const streamRef = useRef<MediaStream | null>(null);
   const holdSinceRef = useRef<number | null>(null);
   const capturingRef = useRef(false);
+  const [videoReady, setVideoReady] = useState(false);
+  const [autoCapture, setAutoCapture] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [restart, setRestart] = useState(0);
   const [needsTap, setNeedsTap] = useState(false);
@@ -117,6 +119,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
     let watchdog = 0;
     setError(null);
     setNeedsTap(false);
+    setVideoReady(false);
     stopStream();
     const start = async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -224,6 +227,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
     const interval = window.setInterval(() => {
       const video = videoRef.current;
       if (!video) return;
+      setVideoReady(video.readyState >= 2 && video.videoWidth > 0 && !video.paused);
       setVideoInfo(
         video.videoWidth > 0
           ? `Video ${video.videoWidth}×${video.videoHeight} · ${video.paused ? "pausiert" : "läuft"}`
@@ -314,7 +318,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
 
   const capture = useCallback(async (autoCaptured: boolean) => {
     const video = videoRef.current;
-    if (!video || video.videoWidth === 0 || capturingRef.current) return;
+    if (!video || video.readyState < 2 || video.videoWidth === 0 || video.paused || capturingRef.current) return;
     capturingRef.current = true;
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
@@ -336,7 +340,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
   }, [onCapture, stopStream]);
 
   // Selbstauslöser: Kreis füllt sich, solange alles passt; dann Foto.
-  const ready = guidance.ready;
+  const ready = autoCapture && videoReady && guidance.ready;
   useEffect(() => {
     let frame = 0;
     const step = () => {
@@ -382,7 +386,12 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
             muted
             autoPlay
             onLoadedMetadata={updateBand}
-            onPlaying={() => setNeedsTap(false)}
+            onLoadedData={(event) => setVideoReady(event.currentTarget.readyState >= 2 && event.currentTarget.videoWidth > 0 && !event.currentTarget.paused)}
+            onEmptied={() => setVideoReady(false)}
+            onPlaying={(event) => {
+              setNeedsTap(false);
+              setVideoReady(event.currentTarget.readyState >= 2 && event.currentTarget.videoWidth > 0);
+            }}
             data-testid="guided-video"
           />
 
@@ -433,7 +442,7 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
-        <span className={styles.title}>Geführte Aufnahme <span className={styles.badge}>Test</span></span>
+        <span className={styles.title}>Geführte Aufnahme</span>
         {zoom ? (
           <div className={styles.zoomGroup} role="group" aria-label="Zoom">
             {[1, 2, 3]
@@ -460,16 +469,20 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
           <strong>{guidance.title}</strong>
           <span>{guidance.detail}</span>
         </div>
+        <label className={styles.autoCaptureToggle}>
+          <span>Automatisch aufnehmen</span>
+          <input type="checkbox" role="switch" checked={autoCapture} onChange={(event) => setAutoCapture(event.target.checked)} data-testid="guided-auto-capture" />
+        </label>
         <div className={styles.controls}>
           {!tilt ? (
-            <button type="button" className={styles.iconButton} onClick={() => { void requestMotionPermission(); }} aria-label="Lagesensor aktivieren">Lage</button>
+            <button type="button" className={styles.iconButton} onClick={() => { void requestMotionPermission(); }} aria-label="Ausrichthilfe aktivieren" title="Zum Ausrichten den Lagesensor freigeben">Ausrichten</button>
           ) : <span />}
           <button
             type="button"
             className={styles.shutter}
             data-ready={guidance.ready || undefined}
             onClick={() => void capture(false)}
-            disabled={Boolean(error)}
+            disabled={Boolean(error) || !videoReady}
             aria-label={guidance.ready ? "Aufnehmen" : "Trotzdem aufnehmen"}
             data-testid="guided-shutter"
           >
@@ -490,7 +503,12 @@ export function GuidedCamera({ onCapture, onClose, onFallback }: GuidedCameraPro
             )}
           </div>
         </div>
-        <p className={styles.diagnostic} data-testid="guided-diagnostic">{videoInfo}</p>
+        <details className={styles.diagnostic}>
+          <summary>Kamerahilfe</summary>
+          <p data-testid="guided-diagnostic">{videoInfo}</p>
+          <p>Die Ausrichthilfe verwendet den Lagesensor. Du kannst auch ohne sie fotografieren.</p>
+          <button type="button" className={styles.fallbackButton} onClick={() => { stopStream(); onFallback(); }}>Normale Kamera öffnen</button>
+        </details>
       </div>
     </div>
   );

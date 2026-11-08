@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { stlFileName } from "./stl-file-name";
 import type {
   ChangeEvent,
   Dispatch,
@@ -458,7 +459,7 @@ export const usePageHandlers = ({
 
     triggerBrowserDownload({
       blob: new Blob([stl], { type: "model/stl" }),
-      fileName: "rib-tool.stl",
+      fileName: stlFileName(toolHeightMm, resolvedToolWidthMm, thicknessMm),
     });
     setStatus(pageText.stlExported);
   };

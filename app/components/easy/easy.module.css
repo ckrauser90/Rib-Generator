@@ -35,6 +35,8 @@
   font-weight: 600;
 }
 
+.brandGroup { display: flex; align-items: center; gap: 10px; }
+
 .headerActions {
   display: flex;
   align-items: center;
@@ -525,4 +527,27 @@
   .sheet { border-radius: 28px; }
   .sheetHandle { display: none; }
   .stickyAction { position: static; box-shadow: none; }
+}
+
+/* Atelier: explicit measurement, reversible edits and direct photo comparison. */
+.historyActions { display: flex; justify-content: space-between; gap: 12px; }
+.historyActions button { min-height: 44px; padding: 6px 8px; border: 0; background: transparent; color: var(--easy-text); font-size: 14px; cursor: pointer; }
+.historyActions button:disabled { opacity: 0.4; cursor: default; }
+.measurementConfirmation { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 12px; font-size: 14px; cursor: pointer; }
+.measurementConfirmation input { width: 20px; height: 20px; accent-color: var(--easy-primary); }
+.materialDetails { border-top: 1px solid var(--easy-line); margin-top: 8px; padding-top: 6px; }
+.materialDetails summary { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 48px; cursor: pointer; font-size: 14px; }
+.materialDetails summary span { color: var(--easy-muted); }
+.previewChoice { position: absolute; z-index: 3; top: 12px; left: 12px; right: 12px; display: flex; border-radius: 14px; padding: 4px; background: var(--cream-warm); }
+.previewChoice button { flex: 1; min-height: 44px; border: 0; border-radius: 11px; background: transparent; color: var(--easy-text); cursor: pointer; }
+.previewChoice button[aria-pressed="true"] { background: var(--easy-primary); color: #fff; }
+.photoComparison { position: absolute; inset: 72px 0 44px; display: flex; justify-content: center; align-items: center; }
+.photoComparison canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+.downloadHint { text-align: center; color: var(--easy-muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.downloadHint span { font-size: 12px; }
+
+@media (max-width: 359px) {
+  .brand { font-size: 19px; }
+  .brandGroup { gap: 6px; }
+  .proLink { font-size: 12px; padding: 0 10px; }
 }

@@ -20,6 +20,11 @@ import styles from "./easy.module.css";
 export type ContourStepProps = {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   contourReady: boolean;
+  heightConfirmed: boolean;
+  canUndo: boolean;
+  onHeightConfirmedChange: (confirmed: boolean) => void;
+  onUndo: () => void;
+  onResetAnchors: () => void;
   correctionMode: boolean;
   dragging: boolean;
   heightMm: number;
@@ -50,6 +55,11 @@ export type ContourStepProps = {
 export function ContourStep({
   canvasRef,
   contourReady,
+  heightConfirmed,
+  canUndo,
+  onHeightConfirmedChange,
+  onUndo,
+  onResetAnchors,
   correctionMode,
   dragging,
   heightMm,
@@ -98,7 +108,7 @@ export function ContourStep({
   return (
     <>
       <div className={styles.intro}>
-        <h1 className={styles.title}>Wo soll deine Rib anliegen?</h1>
+        <h1 className={styles.title}>Prüfe deine Arbeitskante</h1>
         <p className={styles.lead}>
           Zieh <strong>Start</strong> und <strong>Ende</strong> auf der grünen Linie dorthin, wo die Rib die Form
           abnehmen soll.
@@ -136,6 +146,10 @@ export function ContourStep({
       </div>
 
       <div className={styles.controls}>
+        <div className={styles.historyActions}>
+          <button type="button" onClick={onUndo} disabled={!canUndo || segmenting} data-testid="easy-undo">↶ Rückgängig</button>
+          <button type="button" onClick={onResetAnchors} disabled={!contourReady || segmenting} data-testid="easy-reset-anchors">Automatisch setzen</button>
+        </div>
         {contourReady && !correctionMode && <PhotoCheckCard result={photoCheck} onNewPhoto={onNewPhoto} />}
         {(statusIsError || loadFailed) && !segmenting && <p className={styles.errorNote} data-testid="easy-error">{status}</p>}
         {loadFailed && (
@@ -181,19 +195,27 @@ export function ContourStep({
               <button type="button" aria-label="Mehr" onClick={() => onHeightChange(clampVesselHeightMm(heightMm + 1))}>+</button>
             </div>
           </div>
-          <ShrinkageControl
-            percent={shrinkagePercent}
-            targetHeightMm={heightMm}
-            variant="mobile"
-            onChange={onShrinkageChange}
-            testIdPrefix="easy-shrinkage"
-          />
+          <label className={styles.measurementConfirmation}>
+            <input type="checkbox" checked={heightConfirmed} onChange={(event) => onHeightConfirmedChange(event.target.checked)} data-testid="easy-height-confirmed" />
+            Mit dem Lineal gemessen
+          </label>
+          <details className={styles.materialDetails}>
+            <summary data-testid="easy-material-toggle">Ton &amp; Schwindung <span>{String(shrinkagePercent).replace(".", ",")} %</span></summary>
+            <ShrinkageControl
+              percent={shrinkagePercent}
+              targetHeightMm={heightMm}
+              variant="mobile"
+              onChange={onShrinkageChange}
+              testIdPrefix="easy-shrinkage"
+            />
+          </details>
         </div>
+        {!heightConfirmed && <p className={styles.note}>Miss die Gefäßhöhe und bestätige das Maß, bevor du die Rib erstellst.</p>}
 
         <button
           type="button"
           className={`${styles.primaryButton} ${styles.stickyAction}`}
-          disabled={!contourReady || segmenting}
+          disabled={!contourReady || segmenting || !heightConfirmed}
           onClick={onCreateRib}
           data-testid="easy-create-button"
         >
