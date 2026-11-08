@@ -1,6 +1,43 @@
 # Next Session
 
-Last updated: 2026-10-06
+Last updated: 2026-11-08
+
+## UI und Konturglättung (2026-11-08)
+
+- Ausgewählten Atelier-Entwurf im Easy Flow aufgegriffen: gestrichelte Kontur,
+  Maßbestätigung, einklappbare Schwindung, Rückgängig für die letzte Ankeränderung,
+  automatische Anker und Foto-/3D-Vergleich. Die Startseite nutzt eine Gefäßillustration;
+  das generierte Entwurfsfoto ist kein Produktionsasset.
+- Bestätigung der gemessenen Höhe ist vor „Rib erstellen“ nötig und wird bei einem
+  neuen Foto oder geändertem Höhenmaß ungültig. Downloadname enthält die tatsächlichen
+  kompensierten Maße; Hinweis auf Millimeter und 100 % im Slicer.
+- Geführte Kamera: automatische Aufnahme abschaltbar, manuelle Aufnahme erst mit
+  laufendem Videobild, technische Angaben hinter „Kamerahilfe“.
+- Konturerkennung behält Subpixel-Koordinaten statt erneut auf halbe Pixel zu runden.
+  Rib-Glättung schützt deutliche Rillen und runde Wölbungen vor dem stärkeren Filter.
+  Rohprofil bleibt erhalten; Anzeige und Geometrie bleiben getrennt.
+- Verifiziert: 98 Unit-, 38 Browser- und 7 Header-Tests; öffentlicher Build und echtes
+  MediaPipe unter Wrangler/CSP. Worker und Rückfallpfad liefern dieselbe aktuelle STL.
+- Details, Grenzen und Verifikation: `docs/UI-AND-CONTOUR.md`.
+
+## Performance und Security (2026-10-28)
+
+Aktueller Arbeitsbranch: `fix/iphone-guided-camera`, basiert auf dem bestehenden UI-Branch
+`claude/relaxed-dijkstra-tgjeh9`. UI und konservative Kontur-/Geometriegrenzen bleiben erhalten.
+
+- MediaPipe läuft bevorzugt im Worker, mit geprüftem Browser-Rückfallpfad; frühe Uploads
+  während der Modellinitialisierung werden durch einen Regressionstest abgesichert.
+- Binäre STL, wiederverwendeter 3D-Renderer, bedarfsgesteuertes Rendern und optimierte
+  Whittaker-Initialisierung. Referenzgeometrie bleibt erhalten.
+- Native ONNX-Laborinstallation separat (`npm run lab:setup`); doppelte externe ONNX-WASM-
+  Dateien sind vom Deployment ausgeschlossen. Wrangler ist versioniert.
+- Framework-/Dependency-Sicherheitsupdates, generierte CSP-Skripthashes und Mock-Erkennung
+  nur in expliziten Test-Builds. Keine Testfreigabe in Cloudflare setzen.
+- Geprüft: 87 Unit-Tests, 37 Browser-Tests, 7 Header-Tests, öffentlicher Cloudflare-Build und
+  Deploy-Dry-Run. Echtes MediaPipe erzeugt im Worker und im Rückfallpfad dieselbe
+  Referenz-STL (41.812 Dreiecke). Root-/Lab-Audits melden keine bekannten Schwachstellen.
+- Details und Befehle: `docs/PERFORMANCE-AND-SECURITY.md`, `docs/DEPENDENCY-SECURITY.md`.
+- Nicht auf echter iPhone-Hardware geprüft und nicht direkt aus dieser Session deployed.
 
 ## Stand 2026-10-06 (Branch `claude/relaxed-dijkstra-tgjeh9`)
 

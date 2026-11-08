@@ -1,7 +1,8 @@
 .next
 node_modules
-.env.local
-.env.*.local
+.env
+.env.*
+!.env.example
 
 .vercel
 playwright-report
@@ -14,3 +15,6 @@ public/lab-assets
 public/mediapipe
 reports/segmentation
 /out
+
+# Local Wrangler state and generated bundles
+.wrangler

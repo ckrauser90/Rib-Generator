@@ -185,7 +185,7 @@ test("compare ribs from bubble cup photos with the original rib", async ({ page 
         };
         results.push(entry);
         if (rib.stl && label.startsWith("Standard neu")) {
-          writeFileSync(path.join(outDir, `${path.parse(name).name}-${side}.stl`), rib.stl);
+          writeFileSync(path.join(outDir, `${path.parse(name).name}-${side}.stl`), Buffer.from(rib.stl));
         }
         console.log(
           `${name} ${side.padEnd(5)} ${label.padEnd(34)} Kerben ${entry.notches} (gemeinsam ${entry.matched})  Maßstab ${fit.scale.toFixed(3)}  Bogentiefe ${entry.arcDepthMm.toFixed(2)} mm (Rib ${objArcDepth.toFixed(2)})  Abweichung Ø ${fit.cost.toFixed(2)}  P95 ${entry.p95Mm.toFixed(2)}  max ${entry.maxMm.toFixed(2)} mm`,

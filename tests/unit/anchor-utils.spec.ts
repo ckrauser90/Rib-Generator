@@ -11,12 +11,8 @@ import {
 } from "../../app/anchor-utils";
 import type { Point, ProfileAnchors } from "../../lib/contour";
 
-const globalScope = globalThis as typeof globalThis & {
-  HTMLImageElement?: new (...args: unknown[]) => unknown;
-};
-
-if (!globalScope.HTMLImageElement) {
-  globalScope.HTMLImageElement = class MockHTMLImageElement {};
+if (typeof globalThis.HTMLImageElement === "undefined") {
+  Object.defineProperty(globalThis, "HTMLImageElement", { value: class MockHTMLImageElement {}, configurable: true });
 }
 
 const profile: Point[] = [

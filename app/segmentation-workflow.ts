@@ -46,16 +46,9 @@ export type SegmentationWorkflowResult = {
 
 const getContourImageData = (
   sourceRaster: RasterSource,
-  sourceImageData: ImageData,
-  sourceWidth: number,
-  sourceHeight: number,
   targetWidth: number,
   targetHeight: number,
 ) => {
-  if (sourceWidth === targetWidth && sourceHeight === targetHeight) {
-    return sourceImageData;
-  }
-
   const contourCanvas = document.createElement("canvas");
   contourCanvas.width = targetWidth;
   contourCanvas.height = targetHeight;
@@ -86,23 +79,14 @@ export const runSegmentationWorkflow = async ({
   workProfileSide,
 }: RunSegmentationWorkflowOptions): Promise<SegmentationWorkflowResult> => {
   const { width, height } = getRasterSize(sourceRaster);
-  const workerCanvas = document.createElement("canvas");
-  workerCanvas.width = width;
-  workerCanvas.height = height;
-  const workerContext = workerCanvas.getContext("2d");
-
-  if (!workerContext) {
-    throw new Error("Canvas konnte nicht erstellt werden.");
-  }
-
-  workerContext.drawImage(sourceRaster, 0, 0, width, height);
-  const sourceImageData = workerContext.getImageData(0, 0, width, height);
+  // Infer directly from the decoded photo. Read pixels only at the returned mask size,
+  // avoiding an additional full-resolution RGBA allocation before inference.
   const maskThreshold = MASK_THRESHOLD[segmenter];
   // BiRefNet braucht keinen Klickpunkt; der Punkt wählt danach nur das Gefäß unter
   // mehreren freigestellten Teilen aus (seedPoint der Kontur-Strecke).
   const segmentationResult =
     segmenter === "birefnet" && !isE2eMockEnabled()
-      ? await segmentRasterWithBiRefNet(workerCanvas, maskThreshold, {
+      ? await segmentRasterWithBiRefNet(sourceRaster, maskThreshold, {
           inputSize: BIREFNET_INPUT_SIZE_SETTING,
           modelUrl: BIREFNET_MODEL_URL,
         }).catch(
@@ -112,7 +96,7 @@ export const runSegmentationWorkflow = async ({
           },
         )
       : await segmentRasterFromPoint(
-          workerCanvas,
+          sourceRaster,
           { x: promptPoint.x / width, y: promptPoint.y / height },
           maskThreshold,
         );
@@ -124,9 +108,6 @@ export const runSegmentationWorkflow = async ({
 
   const contourImageData = getContourImageData(
     sourceRaster,
-    sourceImageData,
-    width,
-    height,
     segmentationResult.width,
     segmentationResult.height,
   );

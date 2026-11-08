@@ -26,13 +26,24 @@ async function downloadStlLength(page: Page) {
   for await (const chunk of await download.createReadStream()) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
-  const vertices = [...Buffer.concat(chunks).toString("utf-8").matchAll(/vertex\s+(\S+)\s+(\S+)\s+(\S+)/g)].map(
-    (match) => [Number(match[1]), Number(match[2]), Number(match[3])],
-  );
-  // Die STL steht aufrecht auf dem Druckbett; die Rib-Höhe ist die längste Ausdehnung.
-  const extents = [0, 1, 2].map(
-    (axis) => Math.max(...vertices.map((vertex) => vertex[axis])) - Math.min(...vertices.map((vertex) => vertex[axis])),
-  );
+  const content = Buffer.concat(chunks);
+  expect(content.byteLength).toBeGreaterThanOrEqual(84);
+  const triangles = content.readUInt32LE(80);
+  expect(triangles).toBeGreaterThan(10);
+  expect(content.byteLength).toBe(84 + 50 * triangles);
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (let triangle = 0; triangle < triangles; triangle += 1) {
+    for (let vertex = 0; vertex < 3; vertex += 1) {
+      for (let axis = 0; axis < 3; axis += 1) {
+        const value = content.readFloatLE(84 + triangle * 50 + 12 + vertex * 12 + axis * 4);
+        min[axis] = Math.min(min[axis], value);
+        max[axis] = Math.max(max[axis], value);
+      }
+    }
+  }
+  // Standing print orientation: the rib height is its longest extent.
+  const extents = max.map((value, axis) => value - min[axis]);
   return Math.max(...extents);
 }
 

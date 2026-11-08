@@ -657,7 +657,8 @@ export const buildRibFromPhoto = async (input: {
           input.shapeBoost ?? 1,
         )
       : null;
-  return { toolProfile: state.toolProfile, toolOutline: state.toolOutline, stl, blocked: prepared.kind === "blocked" ? prepared.status : null };
+  // Playwright's page.evaluate transport cannot retain an ArrayBuffer directly.
+  return { toolProfile: state.toolProfile, toolOutline: state.toolOutline, stl: stl ? Array.from(new Uint8Array(stl)) : null, blocked: prepared.kind === "blocked" ? prepared.status : null };
 };
 
 // ── Foto-Check kalibrieren (tests/lab/photo-check-calibration.spec.ts) ──

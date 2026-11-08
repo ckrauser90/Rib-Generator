@@ -18,6 +18,7 @@ test("test mode records an attempt and exports it as one JSON file", async ({ pa
   await page.getByTestId("easy-upload-input").setInputFiles(fixturePath);
   await expect(page.getByTestId("easy-contour-status")).toHaveText("Kontur erkannt");
   await expect(page.getByTestId("photo-check")).toBeVisible();
+  await page.getByTestId("easy-height-confirmed").check();
   await page.getByTestId("easy-create-button").click();
   await page.getByTestId("easy-download-button").click();
   await expect(page.getByTestId("test-mode-count")).toHaveText("1");

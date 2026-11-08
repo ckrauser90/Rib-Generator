@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { ToolGeometryValidation } from "../../lib/contour";
 import { prepareStlExport } from "../../app/export-workflow";
 
 const validGeometryValidation = {
@@ -6,7 +7,7 @@ const validGeometryValidation = {
   errors: [],
   warnings: [],
   minHoleClearanceMm: null,
-} as const;
+} satisfies ToolGeometryValidation;
 
 test("prepareStlExport blocks when contour prerequisites are missing", () => {
   expect(

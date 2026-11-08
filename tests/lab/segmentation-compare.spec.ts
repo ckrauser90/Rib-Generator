@@ -1,6 +1,6 @@
 // Segmentierungs-Vergleich: MediaPipe magic_touch gegen BiRefNet lite.
 //
-// Aufruf: npm run lab:models (einmalig), dann npm run lab:compare
+// Aufruf: npm run lab:setup und npm run lab:models (einmalig), dann npm run lab:compare
 // Ergebnis: reports/segmentation/latest/index.html plus results.json und Bilder.
 //
 // Ablauf pro Bild: Die Laborseite skaliert das Foto auf 1024×1024, Node führt
@@ -15,12 +15,22 @@ import { expect, test } from "@playwright/test";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import * as ort from "onnxruntime-node";
+import { createRequire } from "node:module";
 import { BIREFNET_INPUT_SIZE, buildBiRefNetInput } from "../../lib/segmenters/birefnet";
 import { openLab } from "./lab-page";
 import { renderReport, type CaseKind, type CaseResult } from "./report";
 
 const root = path.join(__dirname, "..", "..");
+// Resolve the optional native runtime from the separate lab installation. Its
+// shared session/tensor API is typed through the browser runtime used by the app.
+const labRequire = createRequire(path.join(root, "lab", "package.json"));
+const ort = (() => {
+  try {
+    return labRequire("onnxruntime-node") as Pick<typeof import("onnxruntime-web"), "InferenceSession" | "Tensor">;
+  } catch (cause) {
+    throw new Error("Die native Labor-Laufzeit fehlt. Zuerst npm run lab:setup ausführen.", { cause });
+  }
+})();
 const fixtureDir = path.join(root, "tests", "fixtures", "segmentation");
 const modelPath = path.join(root, ".lab-models", "birefnet-general-lite.onnx");
 const reportDir = path.join(root, "reports", "segmentation", "latest");

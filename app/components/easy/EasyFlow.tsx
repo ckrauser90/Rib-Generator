@@ -31,15 +31,16 @@ export function EasyFlow({ step, contour, done, photo, onBack, onOpenPro, testLo
   return (
     <main className={styles.easy} data-testid="easy-flow" data-step={step}>
       <header className={styles.header}>
-        {step === "foto" ? (
+        <div className={styles.brandGroup}>
+          {step !== "foto" && (
+            <button type="button" className={styles.iconButton} onClick={onBack} aria-label="Zurück" data-testid="easy-back-button">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+          )}
           <span className={styles.brand}>Rib Generator</span>
-        ) : (
-          <button type="button" className={styles.iconButton} onClick={onBack} aria-label="Zurück" data-testid="easy-back-button">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-        )}
+        </div>
         <div className={styles.headerActions}>
           {step === "foto" && (
             <button type="button" className={styles.iconButton} onClick={() => photo.onTipsOpenChange(true)} aria-label="Foto-Tipps">

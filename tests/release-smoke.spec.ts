@@ -135,7 +135,7 @@ test("core release flow allows upload, marker confirmation, anchor confirmation 
     page.getByTestId("download-button").click(),
   ]);
 
-  expect(download.suggestedFilename()).toBe("rib-tool.stl");
+  expect(download.suggestedFilename()).toMatch(/^Rib_[\d.]+x[\d.]+x[\d.]+mm\.stl$/);
 });
 
 test("reset clears the active flow after a successful contour pass", async ({ page }) => {

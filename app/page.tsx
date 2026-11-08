@@ -7,6 +7,8 @@ import { trimProfileBetweenAnchors, type AnchorHandle } from "./anchor-utils";
 import {
   createEmptyAnchorConfirmationState,
   createEmptyAnchorOverrideState,
+  type AnchorConfirmationState,
+  type AnchorOverrideState,
 } from "./anchor-edit-workflow";
 import { DesktopRibbon } from "./components/DesktopRibbon";
 import { EasyFlow } from "./components/easy/EasyFlow";
@@ -49,6 +51,13 @@ import {
 } from "./segmenter-choice";
 
 const DEFAULT_TOOL_WIDTH_MM = 65;
+
+type AnchorSnapshot = {
+  manual: AnchorOverrideState;
+  draft: AnchorOverrideState;
+  confirmed: AnchorConfirmationState;
+  editing: boolean;
+};
 
 export default function Home() {
   // Einfacher Ablauf ist der Standard; `?modus=pro` oder der Knopf öffnet die
@@ -146,6 +155,21 @@ export default function Home() {
   const [draftAnchorOverrides, setDraftAnchorOverrides] = useState(
     createEmptyAnchorOverrideState,
   );
+  const [heightConfirmed, setHeightConfirmed] = useState(false);
+  const [anchorUndo, setAnchorUndo] = useState<AnchorSnapshot | null>(null);
+  const anchorDragStartRef = useRef<AnchorSnapshot | null>(null);
+  const anchorSnapshot = (): AnchorSnapshot => ({
+    manual: manualAnchorOverrides,
+    draft: draftAnchorOverrides,
+    confirmed: anchorsConfirmed,
+    editing: anchorEditMode,
+  });
+  useEffect(() => { setHeightConfirmed(false); }, [sourceRaster, toolHeightMm]);
+  useEffect(() => {
+    setAnchorUndo(null);
+    anchorDragStartRef.current = null;
+  }, [sourceRaster, leftWorkProfile, rightWorkProfile, workProfileSide]);
+
   const [lensPoint, setLensPoint] = useState<Point | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("foto");
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
@@ -569,6 +593,7 @@ export default function Home() {
   };
 
   const toggleEasySide = () => {
+    setAnchorUndo(null);
     // Gezogene, noch nicht übernommene Punkte der bisherigen Seite bleiben erhalten.
     if (anchorEditMode) applyAnchorEditing();
     setWorkProfileSide(workProfileSide === "left" ? "right" : "left");
@@ -576,6 +601,7 @@ export default function Home() {
   };
 
   const createEasyRib = () => {
+    if (!heightConfirmed) return;
     testLog.annotate({
       details: {
         side: workProfileSide,
@@ -630,6 +656,24 @@ export default function Home() {
         contour={{
           canvasRef,
           contourReady,
+          heightConfirmed,
+          canUndo: Boolean(anchorUndo),
+          onHeightConfirmedChange: setHeightConfirmed,
+          onUndo: () => {
+            if (!anchorUndo) return;
+            setManualAnchorOverrides(anchorUndo.manual);
+            setDraftAnchorOverrides(anchorUndo.draft);
+            setAnchorsConfirmed(anchorUndo.confirmed);
+            setAnchorEditMode(anchorUndo.editing);
+            setDraggingAnchor(null);
+            setLensPoint(null);
+            setAnchorUndo(null);
+          },
+          onResetAnchors: () => {
+            setAnchorUndo(anchorSnapshot());
+            resetCurrentAnchors();
+            setAnchorEditMode(false);
+          },
           correctionMode,
           dragging: Boolean(draggingAnchor),
           heightMm: toolHeightMm,
@@ -639,12 +683,25 @@ export default function Home() {
           statusIsError: !segmenting && !contourReady && Boolean(promptPoint) && feedbackTone === "error",
           workProfileSide,
           onCanvasClick: handleEasyCanvasClick,
-          onCanvasPointerDown: handleCanvasPointerDown,
+          onCanvasPointerDown: (event) => {
+            anchorDragStartRef.current = anchorSnapshot();
+            handleCanvasPointerDown(event);
+          },
           onCanvasPointerMove: handleCanvasPointerMove,
-          onCanvasPointerUp: finishAnchorDrag,
+          onCanvasPointerUp: (event) => {
+            const before = anchorDragStartRef.current;
+            if (before && (before.draft !== draftAnchorOverrides || before.manual !== manualAnchorOverrides)) {
+              setAnchorUndo(before);
+            }
+            finishAnchorDrag(event);
+            anchorDragStartRef.current = null;
+          },
           onCorrectionModeChange: setCorrectionMode,
           onCreateRib: createEasyRib,
-          onHeightChange: setToolHeightMm,
+          onHeightChange: (value) => {
+            if (value !== toolHeightMm) setHeightConfirmed(false);
+            setToolHeightMm(value);
+          },
           onShrinkageChange: setShrinkagePercent,
           onToggleSide: toggleEasySide,
           onNewPhoto: () => {
@@ -664,6 +721,13 @@ export default function Home() {
               : `Erkennung: ${SEGMENTER_OPTIONS.find((option) => option.id === segmenter)?.label ?? segmenter} – im Pro-Modus umstellbar.`,
         }}
         done={{
+          comparison: {
+            image: sourceRaster,
+            imageSize: profileImageSize,
+            contour: displayContour,
+            profile: displayWorkProfile,
+            segment: easyActiveSegment,
+          },
           bevelStrength,
           blockedReason: toolOutline.length > 1 ? geometryValidation.errors[0]?.message ?? null : null,
           canDownload,
