@@ -1,6 +1,24 @@
 # Next Session
 
-Last updated: 2026-10-28
+Last updated: 2026-11-08
+
+## UI und Konturglättung (2026-11-08)
+
+- Ausgewählten Atelier-Entwurf im Easy Flow aufgegriffen: gestrichelte Kontur,
+  Maßbestätigung, einklappbare Schwindung, Rückgängig für die letzte Ankeränderung,
+  automatische Anker und Foto-/3D-Vergleich. Die Startseite nutzt eine Gefäßillustration;
+  das generierte Entwurfsfoto ist kein Produktionsasset.
+- Bestätigung der gemessenen Höhe ist vor „Rib erstellen“ nötig und wird bei einem
+  neuen Foto oder geändertem Höhenmaß ungültig. Downloadname enthält die tatsächlichen
+  kompensierten Maße; Hinweis auf Millimeter und 100 % im Slicer.
+- Geführte Kamera: automatische Aufnahme abschaltbar, manuelle Aufnahme erst mit
+  laufendem Videobild, technische Angaben hinter „Kamerahilfe“.
+- Konturerkennung behält Subpixel-Koordinaten statt erneut auf halbe Pixel zu runden.
+  Rib-Glättung schützt deutliche Rillen und runde Wölbungen vor dem stärkeren Filter.
+  Rohprofil bleibt erhalten; Anzeige und Geometrie bleiben getrennt.
+- Verifiziert: 98 Unit-, 38 Browser- und 7 Header-Tests; öffentlicher Build und echtes
+  MediaPipe unter Wrangler/CSP. Worker und Rückfallpfad liefern dieselbe aktuelle STL.
+- Details, Grenzen und Verifikation: `docs/UI-AND-CONTOUR.md`.
 
 ## Performance und Security (2026-10-28)
 
