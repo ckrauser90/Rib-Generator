@@ -665,7 +665,7 @@ const snapBoundaryToImageEdge = (
     ];
     const localMedian = median(localWindow);
     const blended = average([forward[index], backward[index]]) * 0.62 + localMedian * 0.28 + boundaryX * 0.1;
-    return clamp(Math.round(blended * 2) / 2, boundaryX - 2, boundaryX + 2);
+    return clamp(blended, boundaryX - 2, boundaryX + 2);
   });
 };
 
@@ -809,7 +809,7 @@ const refineBoundaryInBand = (
     const candidateX = candidatesByRow[rowIndex][candidateIndex];
     const blended = candidateX * 0.74 + values[rowIndex] * 0.16 + anchorValues[rowIndex] * 0.1;
     refined[rowIndex] = clamp(
-      Math.round(blended * 2) / 2,
+      blended,
       Math.min(values[rowIndex], anchorValues[rowIndex]) - 2,
       Math.max(values[rowIndex], anchorValues[rowIndex]) + 2,
     );
@@ -865,7 +865,7 @@ const stabilizeDetectedBoundary = (values: number[], rows: number[]) => {
       reference - RAW_BOUNDARY_MAX_DRIFT_PX,
       reference + RAW_BOUNDARY_MAX_DRIFT_PX,
     );
-    return Math.round(clampedToRaw * 2) / 2;
+    return clampedToRaw;
   });
 };
 

@@ -1,5 +1,5 @@
 import { type Point } from "../lib/contour";
-import { whittakerLambdaForPeriod, whittakerSmooth } from "../lib/curve-fitting";
+import { DEFAULT_NOTCH_OPTIONS, findNotchIndices, whittakerLambdaForPeriod, whittakerSmooth } from "../lib/curve-fitting";
 import { smoothWorkProfileCurve } from "../lib/profile-normalization";
 
 const DISPLAY_PROFILE_MAX_DRIFT_PX = 0.9;
@@ -19,6 +19,8 @@ const smoothstep = (t: number) => {
  * 10 (Standard) Wellen unter gut 1 %, 100 Wellen unter 6 %. Anders als früher wird
  * das Ergebnis nicht wieder mit der Rohkante gemischt – sonst blieben die Zacken.
  * Anfang und Ende sind stärker gewichtet, damit Rand und Fuß an ihrer Stelle bleiben.
+ * Deutliche lokale Wölbungen und Rillen werden vorab auf einer Referenzhöhe von
+ * 120 mm erkannt und stärker gewichtet; Pixelrauschen wird dabei vorgeglättet.
  * Die Rohkante selbst bleibt unverändert die Quelle (siehe CLAUDE.md).
  */
 export const buildGeometryWorkProfile = (profile: Point[], smoothingStrength: number) => {
@@ -35,9 +37,30 @@ export const buildGeometryWorkProfile = (profile: Point[], smoothingStrength: nu
   const periodFraction = 0.005 + clamp(smoothingStrength / 100, 0, 1) * 0.055;
   const periodSamples = Math.max(2, periodFraction * heightPx * samplesPerPx);
   const edgeZone = Math.max(2, Math.round(periodSamples / 2));
+  // Detect persistent shape features before stronger smoothing. Look on both
+  // reflected sides: a vessel bulge must be protected just like the groove beside it.
+  // Canonical millimetres keep feature thresholds independent of photo resolution.
+  const toMm = 120 / heightPx;
+  const originX = profile[0].x;
+  const canonical = profile.map((point) => ({ x: (point.x - originX) * toMm, y: (point.y - profile[0].y) * toMm }));
+  // A round lobe needs no sharp corner. Keep the existing depth, neighbourhood
+  // and noise thresholds, but do not require the turn angle used for sharp notches.
+  const featureOptions = { ...DEFAULT_NOTCH_OPTIONS, minAngleDeg: 0 };
+  const features = [...new Set([
+    ...findNotchIndices(canonical, featureOptions),
+    ...findNotchIndices(canonical.map((point) => ({ x: -point.x, y: point.y })), featureOptions),
+  ])];
+  const featureRadius = Math.max(2, periodSamples / 3);
+  // Near persistent features keep the effective filter at the pixel-cleanup
+  // wavelength (0.5% of profile height), even when global smoothing is stronger.
+  const featureGain = Math.pow(periodFraction / 0.005, 4) - 1;
   const weights = profile.map((_, index) => {
     const distanceToEdge = Math.min(index, profile.length - 1 - index);
-    return 1 + (1 - smoothstep(distanceToEdge / edgeZone)) * 5.5;
+    const featureWeight = features.reduce((weight, feature) => {
+      const distance = (index - feature) / featureRadius;
+      return Math.max(weight, featureGain * Math.exp(-distance * distance));
+    }, 0);
+    return 1 + (1 - smoothstep(distanceToEdge / edgeZone)) * 5.5 + featureWeight;
   });
   const smoothedXs = whittakerSmooth(
     profile.map((point) => point.x),
